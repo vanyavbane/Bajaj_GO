@@ -1,0 +1,20 @@
+# Android / Capacitor
+android/
+node_modules/
+dist/
+*.aab
+*.apk
+*.jks
+*.keystore
+keystore.properties
+
+# ОС и редакторы
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Временное
+*.log
+*.tmp
