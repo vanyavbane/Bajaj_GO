@@ -967,10 +967,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
   const envMapTex = createCanvasTexture(256, 128, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, '#3a7bd5');
-    g.addColorStop(0.48, '#ffd194');
-    g.addColorStop(0.52, '#242b38');
-    g.addColorStop(1, '#0f141d');
+    g.addColorStop(0, '#33507a');
+    g.addColorStop(0.48, '#d9a878');
+    g.addColorStop(0.52, '#20293a');
+    g.addColorStop(1, '#0d1119');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   }, 1, 1, true);
@@ -1083,9 +1083,9 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      topColor: { value: new THREE.Color(0x1f5fae) },
-      midColor: { value: new THREE.Color(0x6fb1e8) },
-      botColor: { value: new THREE.Color(0xd7e8f7) }
+      topColor: { value: new THREE.Color(0x121a30) },
+      midColor: { value: new THREE.Color(0x1e2a44) },
+      botColor: { value: new THREE.Color(0x2c3a58) }
     },
     vertexShader: `
       varying vec3 vWorldPos;
@@ -1111,12 +1111,12 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
   const skyDome = new THREE.Mesh(new THREE.SphereGeometry(490, 24, 16), skyDomeMat);
   scene.add(skyDome);
 
-  scene.fog = new THREE.FogExp2(0x8ab4d8, 0.0024);
+  scene.fog = new THREE.FogExp2(0x1b2740, 0.0024);
 
-  const hemiLight = new THREE.HemisphereLight(0xddeeff, 0x263238, 1.15);
+  const hemiLight = new THREE.HemisphereLight(0x5a6a86, 0x141a26, 0.30);
   scene.add(hemiLight);
 
-  const sunLight = new THREE.DirectionalLight(0xfff4d8, 2.2);
+  const sunLight = new THREE.DirectionalLight(0x9aabc4, 0.40);
   sunLight.castShadow = true;
   sunLight.shadow.camera.near = 5;
   sunLight.shadow.camera.far = 190;
@@ -2843,38 +2843,53 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
   /* =========================================================================
    * 12. СМЕНА ВРЕМЕНИ СУТОК (И ЗАКАТНАЯ СЦЕНА ДЛЯ ГЛАВНОГО МЕНЮ)
    * ========================================================================= */
+  /* -------------------------------------------------------------------------
+   * ПАЛИТРА ВРЕМЕНИ СУТОК
+   * Источник: референс `Cover art.bmp`. Доминирующие цвета обложки:
+   *   #181830 15%  #303030 13%  #486090 9%  #181818 7%  #303048 5.5%
+   *   #183018 5%   #303018 4%  #304878 4%  #483030 3%
+   * Характер: тёмная холодная ночь с засветкой города, низкая насыщенность,
+   * без неона. Небо и туман держим в сине-серых тонах, свет — нейтрально-холодный.
+   * Меняя эти значения, обновляйте docs/STYLE.md.
+   * ---------------------------------------------------------------------- */
   const todPalettes = {
     day: {
-      top: new THREE.Color(0x1b63b8),
-      mid: new THREE.Color(0x6fb7f0),
-      bot: new THREE.Color(0xdbeeff),
-      fog: new THREE.Color(0x9bc8eb),
-      cloud: new THREE.Color(0xffffff),
-      sunCol: new THREE.Color(0xfff4d4),
+      top: new THREE.Color(0x2a5c94),
+      mid: new THREE.Color(0x7fa9c9),
+      bot: new THREE.Color(0xc9dae8),
+      fog: new THREE.Color(0x9ab8ce),
+      cloud: new THREE.Color(0xe8eef5),
+      sunCol: new THREE.Color(0xfff0d6),
+      hemiSky: new THREE.Color(0xd6e6f2),
+      hemiGround: new THREE.Color(0x2b3640),
       sunInt: 2.3,
       hemiInt: 1.25,
       headInt: 0.7
     },
     sunset: {
-      top: new THREE.Color(0x281b54),
-      mid: new THREE.Color(0xc8526c),
-      bot: new THREE.Color(0xff9a52),
-      fog: new THREE.Color(0xb85d6f),
-      cloud: new THREE.Color(0xff9e80),
-      sunCol: new THREE.Color(0xff8a50),
+      top: new THREE.Color(0x241a3a),
+      mid: new THREE.Color(0xa85a68),
+      bot: new THREE.Color(0xd98455),
+      fog: new THREE.Color(0x8f5a68),
+      cloud: new THREE.Color(0xc98a74),
+      sunCol: new THREE.Color(0xe08a5a),
+      hemiSky: new THREE.Color(0xb48c86),
+      hemiGround: new THREE.Color(0x2a2320),
       sunInt: 1.65,
       hemiInt: 0.85,
       headInt: 2.6
     },
     night: {
-      top: new THREE.Color(0x040814),
-      mid: new THREE.Color(0x0c1830),
-      bot: new THREE.Color(0x162642),
-      fog: new THREE.Color(0x0a1324),
-      cloud: new THREE.Color(0x29384f),
-      sunCol: new THREE.Color(0x8ab4f8),
-      sunInt: 0.45,
-      hemiInt: 0.34,
+      top: new THREE.Color(0x121a30),
+      mid: new THREE.Color(0x1e2a44),
+      bot: new THREE.Color(0x2c3a58),
+      fog: new THREE.Color(0x1b2740),
+      cloud: new THREE.Color(0x36445e),
+      sunCol: new THREE.Color(0x9aabc4),
+      hemiSky: new THREE.Color(0x5a6a86),
+      hemiGround: new THREE.Color(0x141a26),
+      sunInt: 0.40,
+      hemiInt: 0.30,
       headInt: 4.8
     }
   };
@@ -2924,6 +2939,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     scene.fog.color.copy(pA.fog).lerp(pB.fog, t);
     cloudMat.color.copy(pA.cloud).lerp(pB.cloud, t);
     sunLight.color.copy(pA.sunCol).lerp(pB.sunCol, t);
+    hemiLight.color.copy(pA.hemiSky).lerp(pB.hemiSky, t);
+    hemiLight.groundColor.copy(pA.hemiGround).lerp(pB.hemiGround, t);
 
     const baseSunInt = lerp(pA.sunInt, pB.sunInt, t);
     sunLight.intensity = inTunnel ? baseSunInt * 0.25 : baseSunInt;
