@@ -1,0 +1,10 @@
+{
+  "name": "@bajajgo/design",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./design.css": "./design.css"
+  }
+}

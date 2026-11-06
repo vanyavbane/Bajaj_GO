@@ -229,8 +229,6 @@ export function initCatalog() {
   }
   G.getBikeEffectiveStats = getBikeEffectiveStats;
 
-  const isHighEndDevice = (navigator.hardwareConcurrency || 4) >= 6 && (window.devicePixelRatio || 1) >= 1;
-  G.lightingQuality = localStorage.getItem('bajajGO_lighting') || (isHighEndDevice ? 'dlss' : 'normal');
   const savedCamera = localStorage.getItem('bajajGO_camera');
   G.cameraMode = savedCamera === 'third' ? 'third' : 'cockpit';
 
@@ -245,7 +243,7 @@ export function initCatalog() {
     localStorage.setItem('bajajGO_bank', String(Math.floor(G.bankPoints)));
     localStorage.setItem('bajajGO_owned', JSON.stringify(G.ownedBikes));
     localStorage.setItem('bajajGO_selected', G.selectedBikeId);
-    localStorage.setItem('bajajGO_lighting', G.lightingQuality);
+    localStorage.setItem('bajajGO_lighting', JSON.stringify(G.graphics));
     localStorage.setItem('bajajGO_camera', G.cameraMode);
     localStorage.setItem('bajajGO_colors', JSON.stringify(G.customColors));
     localStorage.setItem('bajajGO_tuning', JSON.stringify(bikeTuningData));

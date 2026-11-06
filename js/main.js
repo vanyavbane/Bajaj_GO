@@ -1,3 +1,4 @@
+import { initGraphics } from './graphics.js';
 import { initCatalog } from './catalog.js';
 import { initScene } from './scene.js';
 import { initRoad } from './road.js';
@@ -17,6 +18,7 @@ import { initInput } from './input.js';
 import { initEconomy } from './economy.js';
 import { initLoop } from './loop.js';
 
+initGraphics();
 initCatalog();
 initScene();
 initRoad();

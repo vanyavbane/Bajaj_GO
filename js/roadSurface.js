@@ -10,7 +10,7 @@ export function initRoadSurface() {
    * 5. ДОРОЖНОЕ ПОЛОТНО, РАЗМЕТКА, ТРОТУАРЫ И ОТКОСЫ
    * ========================================================================= */
   const RIBBON_LEN = 350;
-  const RIBBON_SEGS = 140;
+  const RIBBON_SEGS = 84;
   const RIBBON_BEHIND = 30;
   const ROW = RIBBON_SEGS + 1;
   const sampleX = new Float32Array(ROW);
@@ -75,6 +75,9 @@ export function initRoadSurface() {
   const centerDoubleLine2 = makeRibbon(0.14, G.M.lineYellow);
   const edgeLineLeft = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineRight = makeRibbon(0.16, G.M.lineWhite);
+  for (const mesh of [sidewalkLeftMesh, sidewalkRightMesh, curbLeftMesh, curbRightMesh, centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight]) {
+    mesh.receiveShadow = false;
+  }
 
   const slopeGeoL = new THREE.PlaneGeometry(85, RIBBON_LEN, 2, RIBBON_SEGS);
   slopeGeoL.rotateX(-Math.PI / 2);
@@ -94,7 +97,7 @@ export function initRoadSurface() {
   const dashGeo = new THREE.BoxGeometry(0.14, 0.03, 4.2);
   for (let i = 0; i < 60; i++) {
     const dm = new THREE.Mesh(dashGeo, G.M.lineWhite);
-    dm.receiveShadow = true;
+    dm.receiveShadow = false;
     G.scene.add(dm);
     dashMeshes.push({ mesh: dm, laneX: i % 2 === 0 ? -4.75 : 4.75, baseIdx: Math.floor(i / 2) });
   }

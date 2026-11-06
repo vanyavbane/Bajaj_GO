@@ -1,3 +1,4 @@
+import { balance, button, currency, field, heading, iconButton, logo, menuScreen, note, panel, stats } from '@bajajgo/design';
 import { G } from './state.js';
 
 export function initUi() {
@@ -39,6 +40,43 @@ export function initUi() {
   };
   G.jumpSummaryTimer = 0;
 
+  function renderGraphics(from) {
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+    const g = G.graphics;
+    const option = (key, value, label) => button({
+      variant: 'choice',
+      label,
+      pressed: g[key] === value,
+      data: { gfx: key, value }
+    });
+
+    overlay.innerHTML = panel(`
+        ${heading('ГРАФИКА', 'ОДНИ НАСТРОЙКИ НА ВЕСЬ ЭКРАН')}
+        ${g.preset === 'custom' ? note('Свой набор. Экспозиция 1.18 включается только режимом «Чётко».') : ''}
+        ${field('Режим', option('preset', 'fast', 'Быстро') + option('preset', 'balanced', 'Ровно') + option('preset', 'sharp', 'Чётко'))}
+        ${field('Тени', option('shadows', 'off', 'Нет') + option('shadows', 'low', 'Рядом') + option('shadows', 'high', 'Чётче'))}
+        ${field('Масштаб кадра', option('scale', 0.75, '0.75') + option('scale', 1, '1') + option('scale', 1.25, '1.25'))}
+        ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4'))}
+        ${field('Отражения', option('reflections', false, 'Тише') + option('reflections', true, 'Есть'))}
+        ${button({ id: 'gfx-back', label: '← НАЗАД' })}
+    `, { size: 'narrow' });
+
+    overlay.querySelectorAll('[data-gfx]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
+      btn.addEventListener('click', () => {
+        G.chooseGraphics(btn.dataset.gfx, btn.dataset.value);
+        renderGraphics(from);
+      });
+    });
+    $('gfx-back').addEventListener('click', () => {
+      if (from === 'pause') G.renderPauseMenu(false);
+      else renderMainMenu();
+    });
+  }
+  G.renderGraphics = renderGraphics;
+
   function renderMainMenu() {
     G.currentScreen = 'main';
     G.started = false;
@@ -54,71 +92,35 @@ export function initUi() {
 
     const b = G.selectedBike();
     const eff = G.getBikeEffectiveStats(b.id);
-    const isDlss = G.lightingQuality === 'dlss';
     const deltaSign = eff.speedDelta > 0 ? `+${eff.speedDelta}` : (eff.speedDelta < 0 ? `${eff.speedDelta}` : '');
 
-    overlay.innerHTML = `
-      <div class="main-menu-layout">
-        <div class="mm-top-bar">
-          <div class="mm-left-col">
-            <div class="voxel-logo-wrap">
-              <div class="speed-lines" aria-hidden="true">
-                <span></span><span></span><span></span>
-              </div>
-              <div class="voxel-logo">
-                <span class="w-bajaj">bajaj</span>
-                <span class="w-go">GO</span>
-              </div>
-            </div>
-            <div class="mm-selected-badge">
-              Выбран: <b>${b.name}</b> · <b>${eff.maxSpeed} км/ч</b>${deltaSign ? `<span class="tune-plus">(${deltaSign})</span>` : ''} (${b.typeLabel})
-            </div>
-            <div class="mm-btn-stack">
-              <button class="mm-btn-start" id="mm-start">
-                <span class="ico">▶</span>
-                <span>Начать заезд</span>
-              </button>
-              <button class="mm-btn-sec" id="mm-shop">
-                <span class="ico">🛒</span>
-                <span>Магазин мотоциклов</span>
-                <span class="sub-val">${G.bikeCatalog.length} ед.</span>
-              </button>
-              <button class="mm-btn-sec" id="mm-lighting">
-                <span class="ico">☀️</span>
-                <span>Качество освещения</span>
-                <span class="sub-val ${isDlss ? 'on' : ''}">${isDlss ? 'DLSS-стиль' : 'Обычное'}</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="mm-currency">
-            <span>Баланс</span>
-            <b id="bank">${Math.floor(G.bankPoints)} ₽</b>
-          </div>
-        </div>
-
-        <div class="mm-bottom-bar">
-          <div class="mm-dev-info">
-            bajaj GO · Voxel Traffic &amp; Jump Simulator · Game by a fan
-          </div>
-          <div class="mm-corner-icons">
-            <button class="mm-icon-btn" id="mm-cam-btn" title="Переключить вид камеры по умолчанию (${G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо'})">🎥</button>
-            <button class="mm-icon-btn" id="mm-fs-btn" title="Полный экран">⛶</button>
-          </div>
-        </div>
-      </div>
-    `;
+    const badge = `Выбран: <b>${b.name}</b> · <b>${eff.maxSpeed} км/ч</b>${deltaSign ? ` (${deltaSign})` : ''} (${b.typeLabel})`;
+    overlay.innerHTML = menuScreen({
+      badge,
+      actions: [
+        button({ id: 'mm-start', variant: 'primary', icon: '▶', label: 'Начать заезд' }),
+        button({ id: 'mm-shop', icon: '🛒', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
+        button({
+          id: 'mm-graphics',
+          icon: '☀',
+          label: 'Графика',
+          trail: G.graphicsLabel,
+          trailOn: G.graphics.preset === 'sharp'
+        })
+      ].join(''),
+      balance: currency({ id: 'bank', label: 'Баланс', value: `${Math.floor(G.bankPoints)} ₽` }),
+      footer: 'bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan',
+      tools: [
+        iconButton({ id: 'mm-cam-btn', icon: '🎥', title: `Камера: ${G.cameraMode === 'cockpit' ? 'кокпит' : '3-е лицо'}` }),
+        iconButton({ id: 'mm-fs-btn', icon: '⛶', title: 'Полный экран' })
+      ].join('')
+    });
 
     G.syncVehicleAndCameraVisibility(true);
 
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
-    $('mm-lighting').addEventListener('click', () => {
-      G.lightingQuality = (G.lightingQuality === 'dlss') ? 'normal' : 'dlss';
-      G.saveGarage();
-      G.applyLightingSettings();
-      renderMainMenu();
-    });
+    $('mm-graphics').addEventListener('click', () => renderGraphics('menu'));
     $('mm-cam-btn').addEventListener('click', () => {
       G.toggleCameraMode();
       renderMainMenu();
@@ -146,12 +148,18 @@ export function initUi() {
       const eff = G.getBikeEffectiveStats(b.id);
       let btn = '';
       if (selected) {
-        btn = `<button class="choose disabled" disabled>✓ ВЫБРАН</button>`;
+        btn = button({ variant: 'primary', label: '✓ ВЫБРАН', disabled: true });
       } else if (owned) {
-        btn = `<button class="choose" data-select="${b.id}">ВЫБРАТЬ</button>`;
+        btn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { select: b.id } });
       } else {
         const canBuy = G.bankPoints >= b.price;
-        btn = `<button class="buy ${canBuy ? '' : 'disabled'}" data-buy="${b.id}" ${canBuy ? '' : 'disabled'}>${canBuy ? 'КУПИТЬ ЗА ' + b.price.toLocaleString('ru-RU') + ' ₽' : 'НУЖНО ' + b.price.toLocaleString('ru-RU') + ' ₽'}</button>`;
+        const price = b.price.toLocaleString('ru-RU');
+        btn = button({
+          variant: 'primary',
+          label: canBuy ? `КУПИТЬ ЗА ${price} ₽` : `НУЖНО ${price} ₽`,
+          disabled: !canBuy,
+          data: { buy: b.id }
+        });
       }
 
       let swatchHtml = '';
@@ -185,15 +193,13 @@ export function initUi() {
       `;
     }).join('');
 
-    overlay.innerHTML = `
-      <div class="modal-card">
-        <div class="voxel-logo" style="justify-content:center;font-size:42px"><span class="w-bajaj">ГАРАЖ</span><span class="w-go">GO</span></div>
-        <div class="sub">МАГАЗИН МОТОЦИКЛОВ И КВАДРИЦИКЛОВ BAJAJ</div>
-        <p style="font-size:14px;margin:4px 0">Накопленные рубли: <b style="color:#fff59d">${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</b></p>
+    overlay.innerHTML = panel(`
+        ${logo({ left: 'ГАРАЖ', right: 'GO', compact: true })}
+        ${heading('МАГАЗИН', 'МОТОЦИКЛЫ И КВАДРИЦИКЛЫ BAJAJ')}
+        ${balance('Накоплено', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
         <div class="shop-list">${cards}</div>
-        <button class="secondary" id="shop-back">← НАЗАД В ГЛАВНОЕ МЕНЮ</button>
-      </div>
-    `;
+        ${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
+    `);
 
     overlay.querySelectorAll('[data-buy]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
@@ -263,13 +269,13 @@ export function initUi() {
 
       if (installed) {
         statusBadge = `<span class="tune-price" style="color:#69f0ae">✓ Установлено</span>`;
-        actionBtn = `<button class="tune-btn installed-btn" data-toggle-upg="${upg.id}" title="Нажмите, чтобы снять или снова установить деталь">УСТАНОВЛЕНО ✓</button>`;
+        actionBtn = button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', title: 'Снять или поставить деталь снова', data: { 'toggle-upg': upg.id } });
       } else if (owned) {
         statusBadge = `<span class="tune-price" style="color:#81d4fa">Куплено</span>`;
-        actionBtn = `<button class="tune-btn owned-btn" data-toggle-upg="${upg.id}">УСТАНОВИТЬ</button>`;
+        actionBtn = button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } });
       } else {
         statusBadge = `<span class="tune-price">${price.toLocaleString('ru-RU')} ₽</span>`;
-        actionBtn = `<button class="tune-btn buy" data-buy-upg="${upg.id}">КУПИТЬ</button>`;
+        actionBtn = button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
       }
 
       return `
@@ -291,9 +297,9 @@ export function initUi() {
     }).join('');
 
     overlay.innerHTML = `
-      <div class="modal-card">
-        <div class="voxel-logo" style="justify-content:center;font-size:40px"><span class="w-bajaj">ТЮНИНГ</span><span class="w-go">GO</span></div>
-        <div class="sub">ИНДИВИДУАЛЬНАЯ ДОВОДКА И КАСТОМИЗАЦИЯ МОДЕЛИ</div>
+      <div class="ds-panel">
+        ${logo({ left: 'ТЮНИНГ', right: 'GO', compact: true })}
+        ${heading('ДОВОДКА', 'ТЕКУЩИЙ МОТОЦИКЛ')}
 
         <div class="tuning-summary">
           <div class="tuning-bike-header">
@@ -320,7 +326,7 @@ export function initUi() {
 
         <div class="shop-list">${cardsHtml}</div>
 
-        <button class="secondary" id="tuning-back">← НАЗАД В ГЛАВНОЕ МЕНЮ</button>
+        ${button({ id: 'tuning-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
       </div>
     `;
 
@@ -427,8 +433,14 @@ export function initUi() {
     G.syncVehicleAndCameraVisibility(false);
 
     const hint = $('hint');
+    const bottom = $('bottom');
     hint.style.opacity = '1';
-    setTimeout(() => { if (G.started) hint.style.opacity = '0'; }, 5500);
+    bottom.style.opacity = '1';
+    setTimeout(() => {
+      if (!G.started) return;
+      hint.style.opacity = '0';
+      bottom.style.opacity = '0';
+    }, 5500);
   }
   G.startGame = startGame;
 
@@ -452,20 +464,17 @@ export function initUi() {
     overlay.style.display = 'flex';
     overlay.className = 'mode-crash';
 
-    overlay.innerHTML = `
-      <div class="modal-card crash-card">
-        <h2 class="crash-title">💥 АВАРИЯ</h2>
-        <div class="sub" style="margin-bottom:10px">ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ</div>
-        <div class="crash-stats">
-          <div><span>Пройденная дистанция:</span><b>${G.distance.toFixed(2)} км</b></div>
-          <div><span>Перелетено машин:</span><b class="cyan">${G.totalCarsJumpedRun} шт. (+${Math.floor(G.totalJumpBonusRun)} ₽)</b></div>
-          <div><span>Всего заработано за заезд:</span><b class="gold">+${earned} ₽</b></div>
-          <div><span>Баланс в банке:</span><b>${Math.floor(G.bankPoints)} ₽</b></div>
-        </div>
-        <button class="primary" id="crash-restart">▶ ИГРАТЬ СНОВА</button>
-        <button class="secondary" id="crash-menu">В ГЛАВНОЕ МЕНЮ</button>
-      </div>
-    `;
+    overlay.innerHTML = panel(`
+        ${heading('АВАРИЯ', 'ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ')}
+        ${stats([
+          { label: 'Пройденная дистанция', value: `${G.distance.toFixed(2)} км` },
+          { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${Math.floor(G.totalJumpBonusRun)} ₽)`, tone: 'signal' },
+          { label: 'Заработано за заезд', value: `+${earned} ₽`, tone: 'gold' },
+          { label: 'Баланс в банке', value: `${Math.floor(G.bankPoints)} ₽` }
+        ])}
+        ${button({ id: 'crash-restart', variant: 'primary', icon: '▶', label: 'ИГРАТЬ СНОВА' })}
+        ${button({ id: 'crash-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}
+    `, { tone: 'danger' });
 
     $('crash-restart').addEventListener('click', startGame);
     $('crash-menu').addEventListener('click', renderMainMenu);

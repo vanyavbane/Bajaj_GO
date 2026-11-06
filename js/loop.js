@@ -365,9 +365,10 @@ export function initLoop() {
       }
     }
 
-    for (let i = 0; i < G.MAX_ACTIVE_LAMPS; i++) {
+    const lampBudget = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    for (let i = 0; i < G.lampLights.length; i++) {
       const pl = G.lampLights[i];
-      if (isNightish && i < nearestLampPositions.length) {
+      if (isNightish && i < lampBudget && i < nearestLampPositions.length) {
         const lp = nearestLampPositions[i];
         pl.position.set(lp.x, lp.y + 5.8, lp.z);
         pl.intensity = 14;

@@ -48,12 +48,13 @@ export function initSky() {
 
   G.sunLight = new THREE.DirectionalLight(0x9aabc4, 0.40);
   G.sunLight.castShadow = true;
-  G.sunLight.shadow.camera.near = 5;
-  G.sunLight.shadow.camera.far = 190;
-  G.sunLight.shadow.camera.left = -42;
-  G.sunLight.shadow.camera.right = 42;
-  G.sunLight.shadow.camera.top = 45;
-  G.sunLight.shadow.camera.bottom = -45;
+  G.sunLight.shadow.camera.near = 8;
+  G.sunLight.shadow.camera.far = 96;
+  G.sunLight.shadow.camera.left = -18;
+  G.sunLight.shadow.camera.right = 18;
+  G.sunLight.shadow.camera.top = 24;
+  G.sunLight.shadow.camera.bottom = -16;
+  G.sunLight.shadow.camera.updateProjectionMatrix();
   G.sunLight.shadow.bias = -0.0006;
   G.scene.add(G.sunLight);
   G.scene.add(G.sunLight.target);
@@ -81,7 +82,7 @@ export function initSky() {
 
   const cloudGroup = new THREE.Group();
   G.scene.add(cloudGroup);
-  G.cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0.0, flatShading: true });
+  G.cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   G.clouds = [];
   for (let i = 0; i < 34; i++) {
     const cg = new THREE.Group();
@@ -106,7 +107,7 @@ export function initSky() {
     G.clouds.push(cg);
   }
 
-  G.MAX_ACTIVE_LAMPS = 8;
+  G.MAX_ACTIVE_LAMPS = 4;
   G.lampLights = [];
   for (let i = 0; i < G.MAX_ACTIVE_LAMPS; i++) {
     const pl = new THREE.PointLight(0xffb74d, 0, 28, 1.7);
@@ -114,20 +115,5 @@ export function initSky() {
     G.lampLights.push(pl);
   }
 
-  function applyLightingSettings() {
-    const dlss = G.lightingQuality === 'dlss';
-    G.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dlss ? 1.5 : 1.15));
-    G.renderer.setSize(innerWidth, innerHeight);
-    G.renderer.toneMappingExposure = dlss ? 1.18 : 1.0;
-    G.sunLight.shadow.mapSize.set(dlss ? 1536 : 1024, dlss ? 1536 : 1024);
-    if (G.sunLight.shadow.map) {
-      G.sunLight.shadow.map.dispose();
-      G.sunLight.shadow.map = null;
-    }
-    G.M.road.envMapIntensity = dlss ? 1.15 : 0.45;
-    G.M.chrome.envMapIntensity = dlss ? 1.65 : 0.8;
-    G.M.glass.envMapIntensity = dlss ? 1.75 : 0.85;
-  }
-  G.applyLightingSettings = applyLightingSettings;
-  applyLightingSettings();
+  G.applyGraphics();
 }

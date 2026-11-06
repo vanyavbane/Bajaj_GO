@@ -1,7 +1,11 @@
 # Архитектура
 
-Разметка — в `index.html`, стили — в `css/game.css`, логика — ES-модули в `js/`, без сборщика.
+Разметка каркаса — в `index.html`. Кнопки, панели, меню и списки отдаёт пакет
+`@bajajgo/design`: `js/ui.js` и `js/economy.js` импортируют его функции и вставляют
+готовую разметку. `css/game.css` держит HUD и карточки содержимого, не второй набор кнопок.
+Логика — ES-модули в `js/`.
 Точка входа — `js/main.js`: она вызывает `init…()` строго по порядку секций.
+`initGraphics()` идёт первым: до неба и меню уже известно, какие тени и фонари рисовать.
 Общее состояние и функции, которые нужны соседним секциям, лежат на объекте `G`
 из `js/state.js`. Секции не импортируют друг друга: чужой код зовут как `G.placeOnRoad`,
 `G.selectedBike` и так далее. Three.js r160 — пакет `three@0.160.0`. В исходниках
@@ -14,6 +18,7 @@
 
 | № | Файл | Что внутри |
 |---|---|---|
+|   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics` |
 | 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи цветов, гараж |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `ROAD_WIDTH`, `LANE_OFFSETS`, `LANE_SPEEDS`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
@@ -49,7 +54,7 @@
 | `selectedBikeId` | `bajajGO_selected` | Выбранный байк |
 | `customColors` | `bajajGO_colors` | Пользовательские цвета по id |
 | `bikeTuningData` | `bajajGO_tuning` | Установленные улучшения |
-| `lightingQuality` | `bajajGO_lighting` | `'dlss'` \| `'normal'` |
+| `graphics` | `bajajGO_lighting` | JSON: режим, тени, масштаб, фонари, отражения. Старые строки `dlss` и `normal` ещё читаются. |
 | `cameraMode` | `bajajGO_camera` | `'cockpit'` \| `'third'` |
 | `fuelM` | `bajajGO_fuel` | Остаток топлива в метрах (0…`FUEL_RANGE_M` = 25 000) |
 | `wearM` | `bajajGO_wear` | JSON `{pads, oil, plugs}` — пройденные метры с момента замены |

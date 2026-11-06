@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { balance, button, callout, heading, inline, listItem, panel, rows, stats } from '@bajajgo/design';
 import { G } from './state.js';
 
 export function initEconomy() {
@@ -633,7 +634,7 @@ export function initEconomy() {
   G.closeOverlayToGame = closeOverlayToGame;
 
   function exitMenuBackButton() {
-    return `<button class="secondary" id="poi-close">← ПРОДОЛЖИТЬ ПУТЬ</button>`;
+    return button({ id: 'poi-close', label: '← ПРОДОЛЖИТЬ ПУТЬ' });
   }
 
   function bindExitClose() {
@@ -650,29 +651,25 @@ export function initEconomy() {
 
   /* ---------- Рестораны и заказы ---------- */
   function renderRestaurantMenu(message = '') {
-    const rows = RESTAURANTS.map((r, i) => {
+    const list = RESTAURANTS.map((r, i) => {
       const busy = !!activeOrder;
-      return `
-        <button class="poi-row ${busy ? 'disabled' : ''}" data-rest="${i}" ${busy ? 'disabled' : ''}>
-          <div class="poi-ico">${r.badge}</div>
-          <div class="poi-body">
-            <span>${r.name}</span>
-            <small>${busy ? 'Сначала доставьте текущий заказ' : 'Взять заказ на доставку'}</small>
-          </div>
-          <div class="poi-price">${busy ? '—' : 'ЗАКАЗ'}</div>
-        </button>`;
+      return listItem({
+        icon: r.badge,
+        title: r.name,
+        detail: busy ? 'Сначала доставьте текущий заказ' : 'Взять заказ на доставку',
+        price: busy ? '—' : 'ЗАКАЗ',
+        disabled: busy,
+        data: { rest: i }
+      });
     }).join('');
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">🍔 РЕСТОРАНЫ</h2>
-        <div class="poi-sub">СЪЕЗД · ДОСТАВКА ЕДЫ</div>
-        ${activeOrder ? `<div class="poi-note">Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${Math.max(0, Math.ceil(activeOrder.remainingM))} м до заказчика.</div>` : ''}
-        ${message ? `<div class="tuning-msg ok">${message}</div>` : ''}
-        <div class="poi-list">${rows}</div>
+    openModal(panel(`
+        ${heading('🍔 РЕСТОРАНЫ', 'СЪЕЗД · ДОСТАВКА ЕДЫ')}
+        ${activeOrder ? callout(`Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${Math.max(0, Math.ceil(activeOrder.remainingM))} м до заказчика.`) : ''}
+        ${message ? callout(message) : ''}
+        ${rows(list)}
         ${exitMenuBackButton()}
-      </div>
-    `, 'exit');
+    `, { size: 'narrow' }), 'exit');
 
     document.querySelectorAll('[data-rest]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
@@ -760,24 +757,20 @@ export function initEconomy() {
     const full = G.fuelM >= FUEL_RANGE_M - 1;
     const canPay = G.bankPoints >= REFUEL_PRICE;
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">⛽ АЗС</h2>
-        <div class="poi-sub">СЪЕЗД · ЗАПРАВКА</div>
-        <div class="poi-balance">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</div>
-        ${opts.message ? `<div class="tuning-msg ok">${opts.message}</div>` : ''}
-        <div class="poi-note">
-          ${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}
-          Бак: <b>${pct}%</b> · запас хода ≈ <b>${Math.round(G.fuelM).toLocaleString('ru-RU')} м</b>.<br>
-          Полного бака хватает на ${FUEL_RANGE_M.toLocaleString('ru-RU')} м.
-        </div>
-        <button class="primary ${(!canPay || full) ? 'disabled' : ''}" id="fuel-fill" ${(!canPay || full) ? 'disabled' : ''}>
-          ${full ? 'БАК ПОЛОН' : `ЗАЛИТЬ ПОЛНЫЙ БАК — ${REFUEL_PRICE} ₽`}
-        </button>
-        ${(!canPay && !full) ? `<div class="poi-note">Не хватает ${Math.ceil(REFUEL_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽.</div>` : ''}
+    openModal(panel(`
+        ${heading('⛽ АЗС', 'СЪЕЗД · ЗАПРАВКА')}
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${opts.message ? callout(opts.message) : ''}
+        ${callout(`${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}Бак: <b>${pct}%</b> · запас хода ≈ <b>${Math.round(G.fuelM).toLocaleString('ru-RU')} м</b>.<br>Полного бака хватает на ${FUEL_RANGE_M.toLocaleString('ru-RU')} м.`)}
+        ${button({
+          id: 'fuel-fill',
+          variant: 'primary',
+          label: full ? 'БАК ПОЛОН' : `ЗАЛИТЬ ПОЛНЫЙ БАК — ${REFUEL_PRICE} ₽`,
+          disabled: !canPay || full
+        })}
+        ${(!canPay && !full) ? callout(`Не хватает ${Math.ceil(REFUEL_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽.`) : ''}
         ${exitMenuBackButton()}
-      </div>
-    `, 'exit');
+    `, { size: 'narrow' }), 'exit');
 
     $('fuel-fill').addEventListener('click', () => {
       if (G.bankPoints < REFUEL_PRICE || G.fuelM >= FUEL_RANGE_M - 1) return;
@@ -814,22 +807,20 @@ export function initEconomy() {
     G.keys.gas = false;
     const canPay = G.bankPoints >= TOW_PRICE;
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">⛽ БЕНЗИН ЗАКОНЧИЛСЯ</h2>
-        <div class="poi-sub">МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ</div>
-        <div class="poi-balance">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</div>
-        <div class="poi-note">
-          Можно вызвать эвакуатор до ближайшей АЗС за <b>${TOW_PRICE} ₽</b> (заправка на месте — ещё ${REFUEL_PRICE} ₽)
-          или отказаться и ехать своим ходом с ограничением <b>${G.LIMP_MAX_SPEED} км/ч</b>.
-        </div>
-        <button class="primary ${canPay ? '' : 'disabled'}" id="fuel-tow" ${canPay ? '' : 'disabled'}>
-          🚐 ЭВАКУАТОР ДО АЗС — ${TOW_PRICE} ₽
-        </button>
-        ${canPay ? '' : `<div class="poi-note">Не хватает ${Math.ceil(TOW_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽ на эвакуатор.</div>`}
-        <button class="secondary" id="fuel-selftow">ОТКАЗАТЬСЯ · ЕХАТЬ СВОИМ ХОДОМ (${G.LIMP_MAX_SPEED} КМ/Ч)</button>
-      </div>
-    `, 'critical');
+    openModal(panel(`
+        ${heading('⛽ БЕНЗИН ЗАКОНЧИЛСЯ', 'МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${callout(`Можно вызвать эвакуатор до ближайшей АЗС за <b>${TOW_PRICE} ₽</b> (заправка на месте — ещё ${REFUEL_PRICE} ₽) или отказаться и ехать своим ходом с ограничением <b>${G.LIMP_MAX_SPEED} км/ч</b>.`)}
+        ${button({
+          id: 'fuel-tow',
+          variant: 'primary',
+          icon: '🚐',
+          label: `ЭВАКУАТОР ДО АЗС — ${TOW_PRICE} ₽`,
+          disabled: !canPay
+        })}
+        ${canPay ? '' : callout(`Не хватает ${Math.ceil(TOW_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽ на эвакуатор.`)}
+        ${button({ id: 'fuel-selftow', label: `ОТКАЗАТЬСЯ · ЕХАТЬ СВОИМ ХОДОМ (${G.LIMP_MAX_SPEED} КМ/Ч)` })}
+    `, { size: 'narrow' }), 'critical');
 
     $('fuel-tow').addEventListener('click', () => {
       if (G.bankPoints < TOW_PRICE) return;
@@ -856,34 +847,32 @@ export function initEconomy() {
   /* ---------- СТО ---------- */
   function renderServiceMenu(message = '') {
     const bike = G.selectedBike();
-    const rows = ['pads', 'oil', 'plugs'].map(part => {
+    const list = ['pads', 'oil', 'plugs'].map(part => {
       const left = getWearLeftPct(part);
       const price = getServicePrice(part);
       const needed = wearM[part] >= 300;
       const canPay = G.bankPoints >= price;
       const disabled = !needed || !canPay;
-      return `
-        <button class="poi-row ${disabled ? 'disabled' : ''}" data-service="${part}" ${disabled ? 'disabled' : ''}>
-          <div class="poi-ico">${WEAR_ICONS[part]}</div>
-          <div class="poi-body">
-            <span>${WEAR_LABELS[part]}</span>
-            <small>Осталось ${Math.round(left)}% · замена каждые ${WEAR_LIMITS[part].toLocaleString('ru-RU')} м${(!needed ? ' · пока не требуется' : (!canPay ? ' · не хватает денег' : ''))}</small>
-          </div>
-          <div class="poi-price">${needed ? price.toLocaleString('ru-RU') + ' ₽' : 'НОРМА'}</div>
-        </button>`;
+      const detail = `Осталось ${Math.round(left)}% · замена каждые ${WEAR_LIMITS[part].toLocaleString('ru-RU')} м`
+        + (!needed ? ' · пока не требуется' : (!canPay ? ' · не хватает денег' : ''));
+      return listItem({
+        icon: WEAR_ICONS[part],
+        title: WEAR_LABELS[part],
+        detail,
+        price: needed ? `${price.toLocaleString('ru-RU')} ₽` : 'НОРМА',
+        disabled,
+        data: { service: part }
+      });
     }).join('');
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">🔧 СТО</h2>
-        <div class="poi-sub">СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ</div>
-        <div class="poi-balance">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name}</div>
-        ${message ? `<div class="tuning-msg ok">${message}</div>` : ''}
-        <div class="poi-note">Изношенные детали ухудшают торможение, динамику и максимальную скорость. После замены ресурс сбрасывается на 100%.</div>
-        <div class="poi-list">${rows}</div>
+    openModal(panel(`
+        ${heading('🔧 СТО', 'СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ')}
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name}`)}
+        ${message ? callout(message) : ''}
+        ${callout('Изношенные детали ухудшают торможение, динамику и максимальную скорость. После замены ресурс сбрасывается на 100%.')}
+        ${rows(list)}
         ${exitMenuBackButton()}
-      </div>
-    `, 'exit');
+    `, { size: 'narrow' }), 'exit');
 
     document.querySelectorAll('[data-service]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
@@ -914,13 +903,13 @@ export function initEconomy() {
       let actionBtn = '';
       if (installed) {
         statusBadge = `<span class="tune-price" style="color:#69f0ae">✓ Установлено</span>`;
-        actionBtn = `<button class="tune-btn installed-btn" data-toggle-upg="${upg.id}">УСТАНОВЛЕНО ✓</button>`;
+        actionBtn = button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', data: { 'toggle-upg': upg.id } });
       } else if (owned) {
         statusBadge = `<span class="tune-price" style="color:#81d4fa">Куплено</span>`;
-        actionBtn = `<button class="tune-btn owned-btn" data-toggle-upg="${upg.id}">УСТАНОВИТЬ</button>`;
+        actionBtn = button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } });
       } else {
         statusBadge = `<span class="tune-price">${price.toLocaleString('ru-RU')} ₽</span>`;
-        actionBtn = `<button class="tune-btn buy" data-buy-upg="${upg.id}">КУПИТЬ</button>`;
+        actionBtn = button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
       }
       return `
         <div class="tune-card ${installed ? 'installed' : ''}">
@@ -939,16 +928,13 @@ export function initEconomy() {
         </div>`;
     }).join('');
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">🔧 ТЮНИНГ</h2>
-        <div class="poi-sub">СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА</div>
-        <div class="poi-balance">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name} · макс. ${eff.maxSpeed} км/ч</div>
-        ${message ? `<div class="tuning-msg ${statusType}">${message}</div>` : ''}
-        <div class="poi-list">${cardsHtml}</div>
+    openModal(panel(`
+        ${heading('🔧 ТЮНИНГ', 'СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА')}
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name} · макс. ${eff.maxSpeed} км/ч`)}
+        ${message ? callout(message) : ''}
+        ${rows(cardsHtml)}
         ${exitMenuBackButton()}
-      </div>
-    `, 'exit');
+    `, { size: 'narrow' }), 'exit');
 
     document.querySelectorAll('[data-buy-upg]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
@@ -1006,22 +992,20 @@ export function initEconomy() {
     G.speed = Math.max(0, G.speed * 0.2);
     const canPay = G.bankPoints >= MEDKIT_PRICE;
 
-    openModal(`
-      <div class="modal-card poi-card">
-        <h2 class="poi-title">💥 ДТП</h2>
-        <div class="poi-sub">У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ</div>
-        <div class="poi-balance">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</div>
-        <div class="poi-note">
-          Скорая помощь и лекарства стоят <b>${MEDKIT_PRICE} ₽</b>. После оплаты заезд продолжается,
-          заказ «${activeOrder.restaurant}» сохраняется.
-        </div>
-        <button class="primary ${canPay ? '' : 'disabled'}" id="acc-med" ${canPay ? '' : 'disabled'}>
-          🚑 СКОРАЯ + ЛЕКАРСТВА — ${MEDKIT_PRICE} ₽
-        </button>
-        ${canPay ? '' : `<div class="poi-note">Недостаточно денег на лекарства (${Math.ceil(MEDKIT_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽). Остаётся только закончить заезд.</div>`}
-        <button class="secondary" id="acc-end">ОТКАЗАТЬСЯ · ЗАЕЗД ЗАКОНЧИТСЯ</button>
-      </div>
-    `, 'critical');
+    openModal(panel(`
+        ${heading('💥 ДТП', 'У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${callout(`Скорая помощь и лекарства стоят <b>${MEDKIT_PRICE} ₽</b>. После оплаты заезд продолжается, заказ «${activeOrder.restaurant}» сохраняется.`)}
+        ${button({
+          id: 'acc-med',
+          variant: 'primary',
+          icon: '🚑',
+          label: `СКОРАЯ + ЛЕКАРСТВА — ${MEDKIT_PRICE} ₽`,
+          disabled: !canPay
+        })}
+        ${canPay ? '' : callout(`Недостаточно денег на лекарства (${Math.ceil(MEDKIT_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽). Остаётся только закончить заезд.`)}
+        ${button({ id: 'acc-end', label: 'ОТКАЗАТЬСЯ · ЗАЕЗД ЗАКОНЧИТСЯ' })}
+    `, { size: 'narrow' }), 'critical');
 
     $('acc-med').addEventListener('click', () => {
       if (G.bankPoints < MEDKIT_PRICE) return;
@@ -1062,52 +1046,33 @@ export function initEconomy() {
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
 
-    const isDlss = G.lightingQuality === 'dlss';
-    const orderLine = activeOrder
-      ? `<div><span>Заказ:</span><b>${activeOrder.restaurant} · ${formatClock(activeOrder.timeLeft)}</b></div>`
-      : `<div><span>Заказ:</span><b>нет</b></div>`;
+    const orderValue = activeOrder
+      ? `${activeOrder.restaurant} · ${formatClock(activeOrder.timeLeft)}`
+      : 'нет';
 
-    overlay.innerHTML = `
-      <div class="modal-card pause-card">
-        <h2 class="poi-title">⏸ ПАУЗА</h2>
-        <div class="poi-sub">ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ</div>
-        <div class="pause-stats">
-          <div><span>Пробег:</span><b>${G.distance.toFixed(2)} км</b></div>
-          <div><span>Заработано за заезд:</span><b>${Math.floor(G.score).toLocaleString('ru-RU')} ₽</b></div>
-          <div><span>Баланс:</span><b>${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</b></div>
-          <div><span>Топливо:</span><b>${Math.round(clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100)}%</b></div>
-          ${orderLine}
-        </div>
+    overlay.innerHTML = panel(`
+        ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
+        ${stats([
+          { label: 'Пробег', value: `${G.distance.toFixed(2)} км` },
+          { label: 'Заработано за заезд', value: `${Math.floor(G.score).toLocaleString('ru-RU')} ₽` },
+          { label: 'Баланс', value: `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽` },
+          { label: 'Топливо', value: `${Math.round(clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100)}%` },
+          { label: 'Заказ', value: orderValue }
+        ])}
         ${showSettings ? `
-          <div class="pause-stats">
-            <div>
-              <span>Качество освещения</span>
-              <button class="secondary" id="pause-quality" style="width:auto;margin:0;padding:5px 10px;font-size:11px">${isDlss ? 'DLSS-стиль' : 'Обычное'}</button>
-            </div>
-            <div>
-              <span>Камера</span>
-              <button class="secondary" id="pause-cam" style="width:auto;margin:0;padding:5px 10px;font-size:11px">${G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо'}</button>
-            </div>
-          </div>
-          <button class="secondary" id="pause-settings-back">← НАЗАД</button>
-        ` : `
-          <button class="secondary" id="pause-settings">⚙ НАСТРОЙКИ</button>
-        `}
-        <button class="primary" id="pause-resume">▶ ПРОДОЛЖИТЬ</button>
-        <button class="secondary" id="pause-menu">В ГЛАВНОЕ МЕНЮ</button>
-      </div>
-    `;
+          ${inline('Графика', button({ id: 'pause-graphics', variant: 'compact', label: G.graphicsLabel }))}
+          ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
+          ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
+        ` : button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
+        ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
+        ${button({ id: 'pause-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}
+    `, { size: 'narrow' });
 
     $('pause-resume').addEventListener('click', resumeGame);
     $('pause-menu').addEventListener('click', exitToMenuFromPause);
     if (showSettings) {
       $('pause-settings-back').addEventListener('click', () => renderPauseMenu(false));
-      $('pause-quality').addEventListener('click', () => {
-        G.lightingQuality = (G.lightingQuality === 'dlss') ? 'normal' : 'dlss';
-        G.saveGarage();
-        G.applyLightingSettings();
-        renderPauseMenu(true);
-      });
+      $('pause-graphics').addEventListener('click', () => G.renderGraphics('pause'));
       $('pause-cam').addEventListener('click', () => {
         G.toggleCameraMode();
         renderPauseMenu(true);
@@ -1116,6 +1081,7 @@ export function initEconomy() {
       $('pause-settings').addEventListener('click', () => renderPauseMenu(true));
     }
   }
+  G.renderPauseMenu = renderPauseMenu;
 
   function togglePause() {
     if (!G.started || G.ended) return;

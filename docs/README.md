@@ -19,6 +19,6 @@
 
 - Разработка: `npm install`, затем `npm run dev`. Вход `js/main.js`. Типы: `npm run typecheck`.
 - Сборка: `npm run build` или `./build` пишет один `dist/bajaj-go.html`. Его можно открыть двойным щелчком.
-- Three.js 0.160.0 ставится пакетом `three`. Внешнего CDN нет. `./serve` — запасной сервер после `npm install`.
+- Three.js 0.160.0 ставится пакетом `three`. Кнопки, панели и меню — пакетом `@bajajgo/design`. Внешнего CDN нет. `./serve` — запасной сервер после `npm install`.
 - Сохранения в `localStorage`.
 - Git-репозиторий: https://github.com/vanyavbane/Bajaj_GO (приватный).

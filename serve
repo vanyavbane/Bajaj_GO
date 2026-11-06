@@ -27,7 +27,7 @@ ROOT = os.getcwd()
 def stamp():
     newest = 0.0
     paths = [os.path.join(ROOT, "index.html")]
-    for folder in ("js", "css"):
+    for folder in ("js", "css", "packages"):
         base = os.path.join(ROOT, folder)
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = [d for d in dirnames if d != "__pycache__"]
@@ -41,7 +41,7 @@ def stamp():
     return str(newest).encode()
 
 IMPORTMAP = b"""<script type="importmap">
-{ "imports": { "three": "./node_modules/three/build/three.module.js" } }
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "@bajajgo/design": "./node_modules/@bajajgo/design/index.js" } }
 </script>
 """
 

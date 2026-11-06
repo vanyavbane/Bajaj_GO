@@ -86,7 +86,11 @@ npm run build
 - Сохранения — `localStorage`: `bajajGO_bank`, `bajajGO_owned`, `bajajGO_selected`,
   `bajajGO_colors`, `bajajGO_tuning`, `bajajGO_lighting`, `bajajGO_camera`,
   `bajajGO_fuel`, `bajajGO_wear`, `bajajGO_limp`, `bajajGO_order`.
-- Рендер: WebGL, ACES Filmic tone mapping, PCF Soft shadows. Есть экран ошибки при
+- Оформление интерфейса — пакет `@bajajgo/design` (`packages/design`). Экраны
+  собираются из его элементов: кнопка, панель, меню, список, заголовок. Цвета
+  лежат в том же пакете как переменные `--ds-*`.
+- Графика настраивается в меню и в паузе: режим, тени, масштаб кадра, фонари, отражения.
+- Рендер: WebGL, ACES Filmic, тени PCF вокруг мотоцикла. Есть экран ошибки при
   отсутствии WebGL.
 
 ## План: Android / Google Play
