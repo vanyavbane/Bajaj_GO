@@ -2,7 +2,8 @@
 
 export const ONCOMING_EDGE = -0.15;
 
-/** Светящаяся коробка на полосе. Меню съезда открывается только внутри неё. */
+/** Светящаяся коробка на полосе. Меню открывается внутри неё только медленнее этого порога. */
+export const EXIT_ENTER_SPEED = 50;
 export const EXIT_ZONE_WIDTH = 4.8;
 export const EXIT_ZONE_LENGTH = 5.4;
 export const EXIT_ZONE_OFFSET = 12.5;

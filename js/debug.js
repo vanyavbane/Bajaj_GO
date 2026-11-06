@@ -149,13 +149,11 @@ export function initDebug() {
     return { playerS: G.playerS, lane: G.laneOffset, modal: !!G.uiModal };
   }
 
-  function placeAtExit(inside) {
+  function placeAtExit(inside, speed) {
     setKeys({ gas: false, brake: false, left: false, right: false });
-    return G.debugPlaceAtExit ? G.debugPlaceAtExit(inside) : null;
-  }
-
-  function armExit() {
-    return { ok: G.armExit ? !!G.armExit() : false, ...exitHint() };
+    const placed = G.debugPlaceAtExit ? G.debugPlaceAtExit(inside) : null;
+    if (speed != null && Number.isFinite(Number(speed))) G.speed = Number(speed);
+    return placed;
   }
 
   function exitHint() {
@@ -165,12 +163,12 @@ export function initDebug() {
       shown: !!(el && el.classList.contains('show')),
       text: document.getElementById('exit-hint-text')?.textContent || '',
       how: document.getElementById('exit-hint-how')?.textContent || '',
-      armed: !!(el && el.classList.contains('armed')),
-      button: document.getElementById('btn-take-exit')?.textContent || '',
+      slow: !!(el && el.classList.contains('slow')),
+      fast: !!(el && el.classList.contains('fast')),
       modal: !!G.uiModal,
       feed: feed ? [...feed.children].map((node) => node.textContent) : []
     };
   }
 
-  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, armExit, exitHint, replayAfterMenu };
+  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint, replayAfterMenu };
 }

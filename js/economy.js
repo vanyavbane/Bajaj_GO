@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
-import { EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
+import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
 import { placeIfMoved } from './engine/stream.js';
 
@@ -45,10 +45,10 @@ export function initEconomy() {
 
   const EXIT_TYPES = ['restaurant', 'fuel', 'sto', 'tuning'];
   const EXIT_META = {
-    restaurant: { title: 'РЕСТОРАНЫ', sub: 'В КОРОБКУ', badge: 'FOOD' },
-    fuel:       { title: 'АЗС',       sub: 'В КОРОБКУ', badge: 'FUEL' },
-    sto:        { title: 'СТО',       sub: 'В КОРОБКУ', badge: 'STO' },
-    tuning:     { title: 'ТЮНИНГ',    sub: 'В КОРОБКУ', badge: 'TUNE' }
+    restaurant: { title: 'РЕСТОРАНЫ', sub: 'ДО 50 КМ/Ч', badge: 'FOOD' },
+    fuel:       { title: 'АЗС',       sub: 'ДО 50 КМ/Ч', badge: 'FUEL' },
+    sto:        { title: 'СТО',       sub: 'ДО 50 КМ/Ч', badge: 'STO' },
+    tuning:     { title: 'ТЮНИНГ',    sub: 'ДО 50 КМ/Ч', badge: 'TUNE' }
   };
 
   /* ---------- Персистентное состояние экономики ---------- */
@@ -323,7 +323,7 @@ export function initEconomy() {
       ctx.fillText(EXIT_HINT_LABELS[type], w / 2, h / 2 - 16);
       ctx.fillStyle = color;
       ctx.font = '800 26px system-ui,"Segoe UI",Arial';
-      ctx.fillText('В КОРОБКУ', w / 2, h / 2 + 28);
+      ctx.fillText('ДО 50 КМ/Ч', w / 2, h / 2 + 28);
     });
   }
 
@@ -428,20 +428,17 @@ export function initEconomy() {
     const exit = ahead.exit;
     const sideWord = exit.side > 0 ? 'справа' : 'слева';
     const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${meters(Math.max(0, ahead.dist))}`;
-    const armed = exitIsArmed(exit);
-    const how = armed
-      ? `Выбрано. Заезжай в коробку ${sideWord}`
-      : `Нажми «Съехать» или E, потом заезжай в коробку ${sideWord}`;
-    const key = `${exit.type}|${title}|${armed ? 1 : 0}`;
+    const slow = G.speed < EXIT_ENTER_SPEED;
+    const how = slow
+      ? `${Math.round(G.speed)} км/ч · можно съехать`
+      : `${Math.round(G.speed)} км/ч · сбрось ниже ${EXIT_ENTER_SPEED}`;
+    const key = `${exit.type}|${title}|${slow ? 1 : 0}|${Math.round(G.speed)}`;
     if (key === exitHintKey) return;
     exitHintKey = key;
     $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
-    const take = $('btn-take-exit');
-    take.textContent = armed ? 'Выбрано' : 'Съехать · E';
-    take.setAttribute('aria-pressed', armed ? 'true' : 'false');
-    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service') + (armed ? ' armed' : '');
+    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service') + (slow ? ' slow' : ' fast');
   }
 
   function openExitFromBox(exit) {
@@ -545,17 +542,6 @@ export function initEconomy() {
   }
 
   let exitPrevS = null;
-  let armedExit = null;
-  let armedS = NaN;
-
-  function exitIsArmed(exit) {
-    return !!exit && armedExit === exit && armedS === exit.s && !exit.used;
-  }
-
-  function clearArmedExit() {
-    armedExit = null;
-    armedS = NaN;
-  }
 
   function syncExitTrack() {
     exitPrevS = G.playerS;
@@ -608,45 +594,18 @@ export function initEconomy() {
       }
       if (e.zoneFlash > 0) e.zoneFlash = Math.max(0, e.zoneFlash - dt * 1.7);
 
-      if (exitIsArmed(e) && G.started && !G.ended && !G.uiModal && !G.paused
+      if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used
+        && G.speed < EXIT_ENTER_SPEED
         && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, e.side, G.START_LANE)) {
-        clearArmedExit();
         openExitFromBox(e);
         break;
       }
-    }
-
-    if (armedExit && (armedExit.s !== armedS || armedExit.used
-      || G.playerS > exitBoxCenter(armedExit.s) + EXIT_ZONE_LENGTH * 0.5)) {
-      clearArmedExit();
     }
 
     exitPrevS = G.playerS;
     refreshExitHint();
   }
 
-  function playerInExitBox(exit) {
-    return crossedExitBox(G.playerS, G.playerS, G.laneOffset, exit.s, exit.side, G.START_LANE);
-  }
-
-  function armExit() {
-    if (!G.started || G.ended || G.uiModal || G.paused) return false;
-    const ahead = nearestExitAhead();
-    if (!ahead) return false;
-    if (!exitIsArmed(ahead.exit)) {
-      armedExit = ahead.exit;
-      armedS = ahead.exit.s;
-    }
-    if (playerInExitBox(ahead.exit)) {
-      clearArmedExit();
-      openExitFromBox(ahead.exit);
-      return true;
-    }
-    exitHintKey = '';
-    refreshExitHint();
-    return true;
-  }
-  G.armExit = armExit;
   G.updateExitWorld = updateExitWorld;
 
   G.debugPlaceAtExit = (inside) => {
@@ -661,6 +620,9 @@ export function initEconomy() {
     if (!best) best = exitPool[0];
     if (!best) return null;
     if (G.uiModal) closeOverlayToGame();
+    G.started = true;
+    G.ended = false;
+    G.accidentCooldown = 2;
     best.used = false;
     G.speed = 0;
     const where = inside === 'before' ? 'before' : (inside ? 'inside' : 'beside');
@@ -668,6 +630,9 @@ export function initEconomy() {
     G.laneOffset = where === 'beside' ? 0 : best.side * G.START_LANE;
     G.lateralVelocity = 0;
     G.slipDriftVel = 0;
+    for (const car of G.trafficPool || []) {
+      if (Math.abs(car.s - G.playerS) < 45) car.s = G.playerS + 70;
+    }
     syncExitTrack();
     return { type: best.type, side: best.side, s: best.s, inside: where === 'inside', where };
   };
@@ -1262,7 +1227,6 @@ export function initEconomy() {
       activeOrder.targetS = G.playerS + Math.max(60, activeOrder.remainingM || 60);
     }
     deliveryMarker.visible = !!activeOrder;
-    clearArmedExit();
     syncExitTrack();
     updateEcoHud(performance.now());
     saveEco();
@@ -1329,11 +1293,6 @@ export function initEconomy() {
     }
   }
   G.updateEcoHud = updateEcoHud;
-
-  $('btn-take-exit').addEventListener('click', e => {
-    e.preventDefault();
-    armExit();
-  });
 
   $('btn-pause').addEventListener('click', e => {
     e.preventDefault();

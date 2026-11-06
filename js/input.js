@@ -30,11 +30,6 @@ export function initInput() {
       }
 
       const driving = G.started && !G.ended && !G.paused && !G.uiModal;
-      if (driving && (k === 'e' || k === 'у' || e.code === 'KeyE')) {
-        if (G.armExit) G.armExit();
-        e.preventDefault();
-        return;
-      }
       if (driving && (k === 'f' || e.code === 'KeyF')) {
         G.triggerHighBeam();
         e.preventDefault();

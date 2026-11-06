@@ -156,39 +156,17 @@ try {
   await new Promise((r) => setTimeout(r, 400));
   const afterReplay = await cdp.evaluate(`window.__bajaj.exitHint()`);
   const feed = await cdp.evaluate(`window.__bajaj.feed('КОМБО ×2 · +50 ₽', 'combo', 2)`);
-  const bareInside = await cdp.evaluate(`window.__bajaj.placeAtExit(true)`);
-  await new Promise((r) => setTimeout(r, 300));
-  const bare = await cdp.evaluate(`window.__bajaj.exitHint()`);
-  const before = await cdp.evaluate(`window.__bajaj.placeAtExit('before')`);
-  const armed = await cdp.evaluate(`(document.getElementById('btn-take-exit').click(), window.__bajaj.exitHint())`);
-  await new Promise((r) => setTimeout(r, 300));
-  const early = await cdp.evaluate(`window.__bajaj.exitHint()`);
-  const inside = await cdp.evaluate(`window.__bajaj.placeAtExit(true)`);
+  const fastInside = await cdp.evaluate(`window.__bajaj.placeAtExit('before', 80)`);
+  await new Promise((r) => setTimeout(r, 80));
+  const fast = await cdp.evaluate(`window.__bajaj.exitHint()`);
+  const slowBefore = await cdp.evaluate(`window.__bajaj.placeAtExit('before', 40)`);
+  await new Promise((r) => setTimeout(r, 80));
+  const paced = await cdp.evaluate(`window.__bajaj.exitHint()`);
+  const slowInside = await cdp.evaluate(`window.__bajaj.placeAtExit(true, 40)`);
   await new Promise((r) => setTimeout(r, 300));
   const hit = await cdp.evaluate(`window.__bajaj.exitHint()`);
-  if (bare.modal || early.modal || !early.armed || !hit.modal) {
-    throw new Error(`съезд: коробка без кнопки ${bare.modal}, кнопка до коробки ${early.modal}/${early.armed}, въезд ${hit.modal}`);
-  }
-  if (/само|автомат/i.test(`${bare.how} ${early.how}`)) {
-    throw new Error(`подсказка обещает сама: ${bare.how} / ${early.how}`);
-  }
-  if (!bare.how.includes('Съехать') || !bare.how.includes('коробку') || !early.how.startsWith('Выбрано')) {
-    throw new Error(`подсказка разошлась: ${bare.how} / ${early.how}`);
-  }
-  await cdp.evaluate(`window.__bajaj.placeAtExit('before')`);
-  await cdp.evaluate(`document.getElementById('btn-take-exit').click()`);
-  await cdp.evaluate(`window.__bajaj.setKeys({ gas: true, left: false, right: false, brake: false })`);
-  let driven = null;
-  let driveSnap = null;
-  for (let i = 0; i < 24; i++) {
-    await new Promise((r) => setTimeout(r, 250));
-    driven = await cdp.evaluate(`window.__bajaj.exitHint()`);
-    driveSnap = await cdp.evaluate(`window.__bajaj.snapshot()`);
-    if (driven.modal) break;
-  }
-  await cdp.evaluate(`window.__bajaj.setKeys({ gas: false })`);
-  if (!driven.modal) {
-    throw new Error(`после кнопки проезд коробки не открыл меню: s=${driveSnap.playerS} lane=${driveSnap.lane} speed=${driveSnap.speed} how=${driven.how}`);
+  if (fast.modal || !fast.fast || paced.modal || !paced.slow || !hit.modal) {
+    throw new Error(`съезд по скорости: быстро ${fast.modal}/${fast.fast} ${fast.how}, до коробки ${paced.modal}/${paced.slow} ${paced.how}, медленно ${hit.modal}`);
   }
   const exitFrame = await cdp.evaluate(`window.__bajaj.frame()`, 15000);
   const exitFile = join(tmpdir(), 'bajaj-exit.jpg');
@@ -197,7 +175,7 @@ try {
   const pageFile = join(tmpdir(), 'bajaj-exit-page.jpg');
   await writeFile(pageFile, Buffer.from(pageShot.data, 'base64'));
   console.log(JSON.stringify({
-    replay, afterReplay, feed, bareInside, bare, before, armed, early, inside, hit, exitFile, pageFile
+    replay, afterReplay, feed, fastInside, fast, slowBefore, paced, slowInside, hit, exitFile, pageFile
   }, null, 2));
   cdp.ws.close();
 } finally {
