@@ -1,4 +1,4 @@
-import { balance, button, currency, field, heading, iconButton, logo, menuScreen, note, panel, stats } from '@bajajgo/design';
+import { balance, button, callout, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
 import { G } from './state.js';
 
 export function initUi() {
@@ -162,42 +162,38 @@ export function initUi() {
         });
       }
 
-      let swatchHtml = '';
+      let paint = '';
       if (b.swatches && b.swatches.length) {
-        const swItems = b.swatches.map(s => {
-          const hexStr = '#' + s.hex.toString(16).padStart(6, '0');
-          const isAct = activeColor === s.hex;
-          return `<button class="swatch ${isAct ? 'active' : ''}" style="background:${hexStr}" title="${s.name}" data-swatch-bike="${b.id}" data-swatch-hex="${s.hex}"></button>`;
-        }).join('');
-        swatchHtml = `<div class="color-swatches"><span>Окраска:</span>${swItems}</div>`;
+        paint = swatchRow('Окраска', b.swatches.map(s => swatch({
+          color: '#' + s.hex.toString(16).padStart(6, '0'),
+          title: s.name,
+          on: activeColor === s.hex,
+          data: { 'swatch-bike': b.id, 'swatch-hex': s.hex }
+        })).join(''));
       }
 
-      const badgeClass = b.vType === 'yura' ? 'vtype yura' : (b.vType === 'qute' ? 'vtype qute' : 'vtype');
       const speedBadgeText = eff.speedDelta !== 0
         ? `${b.maxSpeed} км/ч (с тюнингом ${eff.maxSpeed} км/ч)`
         : `${b.maxSpeed} км/ч`;
+      const priceLine = b.price === 0
+        ? 'Стартовый мотоцикл · Цена: 0 ₽ (уже в гараже)'
+        : `Цена: ${b.price.toLocaleString('ru-RU')} ₽`;
 
-      return `
-        <div class="bike-card ${selected ? 'active-card' : ''}">
-          <strong>
-            <span>${b.name}</span>
-            <span style="display:flex;gap:6px;align-items:center">
-              <span class="${badgeClass}">${b.typeLabel}</span>
-              <span style="color:#ffb64e">${speedBadgeText}</span>
-            </span>
-          </strong>
-          <small>${b.price === 0 ? 'Стартовый мотоцикл · Цена: 0 ₽ (уже в гараже)' : 'Цена: ' + b.price.toLocaleString('ru-RU') + ' ₽'} · Тюнинг: ${eff.installedCount}/${G.tuningCatalog.length}</small>
-          ${swatchHtml}
-          <div class="bike-actions">${btn}</div>
-        </div>
-      `;
+      return card({
+        on: selected,
+        title: b.name,
+        meta: tag(b.typeLabel, b.vType === 'qute' ? 'warm' : 'plain') + tag(speedBadgeText, 'warm'),
+        detail: `${priceLine} · Тюнинг: ${eff.installedCount}/${G.tuningCatalog.length}`,
+        extra: paint,
+        footer: btn
+      });
     }).join('');
 
     overlay.innerHTML = panel(`
         ${logo({ left: 'ГАРАЖ', right: 'GO', compact: true })}
         ${heading('МАГАЗИН', 'МОТОЦИКЛЫ И КВАДРИЦИКЛЫ BAJAJ')}
         ${balance('Накоплено', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
-        <div class="shop-list">${cards}</div>
+        ${rows(cards)}
         ${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
     `);
 
@@ -249,86 +245,48 @@ export function initUi() {
     const bike = G.selectedBike();
     const eff = G.getBikeEffectiveStats(bike.id);
 
-    const speedDiffHtml = eff.speedDelta !== 0
-      ? `<em class="${eff.speedDelta < 0 ? 'neg' : ''}">(${eff.speedDelta > 0 ? '+' + eff.speedDelta : eff.speedDelta} км/ч)</em>`
-      : '';
-    const accelDiffHtml = eff.accelBonusPct > 0
-      ? `<em>(+${eff.accelBonusPct}%)</em>`
-      : '';
-    const brakeDiffHtml = eff.brakeBonusPct > 0
-      ? `<em>(+${eff.brakeBonusPct}%)</em>`
-      : '';
+    const speedHint = eff.speedDelta === 0 ? '' : ` (${eff.speedDelta > 0 ? '+' : ''}${eff.speedDelta} км/ч)`;
+    const accelHint = eff.accelBonusPct > 0 ? ` (+${eff.accelBonusPct}%)` : '';
+    const brakeHint = eff.brakeBonusPct > 0 ? ` (+${eff.brakeBonusPct}%)` : '';
 
     const cardsHtml = G.tuningCatalog.map(upg => {
       const price = G.getUpgradePrice(bike, upg);
       const owned = G.hasUpgradeOwned(bike.id, upg.id);
       const installed = G.hasUpgradeInstalled(bike.id, upg.id);
-
-      let statusBadge = '';
-      let actionBtn = '';
-
-      if (installed) {
-        statusBadge = `<span class="tune-price" style="color:#69f0ae">✓ Установлено</span>`;
-        actionBtn = button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', title: 'Снять или поставить деталь снова', data: { 'toggle-upg': upg.id } });
-      } else if (owned) {
-        statusBadge = `<span class="tune-price" style="color:#81d4fa">Куплено</span>`;
-        actionBtn = button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } });
-      } else {
-        statusBadge = `<span class="tune-price">${price.toLocaleString('ru-RU')} ₽</span>`;
-        actionBtn = button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
-      }
-
-      return `
-        <div class="tune-card ${installed ? 'installed' : ''}">
-          <div class="tune-ico">${upg.icon}</div>
-          <div class="tune-info">
-            <strong>
-              <span>${upg.name}</span>
-              <span class="effect-tag ${upg.isWarn ? 'warn' : ''}">${upg.effectLabel}</span>
-            </strong>
-            <small>${upg.desc}</small>
-          </div>
-          <div class="tune-act">
-            ${statusBadge}
-            ${actionBtn}
-          </div>
-        </div>
-      `;
+      const status = installed
+        ? tag('✓ Установлено', 'good')
+        : owned
+          ? tag('Куплено')
+          : tag(`${price.toLocaleString('ru-RU')} ₽`, 'warm');
+      const actionBtn = installed
+        ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', title: 'Снять или поставить деталь снова', data: { 'toggle-upg': upg.id } })
+        : owned
+          ? button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } })
+          : button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
+      return card({
+        on: installed,
+        mark: upg.icon,
+        title: upg.name,
+        meta: tag(upg.effectLabel, upg.isWarn ? 'warn' : 'plain'),
+        detail: upg.desc,
+        aside: status + actionBtn
+      });
     }).join('');
 
-    overlay.innerHTML = `
-      <div class="ds-panel">
+    overlay.innerHTML = panel(`
         ${logo({ left: 'ТЮНИНГ', right: 'GO', compact: true })}
         ${heading('ДОВОДКА', 'ТЕКУЩИЙ МОТОЦИКЛ')}
-
-        <div class="tuning-summary">
-          <div class="tuning-bike-header">
-            <strong>🏍️ ${bike.name} <span style="font-size:12px;color:#90caf9;font-weight:700">(База: ${bike.maxSpeed} км/ч)</span></strong>
-            <span class="balance-pill">Баланс: ${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽</span>
-          </div>
-          <div class="tuning-stats-row">
-            <div class="t-stat">
-              <span>Макс. скорость</span>
-              <b>${eff.maxSpeed} км/ч ${speedDiffHtml}</b>
-            </div>
-            <div class="t-stat">
-              <span>Динамика разгона</span>
-              <b>${eff.accel.toFixed(1)} ед. ${accelDiffHtml}</b>
-            </div>
-            <div class="t-stat">
-              <span>Торможение</span>
-              <b>${Math.round(eff.brakeDecel)} ед. ${brakeDiffHtml}</b>
-            </div>
-          </div>
-        </div>
-
-        <div class="tuning-msg ${statusType}" id="tuning-msg">${statusMessage || 'Улучшения привязаны к текущему мотоциклу и сохраняются автоматически'}</div>
-
-        <div class="shop-list">${cardsHtml}</div>
-
+        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${callout(`${bike.name} · база ${bike.maxSpeed} км/ч`)}
+        ${stats([
+          { label: 'Макс. скорость', value: `${eff.maxSpeed} км/ч${speedHint}`, tone: eff.speedDelta < 0 ? 'bad' : 'good' },
+          { label: 'Динамика разгона', value: `${eff.accel.toFixed(1)} ед.${accelHint}`, tone: eff.accelBonusPct > 0 ? 'good' : 'text' },
+          { label: 'Торможение', value: `${Math.round(eff.brakeDecel)} ед.${brakeHint}`, tone: eff.brakeBonusPct > 0 ? 'good' : 'text' }
+        ])}
+        ${callout(statusMessage || 'Улучшения привязаны к текущему мотоциклу и сохраняются автоматически', statusType === 'err' ? 'err' : (statusMessage ? 'ok' : ''))}
+        ${rows(cardsHtml)}
         ${button({ id: 'tuning-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
-      </div>
-    `;
+    `);
 
     overlay.querySelectorAll('[data-buy-upg]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
@@ -449,6 +407,7 @@ export function initUi() {
     G.ended = true;
     G.started = false;
     G.currentScreen = 'crash';
+    if (navigator.vibrate) navigator.vibrate(40);
 
     const earned = Math.floor(G.score);
     G.bankPoints += Math.max(0, earned - G.bankedOrderRun);

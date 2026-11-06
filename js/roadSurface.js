@@ -118,7 +118,6 @@ export function initRoadSurface() {
       pos.setXYZ(idx + 1, cx + rx * oR, cy, cz + rz * oR);
     }
     pos.needsUpdate = true;
-    shadeStrip(mesh.geometry);
   }
 
   function shadeSlope(geo, y0, y1, y2, x0, x1, x2) {
@@ -171,8 +170,22 @@ export function initRoadSurface() {
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
-    shadeSlope(slopeLeftMesh.geometry, -4.5, 1.8, 0.08, -95, -22, -12.7);
-    shadeSlope(slopeRightMesh.geometry, 0.08, 1.8, -4.5, 12.7, 22, 95);
+  }
+
+  const flatStrips = [
+    curbLeftMesh, curbRightMesh, sidewalkLeftMesh, sidewalkRightMesh,
+    centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight
+  ];
+  let lastDashS = NaN;
+  let lastSlopeShadeS = NaN;
+
+  function shareRoadNormals() {
+    shadeStrip(roadMesh.geometry);
+    const from = roadMesh.geometry.attributes.normal.array;
+    for (const mesh of flatStrips) {
+      mesh.geometry.attributes.normal.array.set(from);
+      mesh.geometry.attributes.normal.needsUpdate = true;
+    }
   }
 
   function updateRoadSurface(playerS) {
@@ -186,9 +199,17 @@ export function initRoadSurface() {
     updateStripRibbon(centerDoubleLine2, 0.22, 0.13, 0.025);
     updateStripRibbon(edgeLineLeft, -9.25, 0.15, 0.025);
     updateStripRibbon(edgeLineRight, 9.25, 0.15, 0.025);
+    shareRoadNormals();
     updateSlopeRibbons();
+    if (Number.isNaN(lastSlopeShadeS) || Math.abs(playerS - lastSlopeShadeS) >= 3) {
+      lastSlopeShadeS = playerS;
+      shadeSlope(slopeLeftMesh.geometry, -4.5, 1.8, 0.08, -95, -22, -12.7);
+      shadeSlope(slopeRightMesh.geometry, 0.08, 1.8, -4.5, 12.7, 22, 95);
+    }
 
     const startDashS = Math.floor((playerS - 20) / 11) * 11;
+    if (startDashS === lastDashS) return;
+    lastDashS = startDashS;
     for (const d of dashMeshes) {
       const s = startDashS + d.baseIdx * 11;
       G.placeOnRoad(d.mesh, s, d.laneX, 0.025);

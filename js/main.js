@@ -17,6 +17,7 @@ import { initUi } from './ui.js';
 import { initInput } from './input.js';
 import { initEconomy } from './economy.js';
 import { initLoop } from './loop.js';
+import { initDebug } from './debug.js';
 
 initGraphics();
 initCatalog();
@@ -37,3 +38,4 @@ initUi();
 initInput();
 initEconomy();
 initLoop();
+initDebug();

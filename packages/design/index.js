@@ -45,9 +45,10 @@ export function note(message) {
   return `<p class="ds-note">${esc(message)}</p>`;
 }
 
-/** @param {string} message */
-export function callout(message) {
-  return `<div class="ds-callout">${message}</div>`;
+/** @param {string} message @param {'ok'|'err'|''} [tone] */
+export function callout(message, tone) {
+  const name = tone ? ` ds-callout-${tone}` : '';
+  return `<div class="ds-callout${name}">${message}</div>`;
 }
 
 /** @param {{ id?: string, label: string, value: string }} options */
@@ -66,7 +67,7 @@ export function inline(label, control) {
   return `<div class="ds-inline"><span>${esc(label)}</span>${control}</div>`;
 }
 
-/** @param {{ label: string, value: string, tone?: 'text'|'gold'|'signal' }[]} rows */
+/** @param {{ label: string, value: string, tone?: 'text'|'gold'|'signal'|'good'|'bad' }[]} rows */
 export function stats(rows) {
   return `<div class="ds-stats">${rows.map((row) => {
     const tone = row.tone || 'text';
@@ -93,6 +94,36 @@ export function logo(options = {}) {
     <div class="ds-speed" aria-hidden="true"><span></span><span></span><span></span></div>
     <div class="ds-logo"><span class="ds-logo-left">${esc(left)}</span><span class="ds-logo-right">${esc(right)}</span></div>
   </div>`;
+}
+
+/** @param {string} label @param {'plain'|'warm'|'warn'|'good'} [tone] */
+export function tag(label, tone) {
+  const name = tone && tone !== 'plain' ? ` ds-tag-${tone}` : '';
+  return `<span class="ds-tag${name}">${esc(label)}</span>`;
+}
+
+/** @param {{ color: string, title: string, on?: boolean, data?: Record<string, string|number> }} options */
+export function swatch(options) {
+  const on = options.on ? ' ds-swatch-on' : '';
+  return `<button type="button" class="ds-swatch${on}" style="background:${esc(options.color)}" title="${esc(options.title)}"${dataAttrs(options.data)}></button>`;
+}
+
+/** @param {string} label @param {string} items */
+export function swatchRow(label, items) {
+  return `<div class="ds-swatches"><span>${esc(label)}</span>${items}</div>`;
+}
+
+/**
+ * @param {{ on?: boolean, mark?: string, title: string, meta?: string, detail?: string, extra?: string, footer?: string, aside?: string }} options
+ */
+export function card(options) {
+  const on = options.on ? ' ds-card-on' : '';
+  const mark = options.mark ? `<div class="ds-card-mark">${options.mark}</div>` : '';
+  const meta = options.meta ? `<span class="ds-card-meta">${options.meta}</span>` : '';
+  const detail = options.detail ? `<small>${esc(options.detail)}</small>` : '';
+  const aside = options.aside ? `<div class="ds-card-aside">${options.aside}</div>` : '';
+  const footer = options.footer ? `<div class="ds-card-footer">${options.footer}</div>` : '';
+  return `<article class="ds-card${on}">${mark}<div class="ds-card-main"><header><b>${esc(options.title)}</b>${meta}</header>${detail}${options.extra || ''}${footer}</div>${aside}</article>`;
 }
 
 /** @param {string} inner */

@@ -4,6 +4,9 @@ export function initLoop() {
   const $ = G.$;
   const clamp = G.clamp;
   const lerp = G.lerp;
+  let jumpLineShown = '';
+  let oncomingShown = false;
+  let comboShown = 0;
 
   /* =========================================================================
    * 17. ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ, ФИЗИКА ТЮНИНГА, ТРАМПЛИНОВ И РЕНДЕРИНГ
@@ -184,7 +187,8 @@ export function initLoop() {
           G.jumpState.liveBonus = 0;
           for (const c of G.trafficPool) c.jumpedInCurrentJump = false;
           $('jump-live').hidden = false;
-          $('jump-live-text').textContent = `Машин: 0 · Бонус: +0 ₽`;
+          jumpLineShown = 'Машин: 0 · Бонус: +0 ₽';
+          $('jump-live-text').textContent = jumpLineShown;
           G.playJumpSound('launch', 1);
         }
       }
@@ -201,12 +205,16 @@ export function initLoop() {
 
       if (G.jumpState.height <= 0) {
         finishJumpLanding();
-      } else {
+        } else {
         const jumpDistNow = Math.max(0, G.playerS - G.jumpState.startS);
         const count = G.jumpState.carsJumped;
         const mult = count >= 3 ? 2.0 : (count === 2 ? 1.5 : 1.0);
         G.jumpState.liveBonus = count * 50 * mult + Math.max(0, Math.floor((jumpDistNow - 12) / 10) * 20);
-        $('jump-live-text').textContent = `Машин: ${count} (×${mult}) · Дист: ${jumpDistNow.toFixed(0)} м · +${Math.round(G.jumpState.liveBonus)} ₽`;
+        const jumpLine = `Машин: ${count} (×${mult}) · Дист: ${jumpDistNow.toFixed(0)} м · +${Math.round(G.jumpState.liveBonus)} ₽`;
+        if (jumpLine !== jumpLineShown) {
+          jumpLineShown = jumpLine;
+          $('jump-live-text').textContent = jumpLine;
+        }
       }
     } else {
       G.jumpState.height = lerp(G.jumpState.height, surfaceRampHeight, dt * 18);
@@ -222,13 +230,20 @@ export function initLoop() {
     const comboMult = G.comboCount > 0 ? (1 + Math.min(G.comboCount, 5) * 0.2) : 1;
     G.score += (G.speed * dt / 6) * oncomingMult * comboMult;
 
-    $('badge-oncoming').hidden = oncomingMult === 1;
-    const badgeCombo = $('badge-combo');
-    if (G.comboCount > 1) {
-      badgeCombo.hidden = false;
-      badgeCombo.textContent = `🔥 КОМБО ×${G.comboCount}`;
-    } else {
-      badgeCombo.hidden = true;
+    const oncomingOn = oncomingMult !== 1;
+    if (oncomingOn !== oncomingShown) {
+      oncomingShown = oncomingOn;
+      $('badge-oncoming').hidden = !oncomingOn;
+    }
+    if (G.comboCount !== comboShown) {
+      comboShown = G.comboCount;
+      const badgeCombo = $('badge-combo');
+      if (G.comboCount > 1) {
+        badgeCombo.hidden = false;
+        badgeCombo.textContent = `🔥 КОМБО ×${G.comboCount}`;
+      } else {
+        badgeCombo.hidden = true;
+      }
     }
 
     G.frontWheelGroup.rotation.x -= forwardMeters * 1.9;
@@ -275,9 +290,10 @@ export function initLoop() {
 
       const camS = G.playerS - distBehind;
       const camLat = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
+      const camYaw = -Math.atan(G.roadDX(camS));
       const minSafeY = G.roadY(camS) + 1.85;
-      const targetCamX = G.roadX(camS) + Math.cos(-Math.atan(G.roadDX(camS))) * camLat;
-      const targetCamZ = -camS + Math.sin(-Math.atan(G.roadDX(camS))) * camLat;
+      const targetCamX = G.roadX(camS) + Math.cos(camYaw) * camLat;
+      const targetCamZ = -camS + Math.sin(camYaw) * camLat;
       const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
 
       const followRate = Math.min(1, dt * 11.5);
@@ -320,8 +336,12 @@ export function initLoop() {
         ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
         ramp.s = G.findSafeRampS(maxRampS + nextInterval);
         ramp.triggeredThisPass = false;
+        ramp.placedS = NaN;
       }
-      G.placeOnRoad(ramp.mesh, ramp.s, ramp.lateralOffset, 0);
+      if (ramp.placedS !== ramp.s) {
+        ramp.placedS = ramp.s;
+        G.placeOnRoad(ramp.mesh, ramp.s, ramp.lateralOffset, 0);
+      }
     }
   }
 
@@ -346,18 +366,18 @@ export function initLoop() {
 
     for (const slot of G.roadsideSlots) {
       if (slot.s < G.playerS - 35) slot.s += recycleSpan;
-      G.placeOnRoad(slot.leftGuard, slot.s, -10.05, 0);
-      G.placeOnRoad(slot.rightGuard, slot.s, 10.05, 0);
-      G.placeOnRoad(slot.leftLamp, slot.s, -10.3, 0);
-      G.placeOnRoad(slot.rightLamp, slot.s, 10.3, 0);
-      G.placeOnRoad(slot.leftProp, slot.s, -21.5, 0);
-      G.placeOnRoad(slot.rightProp, slot.s, 21.5, 0);
-
-      if (slot.billboard) {
-        G.placeOnRoad(slot.billboard.group, slot.s + 6, slot.billboard.side * 15.8, 0, slot.billboard.side * -0.22);
-      }
-      if (slot.portal) {
-        G.placeOnRoad(slot.portal, slot.s, 0, 0);
+      if (slot.placedS !== slot.s) {
+        slot.placedS = slot.s;
+        G.placeOnRoad(slot.leftGuard, slot.s, -10.05, 0);
+        G.placeOnRoad(slot.rightGuard, slot.s, 10.05, 0);
+        G.placeOnRoad(slot.leftLamp, slot.s, -10.3, 0);
+        G.placeOnRoad(slot.rightLamp, slot.s, 10.3, 0);
+        G.placeOnRoad(slot.leftProp, slot.s, -21.5, 0);
+        G.placeOnRoad(slot.rightProp, slot.s, 21.5, 0);
+        if (slot.billboard) {
+          G.placeOnRoad(slot.billboard.group, slot.s + 6, slot.billboard.side * 15.8, 0, slot.billboard.side * -0.22);
+        }
+        if (slot.portal) G.placeOnRoad(slot.portal, slot.s, 0, 0);
       }
 
       if (Math.abs(slot.s - G.playerS) < 85) {
@@ -381,7 +401,10 @@ export function initLoop() {
   function updateMegaStructures(dt) {
     for (const ms of G.megaStructures) {
       if (ms.userData.s < G.playerS - 65) ms.userData.s += G.megaStructures.length * 320;
-      G.placeOnRoad(ms, ms.userData.s, 0, 0);
+      if (ms.userData.placedS !== ms.userData.s) {
+        ms.userData.placedS = ms.userData.s;
+        G.placeOnRoad(ms, ms.userData.s, 0, 0);
+      }
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {
           dc.mesh.position.x += dc.dir * 14 * dt;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { devToolsEnabled } from './dev-flag.js';
 import { G } from './state.js';
 
 export function initScene() {
@@ -18,7 +19,8 @@ export function initScene() {
     G.renderer = new THREE.WebGLRenderer({
       antialias: dpr < 1.5,
       powerPreference: 'high-performance',
-      stencil: false
+      stencil: false,
+      preserveDrawingBuffer: devToolsEnabled()
     });
   } catch (e) {
     $('fatal').style.display = 'block';

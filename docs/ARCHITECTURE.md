@@ -42,6 +42,7 @@
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
 | 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
 | 17 | `js/loop.js` | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
+|   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
 
 ## Ключевые переменные
 
@@ -109,6 +110,11 @@ animate(now)
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)
 ```
+
+Обочина, рампы, мосты, указатели съездов и штрихи разметки стоят в мире,
+пока не уедут за спину. Пока `s` тот же, `placeOnRoad` для них не вызывается.
+Нормали бордюра и тротуара копируются с полотна. Нормали откосов
+пересчитываются, когда игрок проехал около 3 м.
 
 ## Экономика и съезды
 

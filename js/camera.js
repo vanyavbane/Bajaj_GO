@@ -68,35 +68,55 @@ export function initCamera() {
   G.toggleCameraMode = toggleCameraMode;
 
   let lastDashDraw = 0;
+  let lastDashKey = '';
+  let lastThirdKey = '';
+  let lastPills = '';
+  let dashGrad = null;
+  let dashGradYura = null;
   function updateCockpitDashboard(now, speedVal, distVal, scoreVal, multVal, highBeamActive) {
     const effStats = G.getBikeEffectiveStats(G.selectedBikeId);
     G.applyWearToStats(effStats);
     const maxSpd = effStats.maxSpeed;
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
+    const speedText = String(Math.round(speedVal));
+    const distText = distVal.toFixed(2);
 
     if (G.cameraMode === 'third' && G.started && !G.ended) {
-      $('tp-speed').textContent = String(Math.round(speedVal));
-      $('tp-gear').textContent = 'G' + gear;
-      $('tp-dist').textContent = distVal.toFixed(2) + ' КМ';
-      $('tp-rub').textContent = Math.floor(scoreVal) + ' ₽';
-
+      const thirdKey = `${speedText}|${gear}|${distText}|${Math.floor(scoreVal)}`;
+      if (thirdKey !== lastThirdKey) {
+        lastThirdKey = thirdKey;
+        $('tp-speed').textContent = speedText;
+        $('tp-gear').textContent = 'G' + gear;
+        $('tp-dist').textContent = distText + ' КМ';
+        $('tp-rub').textContent = Math.floor(scoreVal) + ' ₽';
+      }
       let pills = '';
       if (multVal > 1) pills += `<span class="tp-pill x2">ВСТРЕЧКА ×2</span>`;
       if (G.jumpState.airborne) pills += `<span class="tp-pill jump">ПЕРЕЛЁТ: ${G.jumpState.carsJumped} (+${Math.round(G.jumpState.liveBonus)} ₽)</span>`;
-      $('tp-extra').innerHTML = pills;
+      if (pills !== lastPills) {
+        lastPills = pills;
+        $('tp-extra').innerHTML = pills;
+      }
       return;
     }
 
-    if (now - lastDashDraw < 30) return;
+    const dashKey = `${speedText}|${distText}|${Math.floor(scoreVal)}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
+    if (dashKey === lastDashKey || now - lastDashDraw < 30) return;
+    lastDashKey = dashKey;
     lastDashDraw = now;
 
     const rpmFrac = clamp(speedVal / maxSpd, 0, 1);
     const isYura = G.selectedBike().vType === 'yura';
 
-    const bg = G.dashCtx.createLinearGradient(0, 0, 0, 256);
-    bg.addColorStop(0, isYura ? '#140824' : '#07131e');
-    bg.addColorStop(1, isYura ? '#220e3b' : '#0d2233');
-    G.dashCtx.fillStyle = bg;
+    if (!dashGrad) {
+      dashGrad = G.dashCtx.createLinearGradient(0, 0, 0, 256);
+      dashGrad.addColorStop(0, '#07131e');
+      dashGrad.addColorStop(1, '#0d2233');
+      dashGradYura = G.dashCtx.createLinearGradient(0, 0, 0, 256);
+      dashGradYura.addColorStop(0, '#140824');
+      dashGradYura.addColorStop(1, '#220e3b');
+    }
+    G.dashCtx.fillStyle = isYura ? dashGradYura : dashGrad;
     G.dashCtx.fillRect(0, 0, 512, 256);
 
     G.dashCtx.strokeStyle = isYura ? '#ff4081' : '#29b6f6';

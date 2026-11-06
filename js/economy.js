@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { balance, button, callout, heading, inline, listItem, panel, rows, stats } from '@bajajgo/design';
+import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { G } from './state.js';
 
 export function initEconomy() {
@@ -507,11 +507,14 @@ export function initEconomy() {
         e.pulsePhase = Math.random() * Math.PI * 2;
         updateExitSign(e);
       }
-      G.placeOnRoad(e.group, e.s, e.side * 12.6, 0);
+      const zoneS = e.s - EXIT_ZONE_OFFSET;
+      if (e.placedS !== e.s) {
+        e.placedS = e.s;
+        G.placeOnRoad(e.group, e.s, e.side * 12.6, 0);
+        G.placeOnRoad(e.marker, zoneS, e.side * 7.1, 0.07);
+      }
 
       // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
-      const zoneS = e.s - EXIT_ZONE_OFFSET;
-      G.placeOnRoad(e.marker, zoneS, e.side * 7.1, 0.07);
       const dist = zoneS - G.playerS;
       e.marker.visible = dist > -35 && dist < 270;
 
@@ -599,12 +602,17 @@ export function initEconomy() {
     G.scene.add(deliveryMarker);
   })();
 
+  let deliveryParkS = NaN;
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
-      G.placeOnRoad(deliveryMarker, activeOrder.targetS, 7.1, 0);
+      if (deliveryParkS !== activeOrder.targetS) {
+        deliveryParkS = activeOrder.targetS;
+        G.placeOnRoad(deliveryMarker, activeOrder.targetS, 7.1, 0);
+      }
     } else {
       deliveryMarker.visible = false;
+      deliveryParkS = NaN;
     }
   }
   G.updateDeliveryMarker = updateDeliveryMarker;
@@ -899,39 +907,30 @@ export function initEconomy() {
       const price = G.getUpgradePrice(bike, upg);
       const installed = G.hasUpgradeInstalled(bike.id, upg.id);
       const owned = G.hasUpgradeOwned(bike.id, upg.id);
-      let statusBadge = '';
-      let actionBtn = '';
-      if (installed) {
-        statusBadge = `<span class="tune-price" style="color:#69f0ae">✓ Установлено</span>`;
-        actionBtn = button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', data: { 'toggle-upg': upg.id } });
-      } else if (owned) {
-        statusBadge = `<span class="tune-price" style="color:#81d4fa">Куплено</span>`;
-        actionBtn = button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } });
-      } else {
-        statusBadge = `<span class="tune-price">${price.toLocaleString('ru-RU')} ₽</span>`;
-        actionBtn = button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
-      }
-      return `
-        <div class="tune-card ${installed ? 'installed' : ''}">
-          <div class="tune-ico">${upg.icon}</div>
-          <div class="tune-info">
-            <strong>
-              <span>${upg.name}</span>
-              <span class="effect-tag ${upg.isWarn ? 'warn' : ''}">${upg.effectLabel}</span>
-            </strong>
-            <small>${upg.desc}</small>
-          </div>
-          <div class="tune-act">
-            ${statusBadge}
-            ${actionBtn}
-          </div>
-        </div>`;
+      const status = installed
+        ? tag('✓ Установлено', 'good')
+        : owned
+          ? tag('Куплено')
+          : tag(`${price.toLocaleString('ru-RU')} ₽`, 'warm');
+      const actionBtn = installed
+        ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', data: { 'toggle-upg': upg.id } })
+        : owned
+          ? button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } })
+          : button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
+      return card({
+        on: installed,
+        mark: upg.icon,
+        title: upg.name,
+        meta: tag(upg.effectLabel, upg.isWarn ? 'warn' : 'plain'),
+        detail: upg.desc,
+        aside: status + actionBtn
+      });
     }).join('');
 
     openModal(panel(`
         ${heading('🔧 ТЮНИНГ', 'СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА')}
         ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name} · макс. ${eff.maxSpeed} км/ч`)}
-        ${message ? callout(message) : ''}
+        ${message ? callout(message, statusType === 'err' ? 'err' : 'ok') : ''}
         ${rows(cardsHtml)}
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');

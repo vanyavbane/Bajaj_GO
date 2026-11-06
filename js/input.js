@@ -61,12 +61,20 @@ export function initInput() {
   document.querySelectorAll('.ctrl[data-key]').forEach(btn => {
     if (!(btn instanceof HTMLElement)) return;
     const k = btn.dataset.key;
-    const down = e => { e.preventDefault(); G.keys[k] = true; btn.classList.add('on'); };
-    const up = e => { e.preventDefault(); G.keys[k] = false; btn.classList.remove('on'); };
+    const down = e => {
+      e.preventDefault();
+      try { if (e.pointerId != null) btn.setPointerCapture(e.pointerId); } catch (err) { /* указатель уже отпущен */ }
+      G.keys[k] = true;
+      btn.classList.add('on');
+    };
+    const up = e => {
+      e.preventDefault();
+      G.keys[k] = false;
+      btn.classList.remove('on');
+    };
     btn.addEventListener('pointerdown', down);
     btn.addEventListener('pointerup', up);
     btn.addEventListener('pointercancel', up);
-    btn.addEventListener('pointerleave', up);
   });
   $('btn-flash').addEventListener('pointerdown', e => {
     e.preventDefault();
@@ -76,4 +84,38 @@ export function initInput() {
     e.preventDefault();
     G.toggleCameraMode();
   });
+
+  const view = $('view');
+  let swipeId = null;
+  let swipeX = 0;
+  let swipeSteer = null;
+  function clearSwipe() {
+    if (swipeSteer === 'left' || swipeSteer === 'right') {
+      const held = document.querySelector(`.ctrl[data-key="${swipeSteer}"]`);
+      if (!(held instanceof HTMLElement) || !held.classList.contains('on')) G.keys[swipeSteer] = false;
+    }
+    swipeSteer = null;
+    swipeId = null;
+  }
+  view.addEventListener('pointerdown', e => {
+    if (!G.started || G.ended || G.paused || G.uiModal) return;
+    if (e.target instanceof Element && e.target.closest('#controls, #btn-pause')) return;
+    swipeId = e.pointerId;
+    swipeX = e.clientX;
+    try { view.setPointerCapture(e.pointerId); } catch (err) { /* жест уже закончился */ }
+  });
+  view.addEventListener('pointermove', e => {
+    if (e.pointerId !== swipeId) return;
+    const dx = e.clientX - swipeX;
+    const next = dx > 36 ? 'right' : (dx < -36 ? 'left' : null);
+    if (next === swipeSteer) return;
+    if (swipeSteer) {
+      const held = document.querySelector(`.ctrl[data-key="${swipeSteer}"]`);
+      if (!(held instanceof HTMLElement) || !held.classList.contains('on')) G.keys[swipeSteer] = false;
+    }
+    swipeSteer = next;
+    if (next) G.keys[next] = true;
+  });
+  view.addEventListener('pointerup', e => { if (e.pointerId === swipeId) clearSwipe(); });
+  view.addEventListener('pointercancel', e => { if (e.pointerId === swipeId) clearSwipe(); });
 }
