@@ -41,15 +41,15 @@ export function initBike() {
   G.bikeRoot.add(G.yuraUnderGlowLight);
 
   function applyVisualTuningToModel() {
-    const bId = G.selectedBikeId;
-    const hasFilter = G.hasUpgradeInstalled(bId, 'zero_filter');
-    const hasCarb = G.hasUpgradeInstalled(bId, 'carb_replace');
-    const hasCarbTune = G.hasUpgradeInstalled(bId, 'carb_tune');
-    const hasIridium = G.hasUpgradeInstalled(bId, 'iridium_plugs');
-    const hasSprocket = G.hasUpgradeInstalled(bId, 'speed_sprocket');
-    const hasWideTires = G.hasUpgradeInstalled(bId, 'wide_tires');
-    const hasWindshield = G.hasUpgradeInstalled(bId, 'windshield');
-    const hasBrakes = G.hasUpgradeInstalled(bId, 'new_brakes');
+    const installed = new Set(G.getBikeTuningRecord(G.selectedBikeId).installed);
+    const hasFilter = installed.has('zero_filter');
+    const hasCarb = installed.has('carb_replace');
+    const hasCarbTune = installed.has('carb_tune');
+    const hasIridium = installed.has('iridium_plugs');
+    const hasSprocket = installed.has('speed_sprocket');
+    const hasWideTires = installed.has('wide_tires');
+    const hasWindshield = installed.has('windshield');
+    const hasBrakes = installed.has('new_brakes');
 
     bike.tuneBikeWindshieldExt.visible = hasWindshield;
     pit.tuneBikeWindshieldCockpit.visible = hasWindshield;

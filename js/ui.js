@@ -1,5 +1,5 @@
-import { balance, button, callout, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
-import { grouped, rubles, shortfall } from './money.js';
+import { balance, button, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
+import { grouped, rubles } from './money.js';
 import { resetRun } from './rules.js';
 import { G } from './state.js';
 import { bikePaint } from './vehicle.js';
@@ -209,107 +209,6 @@ export function initUi() {
       });
     });
     $('shop-back').addEventListener('click', renderMainMenu);
-  }
-
-  // ЭКРАН ТЮНИНГА ДЛЯ ТЕКУЩЕГО ВЫБРАННОГО МОТОЦИКЛА
-  function renderTuning(statusMessage = '', statusType = '') {
-    G.currentScreen = 'tuning';
-    const overlay = $('overlay');
-    overlay.style.display = 'flex';
-    overlay.className = 'mode-shop';
-
-    const bike = G.selectedBike();
-    const eff = G.getBikeEffectiveStats(bike.id);
-
-    const speedHint = eff.speedDelta === 0 ? '' : ` (${eff.speedDelta > 0 ? '+' : ''}${eff.speedDelta} км/ч)`;
-    const accelHint = eff.accelBonusPct > 0 ? ` (+${eff.accelBonusPct}%)` : '';
-    const brakeHint = eff.brakeBonusPct > 0 ? ` (+${eff.brakeBonusPct}%)` : '';
-
-    const cardsHtml = G.tuningCatalog.map(upg => {
-      const price = G.getUpgradePrice(bike, upg);
-      const owned = G.hasUpgradeOwned(bike.id, upg.id);
-      const installed = G.hasUpgradeInstalled(bike.id, upg.id);
-      const status = installed
-        ? tag('✓ Установлено', 'good')
-        : owned
-          ? tag('Куплено')
-          : tag(rubles(price), 'warm');
-      const actionBtn = installed
-        ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', title: 'Снять или поставить деталь снова', data: { 'toggle-upg': upg.id } })
-        : owned
-          ? button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } })
-          : button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
-      return card({
-        on: installed,
-        mark: upg.icon,
-        title: upg.name,
-        meta: tag(upg.effectLabel, upg.isWarn ? 'warn' : 'plain'),
-        detail: upg.desc,
-        aside: status + actionBtn
-      });
-    }).join('');
-
-    overlay.innerHTML = panel(`
-        ${logo({ left: 'ТЮНИНГ', right: 'GO', compact: true })}
-        ${heading('ДОВОДКА', 'ТЕКУЩИЙ МОТОЦИКЛ')}
-        ${balance('БАЛАНС', rubles(G.bankPoints))}
-        ${callout(`${bike.name} · база ${bike.maxSpeed} км/ч`)}
-        ${stats([
-          { label: 'Макс. скорость', value: `${eff.maxSpeed} км/ч${speedHint}`, tone: eff.speedDelta < 0 ? 'bad' : 'good' },
-          { label: 'Динамика разгона', value: `${eff.accel.toFixed(1)} ед.${accelHint}`, tone: eff.accelBonusPct > 0 ? 'good' : 'text' },
-          { label: 'Торможение', value: `${Math.round(eff.brakeDecel)} ед.${brakeHint}`, tone: eff.brakeBonusPct > 0 ? 'good' : 'text' }
-        ])}
-        ${callout(statusMessage || 'Улучшения привязаны к текущему мотоциклу и сохраняются автоматически', statusType === 'err' ? 'err' : (statusMessage ? 'ok' : ''))}
-        ${rows(cardsHtml)}
-        ${button({ id: 'tuning-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
-    `);
-
-    overlay.querySelectorAll('[data-buy-upg]').forEach(btn => {
-      if (!(btn instanceof HTMLElement)) return;
-      btn.addEventListener('click', () => {
-        const upgId = btn.dataset.buyUpg;
-        const upg = G.tuningCatalog.find(u => u.id === upgId);
-        if (!upg) return;
-        const price = G.getUpgradePrice(bike, upg);
-        if (G.bankPoints < price) {
-          const need = shortfall(price, G.bankPoints);
-          renderTuning(`⚠ Недостаточно средств! Для покупки «${upg.shortName}» не хватает ещё ${rubles(need)}`, 'err');
-          return;
-        }
-        G.bankPoints -= price;
-        const rec = G.getBikeTuningRecord(bike.id);
-        if (!rec.owned.includes(upg.id)) rec.owned.push(upg.id);
-        if (!rec.installed.includes(upg.id)) rec.installed.push(upg.id);
-        G.saveGarage();
-        G.syncVehicleAndCameraVisibility(true);
-        renderTuning(`✓ Улучшение «${upg.shortName}» куплено и установлено на ${bike.name}!`, 'ok');
-      });
-    });
-
-    overlay.querySelectorAll('[data-toggle-upg]').forEach(btn => {
-      if (!(btn instanceof HTMLElement)) return;
-      btn.addEventListener('click', () => {
-        const upgId = btn.dataset.toggleUpg;
-        const upg = G.tuningCatalog.find(u => u.id === upgId);
-        if (!upg) return;
-        const rec = G.getBikeTuningRecord(bike.id);
-        if (!rec.owned.includes(upg.id)) return;
-        const idx = rec.installed.indexOf(upg.id);
-        let msg = '';
-        if (idx >= 0) {
-          rec.installed.splice(idx, 1);
-          msg = `Деталь «${upg.shortName}» снята (остаётся в вашем гараже — статус «Куплено»)`;
-        } else {
-          rec.installed.push(upg.id);
-          msg = `✓ Деталь «${upg.shortName}» установлена на ${bike.name}!`;
-        }
-        G.saveGarage();
-        G.syncVehicleAndCameraVisibility(true);
-        renderTuning(msg, 'ok');
-      });
-    });
-
-    $('tuning-back').addEventListener('click', renderMainMenu);
   }
 
   function startGame() {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { rubles, shortfall } from './money.js';
+import { meters, rubles, shortfall } from './money.js';
 import { atExitShoulder } from './rules.js';
 import { G } from './state.js';
 import { placeIfMoved } from './stream.js';
@@ -779,7 +779,7 @@ export function initEconomy() {
         ${heading('⛽ АЗС', 'СЪЕЗД · ЗАПРАВКА')}
         ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${opts.message ? callout(opts.message) : ''}
-        ${callout(`${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}Бак: <b>${pct}%</b> · запас хода ≈ <b>${Math.round(G.fuelM).toLocaleString('ru-RU')} м</b>.<br>Полного бака хватает на ${FUEL_RANGE_M.toLocaleString('ru-RU')} м.`)}
+        ${callout(`${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}Бак: <b>${pct}%</b> · запас хода ≈ <b>${meters(G.fuelM)}</b>.<br>Полного бака хватает на ${meters(FUEL_RANGE_M)}.`)}
         ${button({
           id: 'fuel-fill',
           variant: 'primary',
@@ -871,13 +871,13 @@ export function initEconomy() {
       const needed = wearM[part] >= 300;
       const canPay = G.bankPoints >= price;
       const disabled = !needed || !canPay;
-      const detail = `Осталось ${Math.round(left)}% · замена каждые ${WEAR_LIMITS[part].toLocaleString('ru-RU')} м`
+      const detail = `Осталось ${Math.round(left)}% · замена каждые ${meters(WEAR_LIMITS[part])}`
         + (!needed ? ' · пока не требуется' : (!canPay ? ' · не хватает денег' : ''));
       return listItem({
         icon: WEAR_ICONS[part],
         title: WEAR_LABELS[part],
         detail,
-        price: needed ? `${price.toLocaleString('ru-RU')} ₽` : 'НОРМА',
+        price: needed ? rubles(price) : 'НОРМА',
         disabled,
         data: { service: part }
       });
@@ -945,44 +945,33 @@ export function initEconomy() {
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');
 
-    document.querySelectorAll('[data-buy-upg]').forEach(btn => {
+    const tuningRoot = $('overlay');
+    tuningRoot.querySelectorAll('[data-buy-upg]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upg = G.tuningCatalog.find(u => u.id === btn.dataset.buyUpg);
         if (!upg) return;
-        const price = G.getUpgradePrice(bike, upg);
-        if (G.bankPoints < price) {
-          renderExitTuning(`⚠ Не хватает ${rubles(shortfall(price, G.bankPoints))} на «${upg.shortName}»`, 'err');
+        const bought = G.purchaseUpgrade(bike, upg);
+        if (!bought.ok) {
+          renderExitTuning(`⚠ Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'err');
           return;
         }
-        G.bankPoints -= price;
-        const rec = G.getBikeTuningRecord(bike.id);
-        if (!rec.owned.includes(upg.id)) rec.owned.push(upg.id);
-        if (!rec.installed.includes(upg.id)) rec.installed.push(upg.id);
-        G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderExitTuning(`✓ «${upg.shortName}» куплено и установлено!`, 'ok');
       });
     });
 
-    document.querySelectorAll('[data-toggle-upg]').forEach(btn => {
+    tuningRoot.querySelectorAll('[data-toggle-upg]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upg = G.tuningCatalog.find(u => u.id === btn.dataset.toggleUpg);
         if (!upg) return;
-        const rec = G.getBikeTuningRecord(bike.id);
-        if (!rec.owned.includes(upg.id)) return;
-        const idx = rec.installed.indexOf(upg.id);
-        let msg = '';
-        if (idx >= 0) {
-          rec.installed.splice(idx, 1);
-          msg = `Деталь «${upg.shortName}» снята (остаётся в гараже)`;
-        } else {
-          rec.installed.push(upg.id);
-          msg = `✓ Деталь «${upg.shortName}» установлена`;
-        }
-        G.saveGarage();
+        const toggled = G.toggleUpgrade(bike, upg);
+        if (!toggled.ok) return;
         G.syncVehicleAndCameraVisibility(true);
+        const msg = toggled.installed
+          ? `✓ Деталь «${upg.shortName}» установлена`
+          : `Деталь «${upg.shortName}» снята (остаётся в гараже)`;
         renderExitTuning(msg, 'ok');
       });
     });
@@ -1228,7 +1217,7 @@ export function initEconomy() {
         : '−' + formatClock(-activeOrder.timeLeft);
       $('order-dist').textContent = Math.max(0, Math.ceil(activeOrder.remainingM)) + ' м';
       const est = orderPayout(activeOrder);
-      $('order-reward').textContent = '~' + est.toLocaleString('ru-RU') + ' ₽';
+      $('order-reward').textContent = '~' + rubles(est);
     } else {
       orderHud.hidden = true;
     }

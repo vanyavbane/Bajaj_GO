@@ -19,14 +19,14 @@
 | № | Файл | Что внутри |
 |---|---|---|
 |   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics` |
-| 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи цветов, гараж |
+| 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
 |   | `js/rules.js` | очки прыжка, встречки и дистанции, жёсткая посадка, порог съезда, сброс заезда. Без Three.js |
 |   | `js/motion.js` | шаг байка и чужой машины, контакт с игроком, уступка дальнему свету. Без Three.js |
 |   | `js/stream.js` | окно вдоль дороги и `placeIfMoved`: ставить объект только когда его `s` сменилось |
 |   | `js/vehicle.js` | `isQuteBody`, `isYuraType`, `bikePaint`: тип кузова и окраска без порчи каталога |
-|   | `js/money.js` | `rubles`, `grouped`, `shortfall`: один вид сумм на всех экранах |
+|   | `js/money.js` | `rubles`, `grouped`, `meters`, `shortfall`: один вид сумм и метров |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
@@ -43,7 +43,7 @@
 | 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (старт, магазин, освещение), `renderShop`, `renderTuning` (экран тюнинга; из главного меню убран, тюнинг доступен через съезд) |
+| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
 | 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
 | 17 | `js/loop.js` | `animate(now)`: физика, трафик, коллизии, HUD, рендер |

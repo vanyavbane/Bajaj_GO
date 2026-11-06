@@ -1,3 +1,4 @@
+import { shortfall } from './money.js';
 import { isQuteBody, isYuraType } from './vehicle.js';
 import { G } from './state.js';
 
@@ -190,6 +191,29 @@ export function initCatalog() {
     return getBikeTuningRecord(bikeId).owned.includes(upgId);
   }
   G.hasUpgradeOwned = hasUpgradeOwned;
+
+  function purchaseUpgrade(bike, upg) {
+    const price = getUpgradePrice(bike, upg);
+    if (G.bankPoints < price) return { ok: false, missing: shortfall(price, G.bankPoints) };
+    G.bankPoints -= price;
+    const rec = getBikeTuningRecord(bike.id);
+    if (!rec.owned.includes(upg.id)) rec.owned.push(upg.id);
+    if (!rec.installed.includes(upg.id)) rec.installed.push(upg.id);
+    G.saveGarage();
+    return { ok: true };
+  }
+  G.purchaseUpgrade = purchaseUpgrade;
+
+  function toggleUpgrade(bike, upg) {
+    const rec = getBikeTuningRecord(bike.id);
+    if (!rec.owned.includes(upg.id)) return { ok: false, installed: false };
+    const idx = rec.installed.indexOf(upg.id);
+    if (idx >= 0) rec.installed.splice(idx, 1);
+    else rec.installed.push(upg.id);
+    G.saveGarage();
+    return { ok: true, installed: idx < 0 };
+  }
+  G.toggleUpgrade = toggleUpgrade;
 
   // Итоговые характеристики мотоцикла с учётом установленного тюнинга
   function getBikeEffectiveStats(bikeId = G.selectedBikeId) {
