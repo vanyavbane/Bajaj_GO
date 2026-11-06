@@ -409,7 +409,6 @@ canvas{display:block;width:100%;height:100%}
 .mm-btn-sec .ico{font-size:17px;width:24px;text-align:center}
 .mm-btn-sec .sub-val{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.1);color:#90caf9}
 .mm-btn-sec .sub-val.on{background:rgba(0,200,83,.25);color:#69f0ae;border:1px solid rgba(105,240,174,.5)}
-.mm-btn-sec .sub-val.tune{background:rgba(255,182,78,.2);color:#ffd54f;border:1px solid rgba(255,182,78,.45)}
 
 /* ПРАВЫЙ ВЕРХНИЙ СЧЁТЧИК ВАЛЮТЫ И НИЖНЯЯ ПАНЕЛЬ */
 .mm-currency{
@@ -3257,11 +3256,6 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
                 <span>Качество освещения</span>
                 <span class="sub-val ${isDlss ? 'on' : ''}">${isDlss ? 'DLSS-стиль' : 'Обычное'}</span>
               </button>
-              <button class="mm-btn-sec" id="mm-tuning">
-                <span class="ico">🔧</span>
-                <span>Тюнинг</span>
-                <span class="sub-val tune">${eff.installedCount}/${tuningCatalog.length} уст.</span>
-              </button>
             </div>
           </div>
 
@@ -3287,7 +3281,6 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
-    $('mm-tuning').addEventListener('click', () => renderTuning());
     $('mm-lighting').addEventListener('click', () => {
       lightingQuality = (lightingQuality === 'dlss') ? 'normal' : 'dlss';
       saveGarage();

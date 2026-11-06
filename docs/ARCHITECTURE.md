@@ -23,7 +23,7 @@
 | 11 | Камера и HUD | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` |
 | 12 | Время суток | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime` |
 | 13 | Дальний свет | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | Состояние игры и UI | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, `renderTuning` |
+| 14 | Состояние игры и UI | `startGame`, `crashGame`, `renderMainMenu` (старт, магазин, освещение), `renderShop`, `renderTuning` (экран тюнинга; из главного меню убран, тюнинг доступен через съезд) |
 | 15 | Ввод | `handleKey`, экранные кнопки |
 | 16 | Съезды, экономика, критические ситуации и пауза | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
 | 17 | Главный цикл | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
