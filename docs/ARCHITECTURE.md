@@ -27,7 +27,7 @@
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
-|   | `js/effects.js` | частицы прыжка, всплывающие очки, звуки прыжка и маркерной зоны |
+|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений по центру, звуки прыжка, фида и маркерной зоны |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах |
 | 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic` |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике |
@@ -121,8 +121,9 @@ animate(now)
 
 - `exitPool` — 5 объектов-съездов, которые переиспользуются (пулинг): когда съезд
   уходит за игрока, он переносится вперёд на `EXIT_MIN_GAP…EXIT_MAX_GAP` (300–800 м).
-- Съезд срабатывает, когда игрок прижимается к краю (`laneOffset > 7.45` справа
-  или `< -7.45` слева) в радиусе 11 м от `exit.s`. Открывается локальное меню.
+- Съезд открывается только внутри светящейся коробки на полосе.
+  `crossedExitBox` проверяет отрезок кадра, а не одну точку, поэтому
+  высокая скорость коробку не перепрыгивает. Вне коробки меню не открывается.
 - Топливо: полного бака хватает на 25 000 м. Заправка — 500 ₽.
 - Пустой бак: эвакуатор за 1000 ₽ (перемещает на 120 м вперёд и открывает АЗС)
   либо отказ → `limpMode`, максимум 5 км/ч, аварийная АЗС ставится в 70 м.
@@ -144,9 +145,9 @@ animate(now)
 
 - Цвет: зелёный `EXIT_MARKER_COLORS.food` (`0x3ce07d`) — рестораны,
   жёлтый `EXIT_MARKER_COLORS.service` (`0xffd24a`) — АЗС, СТО, тюнинг.
-- Размер: `EXIT_ZONE_WIDTH` = 4.8 м (чуть шире полосы), `EXIT_ZONE_LENGTH` = 5.4 м
-  (ТЗ: 3–6 м). Центр зоны — на `EXIT_ZONE_OFFSET` = 12.5 м раньше центра съезда,
-  в полосе `e.side * 7.1`.
+- Размер: `EXIT_ZONE_WIDTH` = 4.8 м, `EXIT_ZONE_LENGTH` = 5.4 м.
+  Центр — `exitBoxCenter`, на 12.5 м раньше щита, в полосе `e.side * 7.1`.
+  Те же числа рисуют коробку и открывают меню.
 - Материал: `MeshBasicMaterial` с `AdditiveBlending`, `toneMapped: false`,
   `depthWrite: false`. Яркость имитирует emissive + мягкий Bloom без
   постобработки и без дополнительных источников света.
@@ -158,9 +159,10 @@ animate(now)
   «СТО», «ТЮНИНГ») появляется на дистанции ближе 105 м.
 - Иконка типа — `Sprite` (`iconSprite`) над зоной, подпись — второй `Sprite`
   (`labelSprite`). Оба `fog: false`, чтобы не тонуть в тумане.
-- Отклик при въезде: если игрок в полосе зоны (`|laneOffset - side*7.1| < 2.6`)
-  и попал в её длину, зона вспыхивает (`zoneFlash`), в HUD показывается
-  `#exit-hint` (иконка, тип, стрелка направления) и играет `playExitChime()`.
+- Въезд в коробку (`crossedExitBox`) вспыхивает (`zoneFlash`), играет
+  `playExitChime()` и сразу открывает меню. Мимо коробки меню не открывается.
+- Пока коробка ближе 160 м, `#exit-hint` показывает тип, сторону и метры
+  до неё. Подпись говорит «в коробку». Клавиши и кнопки съезда нет.
 - Пулинг: зона живёт внутри объекта `exitPool`; при переносе съезда вперёд
   `resetExits`/`updateExitWorld` сбрасывают `used`, `zoneEntered`, `zoneFlash`
   и `pulsePhase`, а `updateExitSign` меняет цвет, иконку и подпись.
@@ -177,12 +179,12 @@ animate(now)
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` в `js/atmosphere.js` |
 | Рекламные баннеры | `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js` |
-| Частицы и звуки прыжка | `spawnOverflyParticles`, `playJumpSound`, `playExitChime` в `js/effects.js` |
+| Частицы, фид и звуки | `spawnOverflyParticles`, `pushFeed`, `playJumpSound`, `playExitChime` в `js/effects.js` |
 | Физика разгона/торможения | `animate` в `js/loop.js` |
 | Прыжки и бонусы за перелёт | `jumpState` в `js/ui.js`, `finishJumpLanding` в `js/loop.js` |
 | Экономика (цены, награды) | `bikeCatalog`, `tuningCatalog` в `js/catalog.js`, `crashGame` в `js/ui.js`, доставка в `js/economy.js` |
 | Съезды и точки интереса | `EXIT_TYPES`, `EXIT_META`, `resetExits`, `openExitMenu` в `js/economy.js` |
-| Маркерные зоны съездов | `EXIT_MARKER_COLORS`, `createExitMarker`, `updateExitSign`, `getExitGlowLevel`, `showExitHint` в `js/economy.js` |
+| Маркерные зоны съездов | `crossedExitBox` в `js/engine/rules.js`; рисунок и `refreshExitHint` в `js/economy.js` |
 | Заказы и доставка | `RESTAURANTS`, `createOrder`, `tickOrder`, `deliverOrder` в `js/economy.js` |
 | Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` в `js/economy.js` |
 | Критические ситуации | `openFuelEmpty`, `handleAccident` в `js/economy.js` |

@@ -1,5 +1,5 @@
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
-import { COMBO_WINDOW, nearMissPoints, overflyCarPoints } from './engine/rules.js';
+import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
 import { G } from './state.js';
 
@@ -110,17 +110,17 @@ export function initTraffic() {
         car.jumpedInCurrentJump = true;
         G.jumpState.carsJumped++;
         const cCount = G.jumpState.carsJumped;
-        const popVal = overflyCarPoints(cCount);
         G.spawnOverflyParticles(car.model.root.position);
-        G.spawnFloatingPopup(`+${popVal} ₽ (ПЕРЕЛЁТ ×${cCount})`, car.model.root.position, cCount >= 2 ? '#00e5ff' : '#fff176');
-        G.playJumpSound('overfly', cCount);
+        G.pushFeed(`ПЕРЕЛЁТ ×${cCount}`, 'overfly', cCount);
       } else if (kind === 'crash') {
         G.handleAccident(car);
       } else if (kind === 'near') {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
-        G.score += nearMissPoints(G.comboCount, G.laneOffset);
+        const pts = nearMissPoints(G.comboCount, G.laneOffset);
+        G.score += pts;
+        G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount);
       }
     }
   }

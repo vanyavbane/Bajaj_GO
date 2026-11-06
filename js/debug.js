@@ -131,5 +131,31 @@ export function initDebug() {
     return G.renderer.domElement.toDataURL('image/jpeg', 0.6);
   }
 
-  window.__bajaj = { snapshot, ride, setKeys, frame, errors };
+  function feed(text, tone, level) {
+    G.pushFeed(text, tone, level);
+    const root = document.getElementById('event-feed');
+    return {
+      count: root ? root.children.length : 0,
+      texts: root ? [...root.children].map((node) => node.textContent) : []
+    };
+  }
+
+  function placeAtExit(inside) {
+    setKeys({ gas: false, brake: false, left: false, right: false });
+    return G.debugPlaceAtExit ? G.debugPlaceAtExit(!!inside) : null;
+  }
+
+  function exitHint() {
+    const el = document.getElementById('exit-hint');
+    const feed = document.getElementById('event-feed');
+    return {
+      shown: !!(el && el.classList.contains('show')),
+      text: document.getElementById('exit-hint-text')?.textContent || '',
+      how: document.getElementById('exit-hint-how')?.textContent || '',
+      modal: !!G.uiModal,
+      feed: feed ? [...feed.children].map((node) => node.textContent) : []
+    };
+  }
+
+  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint };
 }

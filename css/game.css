@@ -11,7 +11,6 @@ canvas{display:block;width:100%;height:100%}
 #status-badges{position:absolute;top:70px;right:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .badge{background:var(--ds-panel);border:1px solid var(--ds-line);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:800;letter-spacing:1px}
 .badge.x2{border-color:var(--ds-danger-line);color:var(--ds-danger);background:rgba(40,16,18,.88)}
-.badge.combo{border-color:var(--ds-warm);color:var(--ds-warm-strong)}
 .badge.beam,.badge.cam{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
 #hint{position:absolute;top:15%;left:50%;transform:translateX(-50%);font-weight:900;text-align:center;letter-spacing:2px;white-space:normal;font-size:clamp(13px,2vw,22px);transition:opacity .35s;max-width:min(640px,92vw)}
 #hint small{display:block;font-size:11px;letter-spacing:1px;color:var(--ds-text-dim);margin-top:5px}
@@ -67,23 +66,28 @@ canvas{display:block;width:100%;height:100%}
 #eco-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #eco-toast.bad{border-color:var(--ds-danger-line);color:var(--ds-danger)}
 
-/* ПОДСКАЗКА ПРИ ВЪЕЗДЕ В МАРКЕРНУЮ ЗОНУ СЪЕЗДА */
+/* ПОДСКАЗКА СЪЕЗДА: держится, пока щит впереди */
 #exit-hint{
-  position:absolute;top:72px;left:50%;
+  position:absolute;top:96px;left:50%;
   transform:translateX(-50%) translateY(-8px);
-  display:flex;align-items:center;gap:8px;
+  display:flex;align-items:center;gap:10px;
   background:var(--ds-panel);
   border:1px solid var(--ds-warm);
-  border-radius:11px;padding:7px 14px;
-  font-size:13px;font-weight:900;letter-spacing:1px;
-  color:var(--ds-warm-strong);white-space:nowrap;
+  border-radius:11px;padding:8px 14px;
+  font-size:13px;font-weight:900;letter-spacing:.4px;
+  color:var(--ds-warm-strong);
   opacity:0;pointer-events:none;z-index:3;
   transition:opacity .2s,transform .2s;
   text-shadow:0 2px 6px rgba(0,0,0,.85);
+  max-width:min(92vw,440px);
 }
 #exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #exit-hint.service{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
-#exit-hint .arr{font-size:15px;letter-spacing:0}
+#exit-hint .exit-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+#exit-hint small{
+  font-size:11px;font-weight:800;letter-spacing:0;
+  color:var(--ds-text-soft);line-height:1.25;
+}
 
 @media(max-width:700px){
   #eco-hud{width:172px;top:72px;padding:8px 9px;font-size:10px}
@@ -96,8 +100,7 @@ canvas{display:block;width:100%;height:100%}
   #order-hud .order-title{font-size:9px}
   #order-hud .order-row{font-size:10px;gap:8px}
   #exit-hint{
-    top:286px;bottom:auto;font-size:11px;padding:6px 10px;
-    max-width:min(90vw,280px);overflow:hidden;
+    top:118px;font-size:12px;padding:6px 10px;
   }
 }
 
@@ -148,41 +151,42 @@ canvas{display:block;width:100%;height:100%}
 }
 #jump-live .jl-title{font-size:11px;font-weight:900;color:#80d8ff;letter-spacing:2px}
 #jump-live .jl-stats{font-size:20px;font-weight:900;color:#fff176;margin-top:2px}
-#jump-summary{
+/* ФИД КОМБО И УЛУЧШЕНИЙ ПО ЦЕНТРУ */
+#event-feed{
   position:fixed;
-  top:31%;
+  top:34%;
   left:50%;
-  transform:translateX(-50%) scale(0.95);
-  background:var(--ds-panel);
-  border:2px solid var(--ds-warm);
-  border-radius:14px;
-  padding:10px 22px;
-  text-align:center;
-  font-weight:900;
-  box-shadow:0 12px 35px rgba(0,0,0,.7);
+  transform:translateX(-50%);
+  width:min(440px,92vw);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  z-index:12;
   pointer-events:none;
-  z-index:10;
-  opacity:0;
-  transition:opacity .25s ease, transform .25s ease;
 }
-#jump-summary.show{opacity:1;transform:translateX(-50%) scale(1)}
-#jump-summary.hard{border-color:var(--ds-danger-line);background:rgba(40,16,18,.92)}
-
-#floating-popups{position:fixed;inset:0;pointer-events:none;z-index:10;overflow:hidden}
-.float-pop{
-  position:absolute;
-  transform:translate(-50%,-50%);
+.feed-item{
+  background:var(--ds-panel);
+  border:1px solid var(--ds-warm);
+  border-radius:12px;
+  padding:8px 14px;
+  font-size:14px;
   font-weight:900;
-  font-size:18px;
-  color:var(--ds-gold);
-  text-shadow:0 2px 8px rgba(0,0,0,.95);
-  white-space:nowrap;
-  animation:popUp 1.05s cubic-bezier(.16,1,.3,1) forwards;
+  text-align:center;
+  color:var(--ds-warm-strong);
+  box-shadow:0 10px 28px rgba(0,0,0,.55);
+  animation:feedLife 2.6s ease forwards;
+  max-width:100%;
 }
-@keyframes popUp{
-  0%{opacity:0;transform:translate(-50%,-20%) scale(.7)}
-  20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
-  100%{opacity:0;transform:translate(-50%,-135%) scale(.95)}
+#event-feed.frozen .feed-item{animation-play-state:paused}
+.feed-item.overfly{border-color:var(--ds-gold);color:var(--ds-gold)}
+.feed-item.upgrade{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
+.feed-item.hard,.feed-item.remove,.feed-item.bad{border-color:var(--ds-danger-line);color:var(--ds-danger)}
+@keyframes feedLife{
+  0%{opacity:0;transform:translateY(8px) scale(.96)}
+  12%{opacity:1;transform:none}
+  78%{opacity:1}
+  100%{opacity:0;transform:translateY(-10px)}
 }
 
 /* ЭКРАННЫЕ КНОПКИ УПРАВЛЕНИЯ */

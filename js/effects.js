@@ -3,7 +3,6 @@ import { G } from './state.js';
 
 export function initEffects() {
   const $ = G.$;
-  const clamp = G.clamp;
 
   /* =========================================================================
    * ЭФФЕКТЫ: ЧАСТИЦЫ ПРЫЖКА, ВСПЛЫВАЮЩИЕ ОЧКИ И ЗВУКИ
@@ -37,13 +36,12 @@ export function initEffects() {
   let audioCtx = null;
   function playJumpSound(type = 'overfly', combo = 1) {
     try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const ctx = ensureAudio();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      const now = audioCtx.currentTime;
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
       if (type === 'overfly') {
         osc.type = 'triangle';
         const baseFreq = 520 + Math.min(combo, 5) * 110;
@@ -71,17 +69,16 @@ export function initEffects() {
   // Короткий двухнотный отклик при въезде в маркерную зону съезда
   function playExitChime(isFood) {
     try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const now = audioCtx.currentTime;
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
       const base = isFood ? 660 : 520;
       const steps = [1, 1.5];
       for (let i = 0; i < steps.length; i++) {
         const off = i * 0.075;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(base * steps[i], now + off);
         gain.gain.setValueAtTime(0.0001, now + off);
@@ -96,22 +93,101 @@ export function initEffects() {
   }
   G.playExitChime = playExitChime;
 
-  function spawnFloatingPopup(text, worldPos, color = '#fff176') {
-    const container = $('floating-popups');
-    if (!container) return;
-    const v = worldPos.clone().project(G.camera);
-    const x = (v.x * 0.5 + 0.5) * innerWidth;
-    const y = (-v.y * 0.5 + 0.5) * innerHeight;
-    const el = document.createElement('div');
-    el.className = 'float-pop';
-    el.style.left = `${clamp(x, 80, innerWidth - 80)}px`;
-    el.style.top = `${clamp(y, 70, innerHeight - 90)}px`;
-    el.style.color = color;
-    el.textContent = text;
-    container.appendChild(el);
-    setTimeout(() => el.remove(), 1050);
+  const FEED_LIFE = 2.6;
+  const FEED_MAX = 4;
+  const feedItems = [];
+
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
   }
-  G.spawnFloatingPopup = spawnFloatingPopup;
+
+  function feedTone(freq, dur, type, level, delay) {
+    const ctx = ensureAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime + (delay || 0);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(level, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  function playFeedSound(kind, level) {
+    try {
+      ensureAudio();
+      if (kind === 'overfly') {
+        playJumpSound('overfly', level);
+        return;
+      }
+      if (kind === 'land') {
+        feedTone(520, 0.16, 'sine', 0.07);
+        feedTone(780, 0.18, 'sine', 0.05, 0.08);
+        return;
+      }
+      if (kind === 'hard') {
+        feedTone(180, 0.22, 'sine', 0.08);
+        feedTone(110, 0.26, 'triangle', 0.06, 0.06);
+        return;
+      }
+      if (kind === 'upgrade') {
+        feedTone(523, 0.14, 'sine', 0.06);
+        feedTone(659, 0.14, 'sine', 0.05, 0.09);
+        feedTone(784, 0.2, 'sine', 0.05, 0.18);
+        return;
+      }
+      if (kind === 'remove' || kind === 'bad') {
+        feedTone(392, 0.12, 'sine', 0.05);
+        feedTone(262, 0.2, 'sine', 0.05, 0.08);
+        return;
+      }
+      feedTone(360 + Math.min(level, 6) * 70, 0.12, 'triangle', 0.07);
+    } catch {
+      // Аудио может быть заблокировано браузером — молча пропускаем
+    }
+  }
+
+  function pushFeed(text, tone, level) {
+    const kind = tone || 'combo';
+    playFeedSound(kind, level || 1);
+    const feed = $('event-feed');
+    if (G.uiModal || G.paused) feed.classList.add('frozen');
+    const el = document.createElement('div');
+    el.className = 'feed-item ' + kind;
+    el.textContent = text;
+    feed.appendChild(el);
+    feedItems.push({ el, life: FEED_LIFE });
+    while (feedItems.length > FEED_MAX) feedItems.shift().el.remove();
+  }
+
+  function tickFeed(dt) {
+    const feed = $('event-feed');
+    const frozen = !!(G.uiModal || G.paused);
+    feed.classList.toggle('frozen', frozen);
+    if (frozen) return;
+    for (let i = feedItems.length - 1; i >= 0; i--) {
+      feedItems[i].life -= dt;
+      if (feedItems[i].life > 0) continue;
+      feedItems[i].el.remove();
+      feedItems.splice(i, 1);
+    }
+  }
+
+  function clearFeed() {
+    feedItems.length = 0;
+    $('event-feed').replaceChildren();
+    $('event-feed').classList.remove('frozen');
+  }
+
+  G.pushFeed = pushFeed;
+  G.tickFeed = tickFeed;
+  G.clearFeed = clearFeed;
 
   function tickJumpParticles(dt) {
     for (const p of G.jumpParticles) {

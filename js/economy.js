@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { meters, rubles, shortfall } from './engine/money.js';
-import { atExitShoulder } from './engine/rules.js';
+import { EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
 import { placeIfMoved } from './engine/stream.js';
 
@@ -45,10 +45,10 @@ export function initEconomy() {
 
   const EXIT_TYPES = ['restaurant', 'fuel', 'sto', 'tuning'];
   const EXIT_META = {
-    restaurant: { title: 'РЕСТОРАНЫ', sub: 'ДОСТАВКА ЕДЫ', badge: 'FOOD' },
-    fuel:       { title: 'АЗС',       sub: 'ЗАПРАВКА · 500 ₽', badge: 'FUEL' },
-    sto:        { title: 'СТО',       sub: 'РЕМОНТ И ОБСЛУЖИВАНИЕ', badge: 'STO' },
-    tuning:     { title: 'ТЮНИНГ',    sub: 'УЛУЧШЕНИЯ МОТОЦИКЛА', badge: 'TUNE' }
+    restaurant: { title: 'РЕСТОРАНЫ', sub: 'В КОРОБКУ', badge: 'FOOD' },
+    fuel:       { title: 'АЗС',       sub: 'В КОРОБКУ', badge: 'FUEL' },
+    sto:        { title: 'СТО',       sub: 'В КОРОБКУ', badge: 'STO' },
+    tuning:     { title: 'ТЮНИНГ',    sub: 'В КОРОБКУ', badge: 'TUNE' }
   };
 
   /* ---------- Персистентное состояние экономики ---------- */
@@ -216,12 +216,9 @@ export function initEconomy() {
   const EXIT_MARKER_COLORS = { food: 0x3ce07d, service: 0xffd24a };
   const EXIT_HINT_ICONS = { restaurant: '🍔', fuel: '⛽', sto: '🔧', tuning: '⚙️' };
   const EXIT_HINT_LABELS = { restaurant: 'РЕСТОРАН', fuel: 'АЗС', sto: 'СТО', tuning: 'ТЮНИНГ' };
-  // Зона стоит в полосе съезда перед указателем; длина 5.4 м (ТЗ: 3–6 м)
-  const EXIT_ZONE_WIDTH = 4.8;
-  const EXIT_ZONE_LENGTH = 5.4;
-  const EXIT_ZONE_OFFSET = 12.5; // центр зоны на 12.5 м раньше центра съезда
+  const EXIT_HINT_RANGE = 160;
   let exitPulseT = 0;
-  let exitHintTimer = null;
+  let exitHintKey = '';
 
   function roundRectPath(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -320,10 +317,13 @@ export function initEconomy() {
       roundRectPath(ctx, 6, 12, w - 12, h - 24, 20);
       ctx.stroke();
       ctx.fillStyle = '#eef7f2';
-      ctx.font = '900 54px system-ui,"Segoe UI",Arial';
+      ctx.font = '900 46px system-ui,"Segoe UI",Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(EXIT_HINT_LABELS[type], w / 2, h / 2 + 2);
+      ctx.fillText(EXIT_HINT_LABELS[type], w / 2, h / 2 - 16);
+      ctx.fillStyle = color;
+      ctx.font = '800 26px system-ui,"Segoe UI",Arial';
+      ctx.fillText('В КОРОБКУ', w / 2, h / 2 + 28);
     });
   }
 
@@ -375,8 +375,8 @@ export function initEconomy() {
       fog: false
     });
     const label = new THREE.Sprite(labelMat);
-    label.position.set(0, 1.42, 0);
-    label.scale.set(3.8, 0.95, 1);
+    label.position.set(0, 1.35, 0);
+    label.scale.set(4.2, 1.15, 1);
     marker.add(label);
 
     marker.visible = false;
@@ -394,18 +394,58 @@ export function initEconomy() {
     return lerp(1, 0.45, G.smoothstep(0.82, 0.98, t));
   }
 
-  function showExitHint(exit) {
+  function nearestExitAhead() {
+    let best = null;
+    let bestDist = Infinity;
+    for (const e of exitPool) {
+      if (e.used) continue;
+      const dist = exitBoxCenter(e.s) - G.playerS;
+      if (dist < -EXIT_ZONE_LENGTH * 0.5 || dist > EXIT_HINT_RANGE) continue;
+      if (dist < bestDist) {
+        best = e;
+        bestDist = dist;
+      }
+    }
+    return best ? { exit: best, dist: bestDist } : null;
+  }
+
+  function refreshExitHint() {
     const el = $('exit-hint');
-    if (!el) return;
-    const isFood = exit.type === 'restaurant';
+    if (!G.started || G.ended || G.uiModal || G.paused) {
+      if (exitHintKey) {
+        el.className = '';
+        exitHintKey = '';
+      }
+      return;
+    }
+    const ahead = nearestExitAhead();
+    if (!ahead) {
+      if (exitHintKey) {
+        el.className = '';
+        exitHintKey = '';
+      }
+      return;
+    }
+    const exit = ahead.exit;
+    const sideWord = exit.side > 0 ? 'справа' : 'слева';
+    const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${Math.max(0, Math.round(ahead.dist))} м`;
+    const how = 'Заезжай в коробку на полосе';
+    const key = `${exit.type}|${title}`;
+    if (key === exitHintKey) return;
+    exitHintKey = key;
     $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
-    $('exit-hint-text').textContent = EXIT_HINT_LABELS[exit.type] + ' · СЪЕЗД';
-    $('exit-hint-arr').textContent = exit.side > 0 ? '→' : '←';
-    el.className = 'show' + (isFood ? '' : ' service');
-    if (exitHintTimer) clearTimeout(exitHintTimer);
-    exitHintTimer = setTimeout(() => {
-      el.className = isFood ? '' : 'service';
-    }, 1900);
+    $('exit-hint-text').textContent = title;
+    $('exit-hint-how').textContent = how;
+    el.className = 'show' + (exit.type === 'restaurant' ? '' : ' service');
+  }
+
+  function openExitFromBox(exit) {
+    exit.used = true;
+    exit.zoneFlash = 1;
+    $('exit-hint').className = '';
+    exitHintKey = '';
+    G.playExitChime(exit.type === 'restaurant');
+    openExitMenu(exit);
   }
 
   const exitPool = [];
@@ -501,8 +541,11 @@ export function initEconomy() {
     }
   }
 
+  let exitPrevS = null;
+
   function updateExitWorld(dt = 0) {
     exitPulseT += dt;
+    const fromS = exitPrevS == null ? G.playerS : exitPrevS;
     const glow = getExitGlowLevel();
 
     let maxS = G.playerS;
@@ -547,34 +590,40 @@ export function initEconomy() {
       }
       if (e.zoneFlash > 0) e.zoneFlash = Math.max(0, e.zoneFlash - dt * 1.7);
 
-      // Отклик при въезде в зону: вспышка, подсказка и короткий звук
-      if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used) {
-        const aligned = Math.abs(G.laneOffset - e.side * G.START_LANE) < 2.6;
-        const dx = G.playerS - zoneS;
-        if (!e.zoneEntered && aligned && Math.abs(dx) < EXIT_ZONE_LENGTH * 0.5) {
-          e.zoneEntered = true;
-          e.zoneFlash = 1;
-          showExitHint(e);
-          G.playExitChime(e.type === 'restaurant');
-        }
-        if (Math.abs(dx) > EXIT_ZONE_LENGTH * 0.5 + 10) e.zoneEntered = false;
+      if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used
+        && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, e.side, G.START_LANE)) {
+        openExitFromBox(e);
+        break;
       }
     }
 
-    // Съезд срабатывает, когда игрок прижимается к нужному краю дороги
-    if (G.started && !G.ended && !G.uiModal && !G.paused) {
-      for (const e of exitPool) {
-        if (e.used) continue;
-        const onSide = atExitShoulder(G.laneOffset, e.side);
-        if (onSide && Math.abs(G.playerS - e.s) < 11) {
-          e.used = true;
-          openExitMenu(e);
-          break;
-        }
-      }
-    }
+    exitPrevS = G.playerS;
+    refreshExitHint();
   }
   G.updateExitWorld = updateExitWorld;
+
+  G.debugPlaceAtExit = (inside) => {
+    let best = null;
+    let bestDist = Infinity;
+    for (const e of exitPool) {
+      const dist = exitBoxCenter(e.s) - G.playerS;
+      if (dist < -EXIT_ZONE_LENGTH || dist >= bestDist) continue;
+      best = e;
+      bestDist = dist;
+    }
+    if (!best) best = exitPool[0];
+    if (!best) return null;
+    if (G.uiModal) closeOverlayToGame();
+    best.used = false;
+    best.zoneEntered = false;
+    G.speed = 0;
+    G.playerS = exitBoxCenter(best.s);
+    G.laneOffset = inside ? best.side * G.START_LANE : 0;
+    G.lateralVelocity = 0;
+    G.slipDriftVel = 0;
+    exitPrevS = G.playerS;
+    return { type: best.type, side: best.side, s: best.s, inside: !!inside };
+  };
 
   // Маркер точки доставки заказа
   (function buildDeliveryMarker() {
@@ -953,10 +1002,12 @@ export function initEconomy() {
         if (!upg) return;
         const bought = G.purchaseUpgrade(bike, upg);
         if (!bought.ok) {
+          G.pushFeed(`Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'bad');
           renderExitTuning(`⚠ Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'err');
           return;
         }
         G.syncVehicleAndCameraVisibility(true);
+        G.pushFeed(`«${upg.shortName}» установлено`, 'upgrade');
         renderExitTuning(`✓ «${upg.shortName}» куплено и установлено!`, 'ok');
       });
     });
@@ -972,6 +1023,10 @@ export function initEconomy() {
         const msg = toggled.installed
           ? `✓ Деталь «${upg.shortName}» установлена`
           : `Деталь «${upg.shortName}» снята (остаётся в гараже)`;
+        G.pushFeed(
+          toggled.installed ? `«${upg.shortName}» установлено` : `«${upg.shortName}» снято`,
+          toggled.installed ? 'upgrade' : 'remove'
+        );
         renderExitTuning(msg, 'ok');
       });
     });

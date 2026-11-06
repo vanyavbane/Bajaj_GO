@@ -8,7 +8,6 @@ export function initLoop() {
   const lerp = G.lerp;
   let jumpLineShown = '';
   let oncomingShown = false;
-  let comboShown = 0;
 
   /* =========================================================================
    * 17. ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ, ФИЗИКА ТЮНИНГА, ТРАМПЛИНОВ И РЕНДЕРИНГ
@@ -18,7 +17,6 @@ export function initLoop() {
   function finishJumpLanding() {
     const jumpDist = Math.max(0, G.playerS - G.jumpState.startS);
     const hardPitch = Math.abs(G.jumpState.pitch) > HARD_LANDING_PITCH;
-    const bonusSummaryEl = $('jump-summary');
 
     if (G.jumpState.carsJumped > 0 || jumpDist > 16) {
       const count = G.jumpState.carsJumped;
@@ -33,11 +31,13 @@ export function initLoop() {
       G.totalJumpBonusRun += totalBonus;
       G.totalCarsJumpedRun += count;
 
-      bonusSummaryEl.className = hardPitch ? 'show hard' : 'show';
-      bonusSummaryEl.innerHTML = hardPitch
-        ? `⚠ ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ (${jumpDist.toFixed(0)} м) · +${totalBonus} ₽`
-        : `🏆 ПРЫЖОК ${jumpDist.toFixed(0)} М · ПЕРЕЛЁТ ×${count} ${count > 0 ? '(МЯГКАЯ ПОСАДКА +10%)' : ''} · +${totalBonus} ₽`;
-      G.jumpSummaryTimer = 2.6;
+      const meters = jumpDist.toFixed(0);
+      const text = hardPitch
+        ? `Жёсткая посадка · ${meters} м · +${totalBonus} ₽`
+        : (count > 0
+          ? `Прыжок ${meters} м · перелёт ×${count} · мягкая посадка · +${totalBonus} ₽`
+          : `Прыжок ${meters} м · +${totalBonus} ₽`);
+      G.pushFeed(text, hardPitch ? 'hard' : 'land', count);
     }
 
     G.jumpState.airborne = false;
@@ -57,10 +57,6 @@ export function initLoop() {
       if (G.highBeamTimer <= 0) $('badge-beam').hidden = true;
     }
     if (G.highBeamCooldown > 0) G.highBeamCooldown -= dt;
-    if (G.jumpSummaryTimer > 0) {
-      G.jumpSummaryTimer -= dt;
-      if (G.jumpSummaryTimer <= 0) $('jump-summary').classList.remove('show');
-    }
   }
 
   function spinOwnWheels(meters) {
@@ -201,16 +197,6 @@ export function initLoop() {
       oncomingShown = oncomingOn;
       $('badge-oncoming').hidden = !oncomingOn;
     }
-    if (G.comboCount !== comboShown) {
-      comboShown = G.comboCount;
-      const badgeCombo = $('badge-combo');
-      if (G.comboCount > 1) {
-        badgeCombo.hidden = false;
-        badgeCombo.textContent = `🔥 КОМБО ×${G.comboCount}`;
-      } else {
-        badgeCombo.hidden = true;
-      }
-    }
 
     spinOwnWheels(forwardMeters);
   }
@@ -239,6 +225,8 @@ export function initLoop() {
     requestAnimationFrame(animate);
     const dt = Math.min(0.04, (now - G.lastTime) / 1000);
     G.lastTime = now;
+
+    if (G.tickFeed) G.tickFeed(dt);
 
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {

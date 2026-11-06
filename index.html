@@ -17,13 +17,12 @@
     <div class="badge" id="badge-tod">☀ ДЕНЬ</div>
     <div class="badge cam" id="badge-cam">🎥 КОКПИТ (T/C)</div>
     <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
-    <div class="badge combo" id="badge-combo" hidden>🔥 КОМБО ×1</div>
     <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
   </div>
   <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
   <div id="bottom">
     <b>W / ↑ / ПРОБЕЛ</b> — ГАЗ &nbsp;·&nbsp; <b>S / ↓</b> — ТОРМОЗ &nbsp;·&nbsp; <b>A / D / ← / →</b> — ПОВОРОТ<br>
-    <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА (1-е / 3-е лицо) &nbsp;·&nbsp; Трамплины: ПЕРЕЛЁТ МАШИН
+    <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА &nbsp;·&nbsp; Съезд: заезжай в светящуюся коробку
   </div>
 
   <!-- ЭКОНОМИКА: ТОПЛИВО, ИЗНОС, БАЛАНС -->
@@ -51,8 +50,10 @@
   <!-- ПОДСКАЗКА ПРИ ВЪЕЗДЕ В ЗОНУ СЪЕЗДА -->
   <div id="exit-hint">
     <span id="exit-hint-ico">🍔</span>
-    <span id="exit-hint-text">РЕСТОРАН · СЪЕЗД</span>
-    <span class="arr" id="exit-hint-arr">→</span>
+    <span class="exit-copy">
+      <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
+      <small id="exit-hint-how">Заезжай в коробку на полосе</small>
+    </span>
   </div>
 
   <button id="btn-pause" class="ds-icon-button" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
@@ -83,8 +84,7 @@
   <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
   <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
 </div>
-<div id="jump-summary"></div>
-<div id="floating-popups"></div>
+<div id="event-feed"></div>
 
 <!-- МОБИЛЬНЫЕ И ЭКРАННЫЕ КНОПКИ -->
 <div id="controls" hidden>

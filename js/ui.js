@@ -16,7 +16,6 @@ export function initUi() {
   G.ended = false;
   G.lastTime = performance.now();
   resetRun(G, G.START_LANE);
-  G.jumpSummaryTimer = 0;
 
   function renderGraphics(from) {
     const overlay = $('overlay');
@@ -217,7 +216,7 @@ export function initUi() {
     G.ended = false;
     resetRun(G, G.START_LANE);
     $('jump-live').hidden = true;
-    $('jump-summary').classList.remove('show');
+    if (G.clearFeed) G.clearFeed();
 
     for (let i = 0; i < G.NUM_ROADSIDE_SLOTS; i++) {
       G.roadsideSlots[i].s = i * G.SLOT_STEP - 20;

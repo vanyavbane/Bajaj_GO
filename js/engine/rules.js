@@ -2,11 +2,24 @@
 
 export const ONCOMING_EDGE = -0.15;
 
-/** Полоса, с которой срабатывает съезд: чуть снаружи крайней полосы, не у самого отбойника. */
-export const EXIT_TRIGGER = 7.45;
+/** Светящаяся коробка на полосе. Съезд срабатывает только внутри неё. */
+export const EXIT_ZONE_WIDTH = 4.8;
+export const EXIT_ZONE_LENGTH = 5.4;
+export const EXIT_ZONE_OFFSET = 12.5;
 
-export function atExitShoulder(lane, side) {
-  return side > 0 ? lane > EXIT_TRIGGER : lane < -EXIT_TRIGGER;
+export function exitBoxCenter(exitS) {
+  return exitS - EXIT_ZONE_OFFSET;
+}
+
+/** Отрезок fromS→toS пересёк коробку, и байк стоит в её ширине. */
+export function crossedExitBox(fromS, toS, lane, exitS, side, laneCenter) {
+  const center = exitBoxCenter(exitS);
+  const halfL = EXIT_ZONE_LENGTH * 0.5;
+  const lo = Math.min(fromS, toS);
+  const hi = Math.max(fromS, toS);
+  const along = hi >= center - halfL && lo <= center + halfL;
+  const across = Math.abs(lane - side * laneCenter) <= EXIT_ZONE_WIDTH * 0.5;
+  return along && across;
 }
 
 export function oncomingMultiplier(lane) {
@@ -22,10 +35,6 @@ export function overflyMultiplier(count) {
   if (count >= 3) return 2;
   if (count === 2) return 1.5;
   return 1;
-}
-
-export function overflyCarPoints(count) {
-  return Math.round(50 * overflyMultiplier(count));
 }
 
 export const HARD_LANDING_PITCH = 0.34;
