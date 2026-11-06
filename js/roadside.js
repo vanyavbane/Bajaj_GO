@@ -1,11 +1,8 @@
 import * as THREE from 'three';
+import { keepInWindow, placeIfMoved } from './stream.js';
 import { G } from './state.js';
 
 export function initRoadside() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
-
   /* =========================================================================
    * 6. БИЛБОРДЫ, ЗДАНИЯ И ПРИДОРОЖНЫЕ СЛОТЫ
    * ========================================================================= */
@@ -263,4 +260,42 @@ export function initRoadside() {
 
     G.roadsideSlots.push(slot);
   }
+
+  function updateRoadside(isNightish) {
+    const recycleSpan = G.NUM_ROADSIDE_SLOTS * G.SLOT_STEP;
+    const nearestLampPositions = [];
+
+    for (const slot of G.roadsideSlots) {
+      slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
+      slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
+        G.placeOnRoad(slot.leftGuard, slot.s, -10.05, 0);
+        G.placeOnRoad(slot.rightGuard, slot.s, 10.05, 0);
+        G.placeOnRoad(slot.leftLamp, slot.s, -10.3, 0);
+        G.placeOnRoad(slot.rightLamp, slot.s, 10.3, 0);
+        G.placeOnRoad(slot.leftProp, slot.s, -21.5, 0);
+        G.placeOnRoad(slot.rightProp, slot.s, 21.5, 0);
+        if (slot.billboard) {
+          G.placeOnRoad(slot.billboard.group, slot.s + 6, slot.billboard.side * 15.8, 0, slot.billboard.side * -0.22);
+        }
+        if (slot.portal) G.placeOnRoad(slot.portal, slot.s, 0, 0);
+      });
+
+      if (Math.abs(slot.s - G.playerS) < 85) {
+        nearestLampPositions.push(slot.leftLamp.position, slot.rightLamp.position);
+      }
+    }
+
+    const lampBudget = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    for (let i = 0; i < G.lampLights.length; i++) {
+      const pl = G.lampLights[i];
+      if (isNightish && i < lampBudget && i < nearestLampPositions.length) {
+        const lp = nearestLampPositions[i];
+        pl.position.set(lp.x, lp.y + 5.8, lp.z);
+        pl.intensity = 14;
+      } else {
+        pl.intensity = 0;
+      }
+    }
+  }
+  G.updateRoadside = updateRoadside;
 }

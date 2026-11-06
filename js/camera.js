@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bikePaint, isQuteBody, isYuraType } from './vehicle.js';
 import { G } from './state.js';
 
 export function initCamera() {
@@ -14,10 +15,10 @@ export function initCamera() {
 
   function syncVehicleAndCameraVisibility(forceMenuThirdPerson = false) {
     const b = G.selectedBike();
-    const isQute = b.vType === 'qute' || b.vType === 'yura';
-    const isYura = b.vType === 'yura';
+    const isQute = isQuteBody(b.vType);
+    const isYura = isYuraType(b.vType);
 
-    G.tankMat.color.setHex(b.color);
+    G.tankMat.color.setHex(bikePaint(b, G.customColors));
     G.accentMat.color.setHex(b.accent);
 
     G.applyVisualTuningToModel();
@@ -81,8 +82,7 @@ export function initCamera() {
   let dashGrad = null;
   let dashGradYura = null;
   function updateCockpitDashboard(now, speedVal, distVal, scoreVal, multVal, highBeamActive) {
-    const effStats = G.getBikeEffectiveStats(G.selectedBikeId);
-    G.applyWearToStats(effStats);
+    const effStats = G.frameStats || G.applyWearToStats(G.getBikeEffectiveStats(G.selectedBikeId));
     const maxSpd = effStats.maxSpeed;
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
     const speedText = String(Math.round(speedVal));
@@ -113,7 +113,7 @@ export function initCamera() {
     lastDashDraw = now;
 
     const rpmFrac = clamp(speedVal / maxSpd, 0, 1);
-    const isYura = G.selectedBike().vType === 'yura';
+    const isYura = effStats.isYura;
 
     if (!dashGrad) {
       dashGrad = G.dashCtx.createLinearGradient(0, 0, 0, 256);
@@ -178,4 +178,67 @@ export function initCamera() {
     G.dashTex.needsUpdate = true;
   }
   G.updateCockpitDashboard = updateCockpitDashboard;
+
+  function updateFollowCamera(dt, isQute) {
+    const useThirdPersonCam = (!G.started || G.ended) || (G.cameraMode === 'third');
+    if (!useThirdPersonCam) {
+      if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
+      const cockpitY = isQute ? 1.33 : 1.56;
+      const cockpitZ = isQute ? -0.14 : 0.35;
+      G.riderPivot.position.set(0, cockpitY, cockpitZ);
+      G.camera.position.set(0, G.accelPitchOffset * 0.35, 0);
+      G.camera.rotation.set(G.accelPitchOffset * 0.4, 0, -G.steerVisual * (isQute ? 0.025 : 0.04));
+    } else {
+      if (G.camera.parent !== G.scene) G.scene.add(G.camera);
+
+      const roadYaw = -Math.atan(G.roadDX(G.playerS));
+      const cosY = Math.cos(-roadYaw), sinY = Math.sin(-roadYaw);
+
+      const isMenuView = !G.started && !G.ended;
+      const speedPullback = clamp(G.speed / 220, 0, 1.35);
+      const jumpPullback = G.jumpState.airborne ? clamp(G.jumpState.height * 0.55, 0, 2.2) : 0;
+      const distBehind = isMenuView ? 6.6 : (6.1 + speedPullback + jumpPullback);
+      const heightAboveRoad = isMenuView
+        ? 3.35
+        : (3.05 + G.jumpState.height * 0.72 + clamp(G.speed / 320, 0, 0.45));
+
+      const camS = G.playerS - distBehind;
+      const camLat = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
+      const camYaw = -Math.atan(G.roadDX(camS));
+      const minSafeY = G.roadY(camS) + 1.85;
+      const targetCamX = G.roadX(camS) + Math.cos(camYaw) * camLat;
+      const targetCamZ = -camS + Math.sin(camYaw) * camLat;
+      const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
+
+      const followRate = Math.min(1, dt * 11.5);
+      if (G.camPosSmooth.distanceToSquared(G.bikeRoot.position) > 900) {
+        G.camPosSmooth.set(targetCamX, targetCamY, targetCamZ);
+      } else {
+        G.camPosSmooth.x = lerp(G.camPosSmooth.x, targetCamX, followRate);
+        G.camPosSmooth.y = lerp(G.camPosSmooth.y, targetCamY, followRate);
+        G.camPosSmooth.z = lerp(G.camPosSmooth.z, targetCamZ, followRate);
+      }
+      G.camera.position.copy(G.camPosSmooth);
+
+      const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
+      const lookLat = isMenuView ? 0.5 : (G.laneOffset * 0.55);
+      const targetLookX = G.roadX(lookAheadS) + cosY * lookLat;
+      const targetLookZ = -lookAheadS + sinY * lookLat;
+      const targetLookY = G.roadY(lookAheadS) + 1.25 + G.jumpState.height * 0.25;
+
+      G.camLookSmooth.x = lerp(G.camLookSmooth.x, targetLookX, Math.min(1, dt * 13));
+      G.camLookSmooth.y = lerp(G.camLookSmooth.y, targetLookY, Math.min(1, dt * 13));
+      G.camLookSmooth.z = lerp(G.camLookSmooth.z, targetLookZ, Math.min(1, dt * 13));
+
+      G.camera.lookAt(G.camLookSmooth);
+      G.camera.rotation.z += -G.steerVisual * 0.025;
+    }
+  }
+  G.updateFollowCamera = updateFollowCamera;
+
+  function aimSunAtPlayer() {
+    G.sunLight.position.set(G.bikeRoot.position.x - 24, G.bikeRoot.position.y + 48, G.bikeRoot.position.z - 25);
+    G.sunLight.target.position.set(G.bikeRoot.position.x, G.bikeRoot.position.y, G.bikeRoot.position.z - 28);
+  }
+  G.aimSunAtPlayer = aimSunAtPlayer;
 }

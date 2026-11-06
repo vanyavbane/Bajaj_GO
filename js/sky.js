@@ -2,9 +2,6 @@ import * as THREE from 'three';
 import { G } from './state.js';
 
 export function initSky() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 4. НЕБО, КУПОЛ, ОБЪЁМНЫЕ VOXEL-ОБЛАКА, СОЛНЦЕ/ЛУНА И ОСВЕЩЕНИЕ

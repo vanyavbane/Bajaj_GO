@@ -1,9 +1,7 @@
+import { isQuteBody, isYuraType } from './vehicle.js';
 import { G } from './state.js';
 
 export function initCatalog() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 1. КАТАЛОГ ТЕХНИКИ (ФИКСИРОВАННЫЕ ЦЕНЫ) И СИСТЕМА ТЮНИНГА
@@ -200,17 +198,20 @@ export function initCatalog() {
     let speedDelta = 0;
     let accelBonusMult = 0;
     let brakeBonusMult = 0;
+    let wideTires = false;
+    let upgradedBrakes = false;
 
     for (const upg of G.tuningCatalog) {
-      if (rec.installed.includes(upg.id)) {
-        speedDelta += upg.speedBonus;
-        accelBonusMult += upg.accelMult;
-        brakeBonusMult += upg.brakeMult;
-      }
+      if (!rec.installed.includes(upg.id)) continue;
+      speedDelta += upg.speedBonus;
+      accelBonusMult += upg.accelMult;
+      brakeBonusMult += upg.brakeMult;
+      if (upg.id === 'wide_tires') wideTires = true;
+      if (upg.id === 'new_brakes') upgradedBrakes = true;
     }
 
-    const isYura = base.vType === 'yura';
-    const isQute = base.vType === 'qute' || isYura;
+    const isYura = isYuraType(base.vType);
+    const isQute = isQuteBody(base.vType);
     const baseBrakeDecel = isYura ? 84 : (isQute ? 76 : 95);
 
     return {
@@ -223,6 +224,11 @@ export function initCatalog() {
       baseBrake: baseBrakeDecel,
       brakeBonusPct: Math.round(brakeBonusMult * 100),
       brakeDecel: baseBrakeDecel * (1 + brakeBonusMult),
+      vType: base.vType,
+      isQute,
+      isYura,
+      wideTires,
+      upgradedBrakes,
       installedCount: rec.installed.length,
       ownedCount: rec.owned.length
     };
@@ -233,9 +239,7 @@ export function initCatalog() {
   G.cameraMode = savedCamera === 'third' ? 'third' : 'cockpit';
 
   function selectedBike() {
-    const b = G.bikeCatalog.find(x => x.id === G.selectedBikeId) || G.bikeCatalog[0];
-    if (G.customColors[b.id]) b.color = G.customColors[b.id];
-    return b;
+    return G.bikeCatalog.find(x => x.id === G.selectedBikeId) || G.bikeCatalog[0];
   }
   G.selectedBike = selectedBike;
 

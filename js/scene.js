@@ -4,8 +4,6 @@ import { G } from './state.js';
 
 export function initScene() {
   const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 2. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ, РЕНДЕРЕРА И PBR-МАТЕРИАЛОВ

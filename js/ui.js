@@ -1,10 +1,11 @@
 import { balance, button, callout, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
+import { grouped, rubles, shortfall } from './money.js';
+import { resetRun } from './rules.js';
 import { G } from './state.js';
+import { bikePaint } from './vehicle.js';
 
 export function initUi() {
   const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 14. ИГРОВОЕ СОСТОЯНИЕ, ГЛАВНОЕ МЕНЮ, МАГАЗИН, ТЮНИНГ И ОКНО СМЕРТИ
@@ -13,31 +14,8 @@ export function initUi() {
   G.currentScreen = 'main'; // 'main' | 'shop' | 'tuning' | 'playing' | 'crash'
   G.started = false;
   G.ended = false;
-  G.speed = 0;
-  G.distance = 0;
-  G.score = 0;
-  G.totalJumpBonusRun = 0;
-  G.totalCarsJumpedRun = 0;
-  G.comboCount = 0;
-  G.comboTimer = 0;
-  G.playerS = 0;
-  G.laneOffset = 7.1;
-  G.lateralVelocity = 0;
-  G.steerVisual = 0;
-  G.slipDriftVel = 0;
-  G.accelPitchOffset = 0;
   G.lastTime = performance.now();
-
-  G.jumpState = {
-    airborne: false,
-    height: 0,
-    vy: 0,
-    pitch: 0,
-    startS: 0,
-    carsJumped: 0,
-    liveBonus: 0,
-    wobbleTimer: 0
-  };
+  resetRun(G, G.START_LANE);
   G.jumpSummaryTimer = 0;
 
   function renderGraphics(from) {
@@ -108,7 +86,7 @@ export function initUi() {
           trailOn: G.graphics.preset === 'sharp'
         })
       ].join(''),
-      balance: currency({ id: 'bank', label: 'Баланс', value: `${Math.floor(G.bankPoints)} ₽` }),
+      balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
       footer: 'bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan',
       tools: [
         iconButton({ id: 'mm-cam-btn', icon: '🎥', title: `Камера: ${G.cameraMode === 'cockpit' ? 'кокпит' : '3-е лицо'}` }),
@@ -144,7 +122,7 @@ export function initUi() {
     const cards = G.bikeCatalog.map(b => {
       const owned = G.ownedBikes.includes(b.id);
       const selected = G.selectedBikeId === b.id;
-      const activeColor = G.customColors[b.id] || b.color;
+      const activeColor = bikePaint(b, G.customColors);
       const eff = G.getBikeEffectiveStats(b.id);
       let btn = '';
       if (selected) {
@@ -153,7 +131,7 @@ export function initUi() {
         btn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { select: b.id } });
       } else {
         const canBuy = G.bankPoints >= b.price;
-        const price = b.price.toLocaleString('ru-RU');
+        const price = grouped(b.price);
         btn = button({
           variant: 'primary',
           label: canBuy ? `КУПИТЬ ЗА ${price} ₽` : `НУЖНО ${price} ₽`,
@@ -177,7 +155,7 @@ export function initUi() {
         : `${b.maxSpeed} км/ч`;
       const priceLine = b.price === 0
         ? 'Стартовый мотоцикл · Цена: 0 ₽ (уже в гараже)'
-        : `Цена: ${b.price.toLocaleString('ru-RU')} ₽`;
+        : `Цена: ${rubles(b.price)}`;
 
       return card({
         on: selected,
@@ -192,7 +170,7 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${logo({ left: 'ГАРАЖ', right: 'GO', compact: true })}
         ${heading('МАГАЗИН', 'МОТОЦИКЛЫ И КВАДРИЦИКЛЫ BAJAJ')}
-        ${balance('Накоплено', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${balance('Накоплено', rubles(G.bankPoints))}
         ${rows(cards)}
         ${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
     `);
@@ -225,8 +203,6 @@ export function initUi() {
         const bId = btn.dataset.swatchBike;
         const hex = Number(btn.dataset.swatchHex);
         G.customColors[bId] = hex;
-        const bObj = G.bikeCatalog.find(x => x.id === bId);
-        if (bObj) bObj.color = hex;
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
@@ -257,7 +233,7 @@ export function initUi() {
         ? tag('✓ Установлено', 'good')
         : owned
           ? tag('Куплено')
-          : tag(`${price.toLocaleString('ru-RU')} ₽`, 'warm');
+          : tag(rubles(price), 'warm');
       const actionBtn = installed
         ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', title: 'Снять или поставить деталь снова', data: { 'toggle-upg': upg.id } })
         : owned
@@ -276,7 +252,7 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${logo({ left: 'ТЮНИНГ', right: 'GO', compact: true })}
         ${heading('ДОВОДКА', 'ТЕКУЩИЙ МОТОЦИКЛ')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${callout(`${bike.name} · база ${bike.maxSpeed} км/ч`)}
         ${stats([
           { label: 'Макс. скорость', value: `${eff.maxSpeed} км/ч${speedHint}`, tone: eff.speedDelta < 0 ? 'bad' : 'good' },
@@ -296,8 +272,8 @@ export function initUi() {
         if (!upg) return;
         const price = G.getUpgradePrice(bike, upg);
         if (G.bankPoints < price) {
-          const need = price - Math.floor(G.bankPoints);
-          renderTuning(`⚠ Недостаточно средств! Для покупки «${upg.shortName}» не хватает ещё ${need.toLocaleString('ru-RU')} ₽`, 'err');
+          const need = shortfall(price, G.bankPoints);
+          renderTuning(`⚠ Недостаточно средств! Для покупки «${upg.shortName}» не хватает ещё ${rubles(need)}`, 'err');
           return;
         }
         G.bankPoints -= price;
@@ -340,26 +316,7 @@ export function initUi() {
     G.currentScreen = 'playing';
     G.started = true;
     G.ended = false;
-    G.speed = 0;
-    G.distance = 0;
-    G.score = 0;
-    G.totalJumpBonusRun = 0;
-    G.totalCarsJumpedRun = 0;
-    G.comboCount = 0;
-    G.comboTimer = 0;
-    G.playerS = 0;
-    G.laneOffset = 7.1;
-    G.lateralVelocity = 0;
-    G.steerVisual = 0;
-    G.slipDriftVel = 0;
-
-    G.jumpState.airborne = false;
-    G.jumpState.height = 0;
-    G.jumpState.vy = 0;
-    G.jumpState.pitch = 0;
-    G.jumpState.carsJumped = 0;
-    G.jumpState.liveBonus = 0;
-    G.jumpState.wobbleTimer = 0;
+    resetRun(G, G.START_LANE);
     $('jump-live').hidden = true;
     $('jump-summary').classList.remove('show');
 
@@ -429,7 +386,7 @@ export function initUi() {
           { label: 'Пройденная дистанция', value: G.formatRunDistance(G.distance) },
           { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${Math.floor(G.totalJumpBonusRun)} ₽)`, tone: 'signal' },
           { label: 'Заработано за заезд', value: `+${earned} ₽`, tone: 'gold' },
-          { label: 'Баланс в банке', value: `${Math.floor(G.bankPoints)} ₽` }
+          { label: 'Баланс в банке', value: rubles(G.bankPoints) }
         ])}
         ${button({ id: 'crash-restart', variant: 'primary', icon: '▶', label: 'ИГРАТЬ СНОВА' })}
         ${button({ id: 'crash-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { rubles, shortfall } from './money.js';
+import { atExitShoulder } from './rules.js';
 import { G } from './state.js';
+import { placeIfMoved } from './stream.js';
 
 export function initEconomy() {
   const $ = G.$;
@@ -25,6 +28,7 @@ export function initEconomy() {
   const EXIT_COUNT = 5;
 
   const WEAR_LIMITS = { pads: 60000, oil: 40000, plugs: 100000 };
+  const WEAR_CAP = 3;
   const WEAR_LABELS = { pads: 'Колодки', oil: 'Масло', plugs: 'Свечи' };
   const WEAR_ICONS = { pads: '🛑', oil: '🛢', plugs: '⚡' };
   const SERVICE_BASE_PRICE = { pads: 400, oil: 600, plugs: 500 };
@@ -48,6 +52,15 @@ export function initEconomy() {
   };
 
   /* ---------- Персистентное состояние экономики ---------- */
+  function fuelPercent() {
+    return clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100;
+  }
+
+  function orderPayout(order) {
+    const frac = clamp(order.timeLeft / order.timeLimit, 0, 1);
+    return Math.round(order.baseReward * (0.45 + 0.55 * frac));
+  }
+
   function readStoredNumber(key, fallback) {
     const raw = localStorage.getItem(key);
     if (raw === null) return fallback;
@@ -62,7 +75,7 @@ export function initEconomy() {
     if (w && typeof w === 'object') {
       for (const p of Object.keys(WEAR_LIMITS)) {
         const v = Number(w[p]);
-        wearM[p] = Number.isFinite(v) ? clamp(v, 0, WEAR_LIMITS[p] * 3) : 0;
+        wearM[p] = Number.isFinite(v) ? clamp(v, 0, WEAR_LIMITS[p] * WEAR_CAP) : 0;
       }
     }
   } catch { /* повреждённое сохранение — начинаем с новых деталей */ }
@@ -508,11 +521,10 @@ export function initEconomy() {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      if (e.placedS !== e.s) {
-        e.placedS = e.s;
+      e.placedS = placeIfMoved(e.placedS, e.s, () => {
         G.placeOnRoad(e.group, e.s, e.side * 12.6, 0);
-        G.placeOnRoad(e.marker, zoneS, e.side * 7.1, 0.07);
-      }
+        G.placeOnRoad(e.marker, zoneS, e.side * G.START_LANE, 0.07);
+      });
 
       // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
       const dist = zoneS - G.playerS;
@@ -537,7 +549,7 @@ export function initEconomy() {
 
       // Отклик при въезде в зону: вспышка, подсказка и короткий звук
       if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used) {
-        const aligned = Math.abs(G.laneOffset - e.side * 7.1) < 2.6;
+        const aligned = Math.abs(G.laneOffset - e.side * G.START_LANE) < 2.6;
         const dx = G.playerS - zoneS;
         if (!e.zoneEntered && aligned && Math.abs(dx) < EXIT_ZONE_LENGTH * 0.5) {
           e.zoneEntered = true;
@@ -553,7 +565,7 @@ export function initEconomy() {
     if (G.started && !G.ended && !G.uiModal && !G.paused) {
       for (const e of exitPool) {
         if (e.used) continue;
-        const onSide = e.side > 0 ? G.laneOffset > 7.45 : G.laneOffset < -7.45;
+        const onSide = atExitShoulder(G.laneOffset, e.side);
         if (onSide && Math.abs(G.playerS - e.s) < 11) {
           e.used = true;
           openExitMenu(e);
@@ -606,10 +618,9 @@ export function initEconomy() {
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
-      if (deliveryParkS !== activeOrder.targetS) {
-        deliveryParkS = activeOrder.targetS;
-        G.placeOnRoad(deliveryMarker, activeOrder.targetS, 7.1, 0);
-      }
+      deliveryParkS = placeIfMoved(deliveryParkS, activeOrder.targetS, (s) => {
+        G.placeOnRoad(deliveryMarker, s, G.START_LANE, 0);
+      });
     } else {
       deliveryMarker.visible = false;
       deliveryParkS = NaN;
@@ -730,8 +741,7 @@ export function initEconomy() {
 
   function deliverOrder() {
     if (!activeOrder) return;
-    const frac = clamp(activeOrder.timeLeft / activeOrder.timeLimit, 0, 1);
-    const reward = Math.round(activeOrder.baseReward * (0.45 + 0.55 * frac));
+    const reward = orderPayout(activeOrder);
     const name = activeOrder.restaurant;
     G.score += reward;
     // Награда сразу зачисляется на баланс: её можно потратить на этом же заезде.
@@ -761,13 +771,13 @@ export function initEconomy() {
   }
 
   function renderFuelMenu(opts = {}) {
-    const pct = Math.round(clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100);
+    const pct = Math.round(fuelPercent());
     const full = G.fuelM >= FUEL_RANGE_M - 1;
     const canPay = G.bankPoints >= REFUEL_PRICE;
 
     openModal(panel(`
         ${heading('⛽ АЗС', 'СЪЕЗД · ЗАПРАВКА')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${opts.message ? callout(opts.message) : ''}
         ${callout(`${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}Бак: <b>${pct}%</b> · запас хода ≈ <b>${Math.round(G.fuelM).toLocaleString('ru-RU')} м</b>.<br>Полного бака хватает на ${FUEL_RANGE_M.toLocaleString('ru-RU')} м.`)}
         ${button({
@@ -776,7 +786,7 @@ export function initEconomy() {
           label: full ? 'БАК ПОЛОН' : `ЗАЛИТЬ ПОЛНЫЙ БАК — ${REFUEL_PRICE} ₽`,
           disabled: !canPay || full
         })}
-        ${(!canPay && !full) ? callout(`Не хватает ${Math.ceil(REFUEL_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽.`) : ''}
+        ${(!canPay && !full) ? callout(`Не хватает ${rubles(shortfall(REFUEL_PRICE, G.bankPoints))}.`) : ''}
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');
 
@@ -817,7 +827,7 @@ export function initEconomy() {
 
     openModal(panel(`
         ${heading('⛽ БЕНЗИН ЗАКОНЧИЛСЯ', 'МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${callout(`Можно вызвать эвакуатор до ближайшей АЗС за <b>${TOW_PRICE} ₽</b> (заправка на месте — ещё ${REFUEL_PRICE} ₽) или отказаться и ехать своим ходом с ограничением <b>${G.LIMP_MAX_SPEED} км/ч</b>.`)}
         ${button({
           id: 'fuel-tow',
@@ -826,7 +836,7 @@ export function initEconomy() {
           label: `ЭВАКУАТОР ДО АЗС — ${TOW_PRICE} ₽`,
           disabled: !canPay
         })}
-        ${canPay ? '' : callout(`Не хватает ${Math.ceil(TOW_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽ на эвакуатор.`)}
+        ${canPay ? '' : callout(`Не хватает ${rubles(shortfall(TOW_PRICE, G.bankPoints))} на эвакуатор.`)}
         ${button({ id: 'fuel-selftow', label: `ОТКАЗАТЬСЯ · ЕХАТЬ СВОИМ ХОДОМ (${G.LIMP_MAX_SPEED} КМ/Ч)` })}
     `, { size: 'narrow' }), 'critical');
 
@@ -835,7 +845,7 @@ export function initEconomy() {
       G.bankPoints -= TOW_PRICE;
       G.saveGarage();
       G.playerS += 120;
-      G.laneOffset = 7.1;
+      G.laneOffset = G.START_LANE;
       G.lateralVelocity = 0;
       G.speed = 0;
       G.accidentCooldown = 2.0;
@@ -875,7 +885,7 @@ export function initEconomy() {
 
     openModal(panel(`
         ${heading('🔧 СТО', 'СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name}`)}
+        ${balance('БАЛАНС', `${rubles(G.bankPoints)} · ${bike.name}`)}
         ${message ? callout(message) : ''}
         ${callout('Изношенные детали ухудшают торможение, динамику и максимальную скорость. После замены ресурс сбрасывается на 100%.')}
         ${rows(list)}
@@ -911,7 +921,7 @@ export function initEconomy() {
         ? tag('✓ Установлено', 'good')
         : owned
           ? tag('Куплено')
-          : tag(`${price.toLocaleString('ru-RU')} ₽`, 'warm');
+          : tag(rubles(price), 'warm');
       const actionBtn = installed
         ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', data: { 'toggle-upg': upg.id } })
         : owned
@@ -929,7 +939,7 @@ export function initEconomy() {
 
     openModal(panel(`
         ${heading('🔧 ТЮНИНГ', 'СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name} · макс. ${eff.maxSpeed} км/ч`)}
+        ${balance('БАЛАНС', `${rubles(G.bankPoints)} · ${bike.name} · макс. ${eff.maxSpeed} км/ч`)}
         ${message ? callout(message, statusType === 'err' ? 'err' : 'ok') : ''}
         ${rows(cardsHtml)}
         ${exitMenuBackButton()}
@@ -942,7 +952,7 @@ export function initEconomy() {
         if (!upg) return;
         const price = G.getUpgradePrice(bike, upg);
         if (G.bankPoints < price) {
-          renderExitTuning(`⚠ Не хватает ${Math.ceil(price - G.bankPoints).toLocaleString('ru-RU')} ₽ на «${upg.shortName}»`, 'err');
+          renderExitTuning(`⚠ Не хватает ${rubles(shortfall(price, G.bankPoints))} на «${upg.shortName}»`, 'err');
           return;
         }
         G.bankPoints -= price;
@@ -993,7 +1003,7 @@ export function initEconomy() {
 
     openModal(panel(`
         ${heading('💥 ДТП', 'У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
-        ${balance('БАЛАНС', `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽`)}
+        ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${callout(`Скорая помощь и лекарства стоят <b>${MEDKIT_PRICE} ₽</b>. После оплаты заезд продолжается, заказ «${activeOrder.restaurant}» сохраняется.`)}
         ${button({
           id: 'acc-med',
@@ -1002,7 +1012,7 @@ export function initEconomy() {
           label: `СКОРАЯ + ЛЕКАРСТВА — ${MEDKIT_PRICE} ₽`,
           disabled: !canPay
         })}
-        ${canPay ? '' : callout(`Недостаточно денег на лекарства (${Math.ceil(MEDKIT_PRICE - G.bankPoints).toLocaleString('ru-RU')} ₽). Остаётся только закончить заезд.`)}
+        ${canPay ? '' : callout(`Недостаточно денег на лекарства (${rubles(shortfall(MEDKIT_PRICE, G.bankPoints))}). Остаётся только закончить заезд.`)}
         ${button({ id: 'acc-end', label: 'ОТКАЗАТЬСЯ · ЗАЕЗД ЗАКОНЧИТСЯ' })}
     `, { size: 'narrow' }), 'critical');
 
@@ -1053,9 +1063,9 @@ export function initEconomy() {
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
         ${stats([
           { label: 'Пробег', value: G.formatRunDistance(G.distance) },
-          { label: 'Заработано за заезд', value: `${Math.floor(G.score).toLocaleString('ru-RU')} ₽` },
-          { label: 'Баланс', value: `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽` },
-          { label: 'Топливо', value: `${Math.round(clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100)}%` },
+          { label: 'Заработано за заезд', value: rubles(G.score) },
+          { label: 'Баланс', value: rubles(G.bankPoints) },
+          { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
           { label: 'Заказ', value: orderValue }
         ])}
         ${showSettings ? `
@@ -1167,9 +1177,9 @@ export function initEconomy() {
   function tickEconomy(dt, meters) {
     if (meters > 0) {
       if (G.fuelM > 0) G.fuelM = Math.max(0, G.fuelM - meters);
-      wearM.pads = Math.min(WEAR_LIMITS.pads * 3, wearM.pads + meters);
-      wearM.oil = Math.min(WEAR_LIMITS.oil * 3, wearM.oil + meters);
-      wearM.plugs = Math.min(WEAR_LIMITS.plugs * 3, wearM.plugs + meters);
+      for (const part of Object.keys(WEAR_LIMITS)) {
+        wearM[part] = Math.min(WEAR_LIMITS[part] * WEAR_CAP, wearM[part] + meters);
+      }
     }
     ecoSaveTimer += dt;
     if (ecoSaveTimer >= 3) {
@@ -1189,7 +1199,7 @@ export function initEconomy() {
     lastEcoHudDraw = now;
     if (!$('eco-fuel-val')) return;
 
-    const fuelPct = clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100;
+    const fuelPct = fuelPercent();
     $('eco-fuel-val').textContent = Math.round(fuelPct) + '%';
     const fuelBar = $('eco-fuel-bar');
     fuelBar.style.width = fuelPct.toFixed(1) + '%';
@@ -1206,7 +1216,7 @@ export function initEconomy() {
       }
     }
 
-    $('eco-bank').textContent = Math.floor(G.bankPoints).toLocaleString('ru-RU') + ' ₽';
+    $('eco-bank').textContent = rubles(G.bankPoints);
 
     const orderHud = $('order-hud');
     if (activeOrder) {
@@ -1217,7 +1227,7 @@ export function initEconomy() {
         ? formatClock(activeOrder.timeLeft)
         : '−' + formatClock(-activeOrder.timeLeft);
       $('order-dist').textContent = Math.max(0, Math.ceil(activeOrder.remainingM)) + ' м';
-      const est = Math.round(activeOrder.baseReward * (0.45 + 0.55 * clamp(activeOrder.timeLeft / activeOrder.timeLimit, 0, 1)));
+      const est = orderPayout(activeOrder);
       $('order-reward').textContent = '~' + est.toLocaleString('ru-RU') + ' ₽';
     } else {
       orderHud.hidden = true;

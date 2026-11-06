@@ -21,7 +21,12 @@
 |   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics` |
 | 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи цветов, гараж |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
-| 3 | `js/road.js` | `ROAD_WIDTH`, `LANE_OFFSETS`, `LANE_SPEEDS`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
+| 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
+|   | `js/rules.js` | очки прыжка, встречки и дистанции, жёсткая посадка, порог съезда, сброс заезда. Без Three.js |
+|   | `js/motion.js` | шаг байка и чужой машины, контакт с игроком, уступка дальнему свету. Без Three.js |
+|   | `js/stream.js` | окно вдоль дороги и `placeIfMoved`: ставить объект только когда его `s` сменилось |
+|   | `js/vehicle.js` | `isQuteBody`, `isYuraType`, `bikePaint`: тип кузова и окраска без порчи каталога |
+|   | `js/money.js` | `rubles`, `grouped`, `shortfall`: один вид сумм на всех экранах |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
@@ -100,12 +105,12 @@ animate(now)
   ├─ таймеры дальнего света и плашки прыжка
   ├─ меню: демо-проезд
   ├─ заезд: скорость, руль, tickEconomy / tickOrder, прыжок, очки
-  ├─ placeOnRoad байка, камера, солнце за игроком
+  ├─ placeOnRoad байка, updateFollowCamera, aimSunAtPlayer
   ├─ updateRoadSurface + updateAtmosphereAndTimeOfDay
-  ├─ рампы и частицы прыжка
-  ├─ обочина и фонари, мосты и тоннели
+  ├─ recycleRamps и tickJumpParticles
+  ├─ updateRoadside, updateMegaStructures
   ├─ updateExitWorld / updateDeliveryMarker
-  ├─ пешеходы
+  ├─ updatePedestrians
   ├─ трафик: движение, перелёты, столкновения → handleAccident()
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)

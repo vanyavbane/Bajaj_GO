@@ -1,11 +1,8 @@
 import * as THREE from 'three';
+import { keepInWindow } from './stream.js';
 import { G } from './state.js';
 
 export function initPedestrians() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
-
   /* =========================================================================
    * 8. ПЕШЕХОДЫ НА ТРОТУАРАХ
    * ========================================================================= */
@@ -44,4 +41,19 @@ export function initPedestrians() {
       phase: i * 1.3
     });
   }
+
+  const pedSpan = 26 * 16;
+  function updatePedestrians(dt, now) {
+    for (const ped of G.pedestrians) {
+      ped.s = keepInWindow(ped.s + ped.walkSpeed * dt, G.playerS, 30, 390, pedSpan);
+      const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
+      G.placeOnRoad(ped.group, ped.s, ped.lateralOffset, 0.11, facingYaw);
+      if (ped.walkSpeed !== 0) {
+        const swing = Math.sin(now * 0.008 + ped.phase) * 0.45;
+        ped.legL.rotation.x = swing;
+        ped.legR.rotation.x = -swing;
+      }
+    }
+  }
+  G.updatePedestrians = updatePedestrians;
 }

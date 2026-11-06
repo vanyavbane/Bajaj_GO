@@ -2,9 +2,6 @@ import * as THREE from 'three';
 import { G } from './state.js';
 
 export function initRoadSurface() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 5. ДОРОЖНОЕ ПОЛОТНО, РАЗМЕТКА, ТРОТУАРЫ И ОТКОСЫ

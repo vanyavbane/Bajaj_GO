@@ -2,15 +2,14 @@ import * as THREE from 'three';
 import { G } from './state.js';
 
 export function initRoad() {
-  const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 3. ГЕОМЕТРИЯ ДОРОГИ (КРИВЫЕ И ВЫСОТЫ ОТНОСИТЕЛЬНО ОСИ S)
    * ========================================================================= */
   G.ROAD_WIDTH = 19.0;
+  G.ROAD_EDGE = G.ROAD_WIDTH * 0.5 - 0.5;
   G.LANE_OFFSETS = [-7.1, -2.35, 2.35, 7.1]; // 1-2 встречные, 3-4 попутные
+  G.START_LANE = G.LANE_OFFSETS[3];
   G.LANE_SPEEDS = [40, 60, 70, 55];
 
   function roadX(s) {

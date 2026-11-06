@@ -112,4 +112,20 @@ export function initEffects() {
     setTimeout(() => el.remove(), 1050);
   }
   G.spawnFloatingPopup = spawnFloatingPopup;
+
+  function tickJumpParticles(dt) {
+    for (const p of G.jumpParticles) {
+      if (p.life > 0) {
+        p.life -= dt;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.vy -= 14 * dt;
+        p.mesh.rotation.x += 6 * dt;
+        p.mesh.rotation.y += 6 * dt;
+        if (p.life <= 0) p.mesh.visible = false;
+      }
+    }
+  }
+  G.tickJumpParticles = tickJumpParticles;
 }

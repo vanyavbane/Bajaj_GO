@@ -45,6 +45,11 @@ export interface EffectiveStats {
   baseBrake: number;
   brakeBonusPct: number;
   brakeDecel: number;
+  vType: VehicleKind;
+  isQute: boolean;
+  isYura: boolean;
+  wideTires: boolean;
+  upgradedBrakes: boolean;
   installedCount: number;
   ownedCount: number;
   wearBrakePct?: number;
@@ -55,6 +60,42 @@ export interface EffectiveStats {
 export interface TuningRecord {
   owned: string[];
   installed: string[];
+}
+
+export interface JumpState {
+  airborne: boolean;
+  height: number;
+  vy: number;
+  pitch: number;
+  startS: number;
+  carsJumped: number;
+  liveBonus: number;
+  wobbleTimer: number;
+}
+
+export interface TrafficCar {
+  model: {
+    type: string;
+    root: THREE.Object3D;
+    hiDetail: THREE.Object3D;
+    loDetail: THREE.Object3D;
+    wheels: Array<{ rotation: THREE.Euler }>;
+    frontPivots: Array<{ rotation: THREE.Euler }>;
+    alertSprite: THREE.Object3D;
+    halfWidth: number;
+    halfLength: number;
+    roofHeight: number;
+  };
+  laneIdx: number;
+  targetLaneIdx: number;
+  lateralOffset: number;
+  s: number;
+  speedKmh: number;
+  changingLane: boolean;
+  flashReactTimer: number;
+  steerAngle: number;
+  nearMissAwarded: boolean;
+  jumpedInCurrentJump: boolean;
 }
 
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
@@ -76,6 +117,12 @@ export interface GameState {
     extraPitch?: number,
     extraRoll?: number,
   ) => void;
+  ROAD_WIDTH: number;
+  ROAD_EDGE: number;
+  LANE_OFFSETS: number[];
+  START_LANE: number;
+  frameStats: EffectiveStats | null;
+  formatRunDistance: (km: number) => string;
   roadX: (s: number) => number;
   roadY: (s: number) => number;
   roadDX: (s: number) => number;
@@ -98,7 +145,9 @@ export interface GameState {
   speed: number;
   playerS: number;
   laneOffset: number;
-  keys: Record<string, boolean>;
+  keys: { left: boolean; right: boolean; gas: boolean; brake: boolean };
+  jumpState: JumpState;
+  trafficPool: TrafficCar[];
   M: Record<string, THREE.Material>;
 
   [key: string]: any;

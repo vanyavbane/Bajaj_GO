@@ -2,8 +2,6 @@ import { G } from './state.js';
 
 export function initInput() {
   const $ = G.$;
-  const clamp = G.clamp;
-  const lerp = G.lerp;
 
   /* =========================================================================
    * 15. ОБРАБОТКА ВВОДА (КЛАВИАТУРА И ЭКРАННЫЕ КНОПКИ)

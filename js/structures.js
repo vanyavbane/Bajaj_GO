@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { keepInWindow, placeIfMoved } from './stream.js';
 import { G } from './state.js';
 
 export function initStructures() {
@@ -183,4 +184,41 @@ export function initStructures() {
       triggeredThisPass: false
     });
   }
+
+  function recycleRamps() {
+    for (const ramp of G.rampsPool) {
+      if (ramp.s < G.playerS - 32) {
+        let maxRampS = G.playerS;
+        for (const other of G.rampsPool) if (other.s > maxRampS) maxRampS = other.s;
+        const nextInterval = 240 + Math.random() * 200;
+        ramp.laneIdx = Math.random() < 0.5 ? 2 : 3;
+        ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
+        ramp.s = findSafeRampS(maxRampS + nextInterval);
+        ramp.triggeredThisPass = false;
+        ramp.placedS = NaN;
+      }
+      ramp.placedS = placeIfMoved(ramp.placedS, ramp.s, () => {
+        G.placeOnRoad(ramp.mesh, ramp.s, ramp.lateralOffset, 0);
+      });
+    }
+  }
+  G.recycleRamps = recycleRamps;
+
+  function updateMegaStructures(dt) {
+    const span = G.megaStructures.length * 320;
+    for (const ms of G.megaStructures) {
+      ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
+      ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
+        G.placeOnRoad(ms, ms.userData.s, 0, 0);
+      });
+      if (ms.userData.decoCars) {
+        for (const dc of ms.userData.decoCars) {
+          dc.mesh.position.x += dc.dir * 14 * dt;
+          if (dc.mesh.position.x > 20) dc.mesh.position.x = -20;
+          if (dc.mesh.position.x < -20) dc.mesh.position.x = 20;
+        }
+      }
+    }
+  }
+  G.updateMegaStructures = updateMegaStructures;
 }
