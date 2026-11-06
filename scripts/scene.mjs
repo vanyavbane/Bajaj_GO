@@ -169,6 +169,27 @@ try {
   if (bare.modal || early.modal || !early.armed || !hit.modal) {
     throw new Error(`съезд: коробка без кнопки ${bare.modal}, кнопка до коробки ${early.modal}/${early.armed}, въезд ${hit.modal}`);
   }
+  if (/само|автомат/i.test(`${bare.how} ${early.how}`)) {
+    throw new Error(`подсказка обещает сама: ${bare.how} / ${early.how}`);
+  }
+  if (!bare.how.includes('Съехать') || !bare.how.includes('коробку') || !early.how.startsWith('Выбрано')) {
+    throw new Error(`подсказка разошлась: ${bare.how} / ${early.how}`);
+  }
+  await cdp.evaluate(`window.__bajaj.placeAtExit('before')`);
+  await cdp.evaluate(`document.getElementById('btn-take-exit').click()`);
+  await cdp.evaluate(`window.__bajaj.setKeys({ gas: true, left: false, right: false, brake: false })`);
+  let driven = null;
+  let driveSnap = null;
+  for (let i = 0; i < 24; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    driven = await cdp.evaluate(`window.__bajaj.exitHint()`);
+    driveSnap = await cdp.evaluate(`window.__bajaj.snapshot()`);
+    if (driven.modal) break;
+  }
+  await cdp.evaluate(`window.__bajaj.setKeys({ gas: false })`);
+  if (!driven.modal) {
+    throw new Error(`после кнопки проезд коробки не открыл меню: s=${driveSnap.playerS} lane=${driveSnap.lane} speed=${driveSnap.speed} how=${driven.how}`);
+  }
   const exitFrame = await cdp.evaluate(`window.__bajaj.frame()`, 15000);
   const exitFile = join(tmpdir(), 'bajaj-exit.jpg');
   await writeFile(exitFile, Buffer.from(exitFrame.slice(exitFrame.indexOf(',') + 1), 'base64'));

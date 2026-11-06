@@ -429,7 +429,9 @@ export function initEconomy() {
     const sideWord = exit.side > 0 ? 'справа' : 'слева';
     const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${meters(Math.max(0, ahead.dist))}`;
     const armed = exitIsArmed(exit);
-    const how = armed ? 'Ждёт въезда в коробку' : 'Меню откроется само в коробке';
+    const how = armed
+      ? `Выбрано. Заезжай в коробку ${sideWord}`
+      : `Нажми «Съехать» или E, потом заезжай в коробку ${sideWord}`;
     const key = `${exit.type}|${title}|${armed ? 1 : 0}`;
     if (key === exitHintKey) return;
     exitHintKey = key;
@@ -437,7 +439,7 @@ export function initEconomy() {
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
     const take = $('btn-take-exit');
-    take.textContent = armed ? 'Жду коробку' : 'Съехать';
+    take.textContent = armed ? 'Выбрано' : 'Съехать · E';
     take.setAttribute('aria-pressed', armed ? 'true' : 'false');
     $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service') + (armed ? ' armed' : '');
   }
@@ -623,13 +625,23 @@ export function initEconomy() {
     refreshExitHint();
   }
 
+  function playerInExitBox(exit) {
+    return crossedExitBox(G.playerS, G.playerS, G.laneOffset, exit.s, exit.side, G.START_LANE);
+  }
+
   function armExit() {
     if (!G.started || G.ended || G.uiModal || G.paused) return false;
     const ahead = nearestExitAhead();
     if (!ahead) return false;
-    if (exitIsArmed(ahead.exit)) return true;
-    armedExit = ahead.exit;
-    armedS = ahead.exit.s;
+    if (!exitIsArmed(ahead.exit)) {
+      armedExit = ahead.exit;
+      armedS = ahead.exit.s;
+    }
+    if (playerInExitBox(ahead.exit)) {
+      clearArmedExit();
+      openExitFromBox(ahead.exit);
+      return true;
+    }
     exitHintKey = '';
     refreshExitHint();
     return true;
