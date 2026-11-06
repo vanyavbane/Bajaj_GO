@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { bikePaint, isQuteBody, isYuraType } from './engine/vehicle.js';
+import { grouped, rubles, runDistance } from './engine/money.js';
 import { G } from './state.js';
 
 export function initCamera() {
@@ -68,13 +69,6 @@ export function initCamera() {
   }
   G.toggleCameraMode = toggleCameraMode;
 
-  function formatRunDistance(km) {
-    const meters = Math.max(0, km * 1000);
-    if (meters < 1000) return `${Math.round(meters)} м`;
-    return `${km.toFixed(2)} км`;
-  }
-  G.formatRunDistance = formatRunDistance;
-
   let lastDashDraw = 0;
   let lastDashKey = '';
   let lastThirdKey = '';
@@ -86,20 +80,21 @@ export function initCamera() {
     const maxSpd = effStats.maxSpeed;
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
     const speedText = String(Math.round(speedVal));
-    const distText = formatRunDistance(distVal);
+    const distText = runDistance(distVal);
+    const rubText = rubles(scoreVal);
 
     if (G.cameraMode === 'third' && G.started && !G.ended) {
-      const thirdKey = `${speedText}|${gear}|${distText}|${Math.floor(scoreVal)}`;
+      const thirdKey = `${speedText}|${gear}|${distText}|${rubText}`;
       if (thirdKey !== lastThirdKey) {
         lastThirdKey = thirdKey;
         $('tp-speed').textContent = speedText;
         $('tp-gear').textContent = 'G' + gear;
         $('tp-dist').textContent = distText;
-        $('tp-rub').textContent = Math.floor(scoreVal) + ' ₽';
+        $('tp-rub').textContent = rubText;
       }
       let pills = '';
       if (multVal > 1) pills += `<span class="tp-pill x2">ВСТРЕЧКА ×2</span>`;
-      if (G.jumpState.airborne) pills += `<span class="tp-pill jump">ПЕРЕЛЁТ: ${G.jumpState.carsJumped} (+${Math.round(G.jumpState.liveBonus)} ₽)</span>`;
+      if (G.jumpState.airborne) pills += `<span class="tp-pill jump">ПЕРЕЛЁТ: ${G.jumpState.carsJumped} (+${rubles(G.jumpState.liveBonus)})</span>`;
       if (pills !== lastPills) {
         lastPills = pills;
         $('tp-extra').innerHTML = pills;
@@ -107,7 +102,7 @@ export function initCamera() {
       return;
     }
 
-    const dashKey = `${speedText}|${distText}|${Math.floor(scoreVal)}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
+    const dashKey = `${speedText}|${distText}|${rubText}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
     if (dashKey === lastDashKey || now - lastDashDraw < 30) return;
     lastDashKey = dashKey;
     lastDashDraw = now;
@@ -173,7 +168,7 @@ export function initCamera() {
     G.dashCtx.fillText('РУБЛИ' + (multVal > 1 ? ' ×' + multVal : ''), 264, 178);
     G.dashCtx.fillStyle = '#ffb64e';
     G.dashCtx.font = '900 26px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText(String(Math.floor(scoreVal)), 264, 208);
+    G.dashCtx.fillText(grouped(scoreVal), 264, 208);
 
     G.dashTex.needsUpdate = true;
   }

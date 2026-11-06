@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { meters, rubles, shortfall } from './engine/money.js';
+import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
 import { placeIfMoved } from './engine/stream.js';
@@ -409,21 +409,20 @@ export function initEconomy() {
     return best ? { exit: best, dist: bestDist } : null;
   }
 
+  function hideExitHint() {
+    if (!exitHintKey) return;
+    $('exit-hint').className = '';
+    exitHintKey = '';
+  }
+
   function refreshExitHint() {
-    const el = $('exit-hint');
     if (!G.started || G.ended || G.uiModal || G.paused) {
-      if (exitHintKey) {
-        el.className = '';
-        exitHintKey = '';
-      }
+      hideExitHint();
       return;
     }
     const ahead = nearestExitAhead();
     if (!ahead) {
-      if (exitHintKey) {
-        el.className = '';
-        exitHintKey = '';
-      }
+      hideExitHint();
       return;
     }
     const exit = ahead.exit;
@@ -436,14 +435,13 @@ export function initEconomy() {
     $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
-    el.className = 'show' + (exit.type === 'restaurant' ? '' : ' service');
+    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service');
   }
 
   function openExitFromBox(exit) {
     exit.used = true;
     exit.zoneFlash = 1;
-    $('exit-hint').className = '';
-    exitHintKey = '';
+    hideExitHint();
     G.playExitChime(exit.type === 'restaurant');
     openExitMenu(exit);
   }
@@ -533,7 +531,6 @@ export function initEconomy() {
       e.side = (i % 2 === 0) ? 1 : -1;
       e.s = s;
       e.used = false;
-      e.zoneEntered = false;
       e.zoneFlash = 0;
       e.pulsePhase = Math.random() * Math.PI * 2;
       updateExitSign(e);
@@ -542,6 +539,11 @@ export function initEconomy() {
   }
 
   let exitPrevS = null;
+
+  function syncExitTrack() {
+    exitPrevS = G.playerS;
+  }
+  G.debugStampExitTrack = syncExitTrack;
 
   function updateExitWorld(dt = 0) {
     exitPulseT += dt;
@@ -558,7 +560,6 @@ export function initEconomy() {
         e.side = Math.random() < 0.5 ? 1 : -1;
         e.type = chooseExitType();
         e.used = false;
-        e.zoneEntered = false;
         e.zoneFlash = 0;
         e.pulsePhase = Math.random() * Math.PI * 2;
         updateExitSign(e);
@@ -615,13 +616,12 @@ export function initEconomy() {
     if (!best) return null;
     if (G.uiModal) closeOverlayToGame();
     best.used = false;
-    best.zoneEntered = false;
     G.speed = 0;
     G.playerS = exitBoxCenter(best.s);
     G.laneOffset = inside ? best.side * G.START_LANE : 0;
     G.lateralVelocity = 0;
     G.slipDriftVel = 0;
-    exitPrevS = G.playerS;
+    syncExitTrack();
     return { type: best.type, side: best.side, s: best.s, inside: !!inside };
   };
 
@@ -739,14 +739,15 @@ export function initEconomy() {
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');
 
-    document.querySelectorAll('[data-rest]').forEach(btn => {
+    $('overlay').querySelectorAll('[data-rest]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         if (activeOrder) return;
         const r = RESTAURANTS[Number(btn.dataset.rest)];
+        if (!r) return;
         createOrder(r.name);
         closeOverlayToGame();
-        showEcoToast(`🍔 Заказ принят: ${r.name} · ${Math.round(activeOrder.remainingM)} м · ${formatClock(activeOrder.timeLimit)}`);
+        showEcoToast(`🍔 Заказ принят: ${r.name} · ${meters(activeOrder.remainingM)} · ${formatClock(activeOrder.timeLimit)}`);
       });
     });
     bindExitClose();
@@ -775,12 +776,12 @@ export function initEconomy() {
 
     activeOrder.timeLeft -= dt;
     if (activeOrder.timeLeft <= 0 && !activeOrder.penaltyApplied) {
-      const penalty = Math.min(Math.floor(G.bankPoints), Math.max(100, Math.round(activeOrder.baseReward * 0.25)));
+      const penalty = latePenalty(G.bankPoints, activeOrder.baseReward);
       G.bankPoints -= penalty;
       activeOrder.penaltyApplied = true;
       G.saveGarage();
       saveEco();
-      showEcoToast(`⏱ ПРОСРОЧКА! Штраф −${penalty} ₽ · заказ всё равно нужно доставить`, true);
+      showEcoToast(`⏱ ПРОСРОЧКА! Штраф −${rubles(penalty)} · заказ всё равно нужно доставить`, true);
     }
 
     activeOrder.remainingM = Math.max(0, activeOrder.targetS - G.playerS);
@@ -801,7 +802,7 @@ export function initEconomy() {
     deliveryMarker.visible = false;
     G.saveGarage();
     saveEco();
-    showEcoToast(`✅ Заказ «${name}» доставлен · +${reward} ₽ на баланс`);
+    showEcoToast(`✅ Заказ «${name}» доставлен · +${rubles(reward)} на баланс`);
   }
 
   /* ---------- АЗС ---------- */
@@ -896,6 +897,7 @@ export function initEconomy() {
       G.playerS += 120;
       G.laneOffset = G.START_LANE;
       G.lateralVelocity = 0;
+      syncExitTrack();
       G.speed = 0;
       G.accidentCooldown = 2.0;
       saveEco();
@@ -941,10 +943,11 @@ export function initEconomy() {
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');
 
-    document.querySelectorAll('[data-service]').forEach(btn => {
+    $('overlay').querySelectorAll('[data-service]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const part = btn.dataset.service;
+        if (part !== 'pads' && part !== 'oil' && part !== 'plugs') return;
         const price = getServicePrice(part);
         if (wearM[part] < 300 || G.bankPoints < price) return;
         G.bankPoints -= price;
@@ -1079,7 +1082,7 @@ export function initEconomy() {
       G.speed = 0;
       saveEco();
       closeOverlayToGame();
-      showEcoToast(`🚑 Лекарства куплены (−${MEDKIT_PRICE} ₽). Заказ сохранён`, false);
+      showEcoToast(`🚑 Лекарства куплены (−${rubles(MEDKIT_PRICE)}). Заказ сохранён`, false);
     });
 
     $('acc-end').addEventListener('click', () => {
@@ -1106,7 +1109,7 @@ export function initEconomy() {
     overlay.innerHTML = panel(`
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
         ${stats([
-          { label: 'Пробег', value: G.formatRunDistance(G.distance) },
+          { label: 'Пробег', value: runDistance(G.distance) },
           { label: 'Заработано за заезд', value: rubles(G.score) },
           { label: 'Баланс', value: rubles(G.bankPoints) },
           { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
@@ -1160,7 +1163,7 @@ export function initEconomy() {
 
   function exitToMenuFromPause() {
     G.paused = false;
-    G.bankPoints += Math.max(0, Math.floor(G.score) - G.bankedOrderRun);
+    G.bankPoints += creditRun(G.score, G.bankedOrderRun);
     G.bankedOrderRun = 0;
     G.score = 0;
     G.started = false;
@@ -1199,7 +1202,6 @@ export function initEconomy() {
           side: 1,
           type: 'restaurant',
           used: false,
-          zoneEntered: false,
           zoneFlash: 0,
           pulsePhase: Math.random() * Math.PI * 2
         });
@@ -1213,6 +1215,7 @@ export function initEconomy() {
       activeOrder.targetS = G.playerS + Math.max(60, activeOrder.remainingM || 60);
     }
     deliveryMarker.visible = !!activeOrder;
+    syncExitTrack();
     updateEcoHud(performance.now());
     saveEco();
   }

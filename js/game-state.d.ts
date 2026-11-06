@@ -122,7 +122,6 @@ export interface GameState {
   LANE_OFFSETS: number[];
   START_LANE: number;
   frameStats: EffectiveStats | null;
-  formatRunDistance: (km: number) => string;
   roadX: (s: number) => number;
   roadY: (s: number) => number;
   roadDX: (s: number) => number;

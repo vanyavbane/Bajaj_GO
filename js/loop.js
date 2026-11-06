@@ -1,4 +1,5 @@
 import { jumpLaunchVy, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
+import { meters, rubles } from './engine/money.js';
 import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
 import { G } from './state.js';
 
@@ -31,12 +32,13 @@ export function initLoop() {
       G.totalJumpBonusRun += totalBonus;
       G.totalCarsJumpedRun += count;
 
-      const meters = jumpDist.toFixed(0);
+      const flown = meters(jumpDist);
+      const pay = rubles(totalBonus);
       const text = hardPitch
-        ? `Жёсткая посадка · ${meters} м · +${totalBonus} ₽`
+        ? `Жёсткая посадка · ${flown} · +${pay}`
         : (count > 0
-          ? `Прыжок ${meters} м · перелёт ×${count} · мягкая посадка · +${totalBonus} ₽`
-          : `Прыжок ${meters} м · +${totalBonus} ₽`);
+          ? `Прыжок ${flown} · перелёт ×${count} · мягкая посадка · +${pay}`
+          : `Прыжок ${flown} · +${pay}`);
       G.pushFeed(text, hardPitch ? 'hard' : 'land', count);
     }
 
@@ -168,11 +170,11 @@ export function initLoop() {
 
       if (air.landed) {
         finishJumpLanding();
-        } else {
+      } else {
         const jumpDistNow = Math.max(0, G.playerS - G.jumpState.startS);
         const count = G.jumpState.carsJumped;
         G.jumpState.liveBonus = jumpBonus(count, jumpDistNow, false);
-        const jumpLine = `Машин: ${count} (×${overflyMultiplier(count)}) · Дист: ${jumpDistNow.toFixed(0)} м · +${Math.round(G.jumpState.liveBonus)} ₽`;
+        const jumpLine = `Машин: ${count} (×${overflyMultiplier(count)}) · Дист: ${meters(jumpDistNow)} · +${rubles(G.jumpState.liveBonus)}`;
         if (jumpLine !== jumpLineShown) {
           jumpLineShown = jumpLine;
           $('jump-live-text').textContent = jumpLine;

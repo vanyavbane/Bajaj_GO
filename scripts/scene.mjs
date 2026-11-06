@@ -152,6 +152,9 @@ try {
     frame: file,
     pageErrors: cdp.errors
   }, null, 2));
+  const replay = await cdp.evaluate(`window.__bajaj.replayAfterMenu()`);
+  await new Promise((r) => setTimeout(r, 400));
+  const afterReplay = await cdp.evaluate(`window.__bajaj.exitHint()`);
   const feed = await cdp.evaluate(`window.__bajaj.feed('КОМБО ×2 · +50 ₽', 'combo', 2)`);
   const outside = await cdp.evaluate(`window.__bajaj.placeAtExit(false)`);
   await new Promise((r) => setTimeout(r, 300));
@@ -166,7 +169,7 @@ try {
   const pageFile = join(tmpdir(), 'bajaj-exit-page.jpg');
   await writeFile(pageFile, Buffer.from(pageShot.data, 'base64'));
   console.log(JSON.stringify({
-    feed, outside, missed, inside, hit, exitFile, pageFile
+    replay, afterReplay, feed, outside, missed, inside, hit, exitFile, pageFile
   }, null, 2));
   cdp.ws.close();
 } finally {

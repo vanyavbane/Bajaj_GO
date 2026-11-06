@@ -140,6 +140,15 @@ export function initDebug() {
     };
   }
 
+  function replayAfterMenu() {
+    setKeys({ gas: false, brake: false, left: false, right: false });
+    G.playerS = 2500;
+    G.laneOffset = G.START_LANE;
+    if (G.debugStampExitTrack) G.debugStampExitTrack();
+    G.startGame();
+    return { playerS: G.playerS, lane: G.laneOffset, modal: !!G.uiModal };
+  }
+
   function placeAtExit(inside) {
     setKeys({ gas: false, brake: false, left: false, right: false });
     return G.debugPlaceAtExit ? G.debugPlaceAtExit(!!inside) : null;
@@ -157,5 +166,5 @@ export function initDebug() {
     };
   }
 
-  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint };
+  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint, replayAfterMenu };
 }

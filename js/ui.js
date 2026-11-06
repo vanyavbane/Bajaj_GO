@@ -1,5 +1,5 @@
 import { balance, button, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
-import { grouped, rubles } from './engine/money.js';
+import { creditRun, grouped, rubles, runDistance } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
@@ -264,8 +264,8 @@ export function initUi() {
     G.currentScreen = 'crash';
     if (navigator.vibrate) navigator.vibrate(40);
 
-    const earned = Math.floor(G.score);
-    G.bankPoints += Math.max(0, earned - G.bankedOrderRun);
+    const earned = creditRun(G.score, G.bankedOrderRun);
+    G.bankPoints += earned;
     G.bankedOrderRun = 0;
     G.saveGarage();
 
@@ -281,9 +281,9 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${heading('АВАРИЯ', 'ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ')}
         ${stats([
-          { label: 'Пройденная дистанция', value: G.formatRunDistance(G.distance) },
-          { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${Math.floor(G.totalJumpBonusRun)} ₽)`, tone: 'signal' },
-          { label: 'Заработано за заезд', value: `+${earned} ₽`, tone: 'gold' },
+          { label: 'Пройденная дистанция', value: runDistance(G.distance) },
+          { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${rubles(G.totalJumpBonusRun)})`, tone: 'signal' },
+          { label: 'Заработано за заезд', value: `+${rubles(earned)}`, tone: 'gold' },
           { label: 'Баланс в банке', value: rubles(G.bankPoints) }
         ])}
         ${button({ id: 'crash-restart', variant: 'primary', icon: '▶', label: 'ИГРАТЬ СНОВА' })}
