@@ -427,7 +427,7 @@ export function initEconomy() {
     }
     const exit = ahead.exit;
     const sideWord = exit.side > 0 ? 'справа' : 'слева';
-    const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${Math.max(0, Math.round(ahead.dist))} м`;
+    const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${meters(Math.max(0, ahead.dist))}`;
     const how = 'Заезжай в коробку на полосе';
     const key = `${exit.type}|${title}`;
     if (key === exitHintKey) return;
@@ -733,7 +733,7 @@ export function initEconomy() {
 
     openModal(panel(`
         ${heading('🍔 РЕСТОРАНЫ', 'СЪЕЗД · ДОСТАВКА ЕДЫ')}
-        ${activeOrder ? callout(`Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${Math.max(0, Math.ceil(activeOrder.remainingM))} м до заказчика.`) : ''}
+        ${activeOrder ? callout(`Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${meters(Math.max(0, activeOrder.remainingM))} до заказчика.`) : ''}
         ${message ? callout(message) : ''}
         ${rows(list)}
         ${exitMenuBackButton()}
@@ -1110,7 +1110,7 @@ export function initEconomy() {
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
         ${stats([
           { label: 'Пробег', value: runDistance(G.distance) },
-          { label: 'Заработано за заезд', value: rubles(G.score) },
+          { label: 'Заработано за заезд', value: rubles(creditRun(G.score, G.bankedOrderRun)) },
           { label: 'Баланс', value: rubles(G.bankPoints) },
           { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
           { label: 'Заказ', value: orderValue }
@@ -1221,11 +1221,11 @@ export function initEconomy() {
   }
   G.prepareRunEconomy = prepareRunEconomy;
 
-  function tickEconomy(dt, meters) {
-    if (meters > 0) {
-      if (G.fuelM > 0) G.fuelM = Math.max(0, G.fuelM - meters);
+  function tickEconomy(dt, traveled) {
+    if (traveled > 0) {
+      if (G.fuelM > 0) G.fuelM = Math.max(0, G.fuelM - traveled);
       for (const part of Object.keys(WEAR_LIMITS)) {
-        wearM[part] = Math.min(WEAR_LIMITS[part] * WEAR_CAP, wearM[part] + meters);
+        wearM[part] = Math.min(WEAR_LIMITS[part] * WEAR_CAP, wearM[part] + traveled);
       }
     }
     ecoSaveTimer += dt;
@@ -1273,7 +1273,7 @@ export function initEconomy() {
       $('order-time').textContent = activeOrder.timeLeft >= 0
         ? formatClock(activeOrder.timeLeft)
         : '−' + formatClock(-activeOrder.timeLeft);
-      $('order-dist').textContent = Math.max(0, Math.ceil(activeOrder.remainingM)) + ' м';
+      $('order-dist').textContent = meters(Math.max(0, activeOrder.remainingM));
       const est = orderPayout(activeOrder);
       $('order-reward').textContent = '~' + rubles(est);
     } else {

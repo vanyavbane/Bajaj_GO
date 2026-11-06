@@ -8,7 +8,7 @@ export function initHighbeam() {
    * 13. ДАЛЬНИЙ СВЕТ (КЛАВИША F)
    * ========================================================================= */
   function triggerHighBeam() {
-    if (!G.started || G.ended || G.highBeamCooldown > 0) return;
+    if (!G.started || G.ended || G.paused || G.uiModal || G.highBeamCooldown > 0) return;
     G.highBeamTimer = 0.42;
     G.highBeamCooldown = 0.85;
     $('badge-beam').hidden = false;

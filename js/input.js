@@ -29,12 +29,14 @@ export function initInput() {
         if (e.key === 'Escape') { e.preventDefault(); G.renderMainMenu(); return; }
       }
 
-      if (k === 'f' || e.code === 'KeyF') {
+      const driving = G.started && !G.ended && !G.paused && !G.uiModal;
+      if (driving && (k === 'f' || e.code === 'KeyF')) {
         G.triggerHighBeam();
         e.preventDefault();
         return;
       }
-      if (k === 't' || k === 'c' || k === 'v' || k === 'е' || k === 'с' || k === 'м' || e.code === 'KeyT' || e.code === 'KeyC' || e.code === 'KeyV') {
+      const cameraOpen = !G.paused && !G.uiModal && !G.ended && G.currentScreen !== 'shop';
+      if (cameraOpen && (k === 't' || k === 'c' || k === 'v' || k === 'е' || k === 'с' || k === 'м' || e.code === 'KeyT' || e.code === 'KeyC' || e.code === 'KeyV')) {
         G.toggleCameraMode();
         e.preventDefault();
         return;
@@ -48,6 +50,11 @@ export function initInput() {
       arrowdown: 'brake', s: 'brake', ы: 'brake'
     };
     if (map[k]) {
+      const driving = G.started && !G.ended && !G.paused && !G.uiModal;
+      if (isDown && !driving) {
+        e.preventDefault();
+        return;
+      }
       G.keys[map[k]] = isDown;
       e.preventDefault();
     }

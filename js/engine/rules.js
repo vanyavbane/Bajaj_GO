@@ -94,5 +94,13 @@ export function resetRun(target, startLane) {
   target.steerVisual = 0;
   target.slipDriftVel = 0;
   target.accelPitchOffset = 0;
+  target.highBeamTimer = 0;
+  target.highBeamCooldown = 0;
   target.jumpState = blankJumpState();
+  if (target.keys) {
+    target.keys.left = false;
+    target.keys.right = false;
+    target.keys.gas = false;
+    target.keys.brake = false;
+  }
 }

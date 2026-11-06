@@ -146,7 +146,8 @@ export function initCatalog() {
   }
   G.getUpgradePrice = getUpgradePrice;
 
-  G.bankPoints = Number(localStorage.getItem('bajajGO_bank') || 0);
+  const storedBank = Number(localStorage.getItem('bajajGO_bank'));
+  G.bankPoints = Number.isFinite(storedBank) && storedBank > 0 ? Math.floor(storedBank) : 0;
   G.ownedBikes = [];
   try {
     G.ownedBikes = JSON.parse(localStorage.getItem('bajajGO_owned') || '["ns125"]');
@@ -268,6 +269,7 @@ export function initCatalog() {
   G.selectedBike = selectedBike;
 
   function saveGarage() {
+    if (!Number.isFinite(G.bankPoints) || G.bankPoints < 0) G.bankPoints = 0;
     localStorage.setItem('bajajGO_bank', String(Math.floor(G.bankPoints)));
     localStorage.setItem('bajajGO_owned', JSON.stringify(G.ownedBikes));
     localStorage.setItem('bajajGO_selected', G.selectedBikeId);

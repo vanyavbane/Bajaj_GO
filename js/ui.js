@@ -62,6 +62,9 @@ export function initUi() {
     $('tp-hud').hidden = true;
     $('controls').hidden = true;
     $('jump-live').hidden = true;
+    $('badge-beam').hidden = true;
+    $('badge-oncoming').hidden = true;
+    if (G.clearFeed) G.clearFeed();
 
     const overlay = $('overlay');
     overlay.style.display = 'block';
@@ -216,6 +219,8 @@ export function initUi() {
     G.ended = false;
     resetRun(G, G.START_LANE);
     $('jump-live').hidden = true;
+    $('badge-beam').hidden = true;
+    $('badge-oncoming').hidden = true;
     if (G.clearFeed) G.clearFeed();
 
     for (let i = 0; i < G.NUM_ROADSIDE_SLOTS; i++) {
@@ -273,6 +278,9 @@ export function initUi() {
     $('tp-hud').hidden = true;
     $('controls').hidden = true;
     $('jump-live').hidden = true;
+    $('badge-beam').hidden = true;
+    $('badge-oncoming').hidden = true;
+    if (G.clearFeed) G.clearFeed();
 
     const overlay = $('overlay');
     overlay.style.display = 'flex';
