@@ -3,7 +3,7 @@
 Всё приложение — один файл `bajaj go.html`. Внутри он логически разбит на 17 секций,
 помеченных комментариями вида `/* ===== N. НАЗВАНИЕ ===== */`.
 
-> Номера строк — ориентир на момент коммита `862deb9`. После правок они смещаются,
+> Номера строк — ориентир на момент коммита `46e8e28`. После правок они смещаются,
 > ищите по названию секции.
 
 ## Карта секций
@@ -25,7 +25,7 @@
 | 13 | Дальний свет | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | Состояние игры и UI | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, `renderTuning` |
 | 15 | Ввод | `handleKey`, экранные кнопки |
-| 16 | Съезды, экономика, критические ситуации и пауза | `exitPool`, меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
+| 16 | Съезды, экономика, критические ситуации и пауза | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
 | 17 | Главный цикл | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
 
 ## Ключевые переменные
@@ -56,7 +56,7 @@
 
 **Мир:** `trafficPool` (18 машин), `roadsideSlots`, `megaStructures`,
 `rampsPool`, `pedestrians`, `lampLights` (8 активных фонарей), `exitPool`
-(5 съездов), `deliveryMarker`.
+(5 съездов с маркерными зонами), `deliveryMarker`.
 
 ## Система координат
 
@@ -84,7 +84,7 @@ animate(now)
   ├─ дорога/ленты → updateRoadSurface()
   ├─ трафик → движение, перестроения, коллизии → handleAccident()
   ├─ рампы/прыжки → перелёты, бонусы
-  ├─ updateExitWorld() / updateDeliveryMarker() → съезды и точка заказа
+  ├─ updateExitWorld(dt) / updateDeliveryMarker() → съезды, маркерные зоны, точка заказа
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)
 ```
@@ -108,6 +108,37 @@ animate(now)
 - Пауза (Esc / P / кнопка ⏸): замораживает `animate`, включая таймер заказа.
   Меню: продолжить, настройки (свет/камера), в главное меню.
 
+### Маркерные зоны съездов
+
+Перед каждым съездом на полосе, ведущей к нему, лежит светящаяся прямоугольная
+зона в духе маркеров входа из GTA Vice City. Она не перегораживает дорогу —
+её можно проехать мимо.
+
+- Цвет: зелёный `EXIT_MARKER_COLORS.food` (`0x3ce07d`) — рестораны,
+  жёлтый `EXIT_MARKER_COLORS.service` (`0xffd24a`) — АЗС, СТО, тюнинг.
+- Размер: `EXIT_ZONE_WIDTH` = 4.8 м (чуть шире полосы), `EXIT_ZONE_LENGTH` = 5.4 м
+  (ТЗ: 3–6 м). Центр зоны — на `EXIT_ZONE_OFFSET` = 12.5 м раньше центра съезда,
+  в полосе `e.side * 7.1`.
+- Материал: `MeshBasicMaterial` с `AdditiveBlending`, `toneMapped: false`,
+  `depthWrite: false`. Яркость имитирует emissive + мягкий Bloom без
+  постобработки и без дополнительных источников света.
+- Текстуры (`exitMarkerTextures`) процедурные: белая рамка/шевроны зоны,
+  круглые иконки типов и подписи. Цвет зоны задаётся `material.color`,
+  поэтому одна текстура работает для обоих цветов.
+- Пульсация и свечение: `exitPulseT` + `getExitGlowLevel()` — днём ~0.45,
+  ночью 1.0; у каждой зоны свой `pulsePhase`. Подпись («РЕСТОРАН», «АЗС»,
+  «СТО», «ТЮНИНГ») появляется на дистанции ближе 105 м.
+- Иконка типа — `Sprite` (`iconSprite`) над зоной, подпись — второй `Sprite`
+  (`labelSprite`). Оба `fog: false`, чтобы не тонуть в тумане.
+- Отклик при въезде: если игрок в полосе зоны (`|laneOffset - side*7.1| < 2.6`)
+  и попал в её длину, зона вспыхивает (`zoneFlash`), в HUD показывается
+  `#exit-hint` (иконка, тип, стрелка направления) и играет `playExitChime()`.
+- Пулинг: зона живёт внутри объекта `exitPool`; при переносе съезда вперёд
+  `resetExits`/`updateExitWorld` сбрасывают `used`, `zoneEntered`, `zoneFlash`
+  и `pulsePhase`, а `updateExitSign` меняет цвет, иконку и подпись.
+- Позиционирование — через `placeOnRoad`, поэтому зона следует поворотам,
+  подъёмам и спускам; работает в обеих камерах и не перекрывает HUD.
+
 ## Где что менять
 
 | Задача | Где |
@@ -121,6 +152,7 @@ animate(now)
 | Прыжки и бонусы за перелёт | `jumpState`, `finishJumpLanding`, секция 17 |
 | Экономика (цены, награды) | `bikeCatalog`, `tuningCatalog`, `crashGame`, секция 16 |
 | Съезды и точки интереса | `EXIT_TYPES`, `EXIT_META`, `resetExits`, `openExitMenu` (секция 16) |
+| Маркерные зоны съездов | `EXIT_MARKER_COLORS`, `createExitMarker`, `updateExitSign`, `getExitGlowLevel`, `showExitHint` (секция 16) |
 | Заказы и доставка | `RESTAURANTS`, `createOrder`, `tickOrder`, `deliverOrder` (секция 16) |
 | Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` (секция 16) |
 | Критические ситуации | `openFuelEmpty`, `handleAccident` (секция 16) |

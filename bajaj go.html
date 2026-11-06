@@ -83,6 +83,24 @@ canvas{display:block;width:100%;height:100%}
 #eco-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #eco-toast.bad{border-color:rgba(255,120,110,.55);color:#ffb0a8}
 
+/* ПОДСКАЗКА ПРИ ВЪЕЗДЕ В МАРКЕРНУЮ ЗОНУ СЪЕЗДА */
+#exit-hint{
+  position:absolute;top:72px;left:50%;
+  transform:translateX(-50%) translateY(-8px);
+  display:flex;align-items:center;gap:8px;
+  background:rgba(9,17,29,.9);
+  border:1px solid rgba(90,235,150,.6);
+  border-radius:11px;padding:7px 14px;
+  font-size:13px;font-weight:900;letter-spacing:1px;
+  color:#c6f7d8;white-space:nowrap;
+  opacity:0;pointer-events:none;z-index:3;
+  transition:opacity .2s,transform .2s;
+  text-shadow:0 2px 6px rgba(0,0,0,.85);
+}
+#exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#exit-hint.service{border-color:rgba(255,210,74,.65);color:#ffe6a3}
+#exit-hint .arr{font-size:15px;letter-spacing:0}
+
 /* МЕНЮ СЪЕЗДОВ, КРИТИЧЕСКИЕ СИТУАЦИИ И ПАУЗА */
 .poi-card{width:min(560px,96vw)}
 .poi-title{font-size:24px;font-weight:900;letter-spacing:1px;margin:0}
@@ -113,6 +131,7 @@ canvas{display:block;width:100%;height:100%}
   #order-hud{max-width:48vw;min-width:0;padding:5px 9px}
   #order-hud .order-title{font-size:9px}
   #order-hud .order-row{font-size:10px;gap:8px}
+  #exit-hint{top:64px;font-size:11px;padding:6px 10px;max-width:90vw;overflow:hidden}
 }
 
 /* HUD ТРЕТЬЕГО ЛИЦА (ПРАВЫЙ НИЖНИЙ УГОЛ) */
@@ -680,6 +699,13 @@ canvas{display:block;width:100%;height:100%}
       <span id="order-dist">— м</span>
       <span id="order-reward">~0 ₽</span>
     </div>
+  </div>
+
+  <!-- ПОДСКАЗКА ПРИ ВЪЕЗДЕ В ЗОНУ СЪЕЗДА -->
+  <div id="exit-hint">
+    <span id="exit-hint-ico">🍔</span>
+    <span id="exit-hint-text">РЕСТОРАН · СЪЕЗД</span>
+    <span class="arr" id="exit-hint-arr">→</span>
   </div>
 
   <button id="btn-pause" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
@@ -1925,6 +1951,33 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       }
     } catch {
       // Игнорируем, если аудио заблокировано браузером
+    }
+  }
+
+  // Короткий двухнотный отклик при въезде в маркерную зону съезда
+  function playExitChime(isFood) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const base = isFood ? 660 : 520;
+      const steps = [1, 1.5];
+      for (let i = 0; i < steps.length; i++) {
+        const off = i * 0.075;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(base * steps[i], now + off);
+        gain.gain.setValueAtTime(0.0001, now + off);
+        gain.gain.exponentialRampToValueAtTime(0.07, now + off + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + off + 0.18);
+        osc.start(now + off);
+        osc.stop(now + off + 0.2);
+      }
+    } catch {
+      // Аудио может быть заблокировано браузером — молча пропускаем
     }
   }
 
@@ -3847,6 +3900,203 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     };
   }
 
+  /* ---------- Маркерные зоны съездов (GTA-стиль) ---------- */
+  // Зелёный — еда/заказы, жёлтый — сервис (АЗС, СТО, тюнинг)
+  const EXIT_MARKER_COLORS = { food: 0x3ce07d, service: 0xffd24a };
+  const EXIT_HINT_ICONS = { restaurant: '🍔', fuel: '⛽', sto: '🔧', tuning: '⚙️' };
+  const EXIT_HINT_LABELS = { restaurant: 'РЕСТОРАН', fuel: 'АЗС', sto: 'СТО', tuning: 'ТЮНИНГ' };
+  // Зона стоит в полосе съезда перед указателем; длина 5.4 м (ТЗ: 3–6 м)
+  const EXIT_ZONE_WIDTH = 4.8;
+  const EXIT_ZONE_LENGTH = 5.4;
+  const EXIT_ZONE_OFFSET = 12.5; // центр зоны на 12.5 м раньше центра съезда
+  let exitPulseT = 0;
+  let exitHintTimer = null;
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // Белая текстура зоны: цвет задаётся material.color (зелёный/жёлтый)
+  function buildExitZoneTexture() {
+    return createCanvasTexture(256, 288, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+
+      const glow = ctx.createRadialGradient(w / 2, h / 2, 16, w / 2, h / 2, w * 0.72);
+      glow.addColorStop(0, 'rgba(255,255,255,0.10)');
+      glow.addColorStop(0.62, 'rgba(255,255,255,0.16)');
+      glow.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      roundRectPath(ctx, 18, 18, w - 36, h - 36, 14);
+      ctx.fill();
+
+      ctx.shadowColor = 'rgba(255,255,255,0.95)';
+      ctx.shadowBlur = 24;
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = 9;
+      roundRectPath(ctx, 18, 18, w - 36, h - 36, 14);
+      ctx.stroke();
+
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+      ctx.lineWidth = 3;
+      roundRectPath(ctx, 34, 34, w - 68, h - 68, 9);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Шевроны указывают вперёд по ходу движения (к съезду)
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 11;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (const cy of [h * 0.36, h * 0.5, h * 0.64]) {
+        ctx.beginPath();
+        ctx.moveTo(w * 0.34, cy + 18);
+        ctx.lineTo(w * 0.5, cy - 18);
+        ctx.lineTo(w * 0.66, cy + 18);
+        ctx.stroke();
+      }
+    });
+  }
+
+  function buildExitIconTexture(type) {
+    const isFood = type === 'restaurant';
+    const color = isFood ? '#3ce07d' : '#ffd24a';
+    const glyph = EXIT_HINT_ICONS[type];
+    return createCanvasTexture(256, 256, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 34;
+      ctx.fillStyle = 'rgba(8,14,23,0.9)';
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, 88, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, 88, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 104px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji",system-ui,Arial';
+      ctx.fillText(glyph, w / 2, h / 2 + 6);
+    });
+  }
+
+  function buildExitLabelTexture(type) {
+    const isFood = type === 'restaurant';
+    const color = isFood ? '#3ce07d' : '#ffd24a';
+    return createCanvasTexture(512, 128, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(8,14,23,0.82)';
+      roundRectPath(ctx, 6, 12, w - 12, h - 24, 20);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+      roundRectPath(ctx, 6, 12, w - 12, h - 24, 20);
+      ctx.stroke();
+      ctx.fillStyle = '#eef7f2';
+      ctx.font = '900 54px system-ui,"Segoe UI",Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(EXIT_HINT_LABELS[type], w / 2, h / 2 + 2);
+    });
+  }
+
+  const exitMarkerTextures = { zone: buildExitZoneTexture(), icons: {}, labels: {} };
+  for (const t of EXIT_TYPES) {
+    exitMarkerTextures.icons[t] = buildExitIconTexture(t);
+    exitMarkerTextures.labels[t] = buildExitLabelTexture(t);
+  }
+
+  function createExitMarker() {
+    const marker = new THREE.Group();
+
+    // Полупрозрачная светящаяся зона на асфальте: emissive-вид за счёт
+    // аддитивного смешивания, без реальных источников света и постобработки.
+    const zoneMat = new THREE.MeshBasicMaterial({
+      map: exitMarkerTextures.zone,
+      color: EXIT_MARKER_COLORS.food,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
+    const zone = new THREE.Mesh(new THREE.PlaneGeometry(EXIT_ZONE_WIDTH, EXIT_ZONE_LENGTH), zoneMat);
+    zone.rotation.x = -Math.PI / 2;
+    marker.add(zone);
+
+    const iconMat = new THREE.SpriteMaterial({
+      map: exitMarkerTextures.icons.restaurant,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      fog: false
+    });
+    const icon = new THREE.Sprite(iconMat);
+    icon.position.set(0, 2.75, 0);
+    icon.scale.set(2.1, 2.1, 1);
+    marker.add(icon);
+
+    const labelMat = new THREE.SpriteMaterial({
+      map: exitMarkerTextures.labels.restaurant,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      fog: false
+    });
+    const label = new THREE.Sprite(labelMat);
+    label.position.set(0, 1.42, 0);
+    label.scale.set(3.8, 0.95, 1);
+    marker.add(label);
+
+    marker.visible = false;
+    scene.add(marker);
+    return { marker, zoneMat, iconSprite: icon, labelSprite: label };
+  }
+
+  // Уровень свечения зон: 0.45 днём, 1.0 ночью (закат — плавный переход)
+  function getExitGlowLevel() {
+    const t = todCycleTime;
+    if (t < 0.25) return 0.45;
+    if (t < 0.4) return lerp(0.45, 0.8, smoothstep(0.25, 0.4, t));
+    if (t < 0.55) return lerp(0.8, 1, smoothstep(0.4, 0.55, t));
+    if (t < 0.82) return 1;
+    return lerp(1, 0.45, smoothstep(0.82, 0.98, t));
+  }
+
+  function showExitHint(exit) {
+    const el = $('exit-hint');
+    if (!el) return;
+    const isFood = exit.type === 'restaurant';
+    $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
+    $('exit-hint-text').textContent = EXIT_HINT_LABELS[exit.type] + ' · СЪЕЗД';
+    $('exit-hint-arr').textContent = exit.side > 0 ? '→' : '←';
+    el.className = 'show' + (isFood ? '' : ' service');
+    if (exitHintTimer) clearTimeout(exitHintTimer);
+    exitHintTimer = setTimeout(() => {
+      el.className = isFood ? '' : 'service';
+    }, 1900);
+  }
+
   const exitPool = [];
   const deliveryMarker = new THREE.Group();
 
@@ -3897,13 +4147,22 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     lamp.position.set(0, 5.25, 5.5);
     group.add(lamp);
 
+    const markerParts = createExitMarker();
     scene.add(group);
-    return { group, signMat };
+    return { group, signMat, ...markerParts };
   }
 
   function updateExitSign(exit) {
     exit.signMat.map = exitSignTextures[exit.type][exit.side > 0 ? 'right' : 'left'];
     exit.signMat.needsUpdate = true;
+
+    // Маркерная зона: цвет по типу точки интереса + своя иконка и подпись
+    const isFood = exit.type === 'restaurant';
+    exit.zoneMat.color.setHex(isFood ? EXIT_MARKER_COLORS.food : EXIT_MARKER_COLORS.service);
+    exit.iconSprite.material.map = exitMarkerTextures.icons[exit.type];
+    exit.iconSprite.material.needsUpdate = true;
+    exit.labelSprite.material.map = exitMarkerTextures.labels[exit.type];
+    exit.labelSprite.material.needsUpdate = true;
   }
 
   function chooseExitType() {
@@ -3923,12 +4182,18 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       e.side = (i % 2 === 0) ? 1 : -1;
       e.s = s;
       e.used = false;
+      e.zoneEntered = false;
+      e.zoneFlash = 0;
+      e.pulsePhase = Math.random() * Math.PI * 2;
       updateExitSign(e);
       s += EXIT_MIN_GAP + Math.random() * (EXIT_MAX_GAP - EXIT_MIN_GAP);
     }
   }
 
-  function updateExitWorld() {
+  function updateExitWorld(dt = 0) {
+    exitPulseT += dt;
+    const glow = getExitGlowLevel();
+
     let maxS = playerS;
     for (const e of exitPool) if (e.s > maxS) maxS = e.s;
 
@@ -3939,9 +4204,48 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
         e.side = Math.random() < 0.5 ? 1 : -1;
         e.type = chooseExitType();
         e.used = false;
+        e.zoneEntered = false;
+        e.zoneFlash = 0;
+        e.pulsePhase = Math.random() * Math.PI * 2;
         updateExitSign(e);
       }
       placeOnRoad(e.group, e.s, e.side * 12.6, 0);
+
+      // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
+      const zoneS = e.s - EXIT_ZONE_OFFSET;
+      placeOnRoad(e.marker, zoneS, e.side * 7.1, 0.07);
+      const dist = zoneS - playerS;
+      e.marker.visible = dist > -35 && dist < 270;
+
+      if (e.marker.visible) {
+        const pulse = 0.5 + 0.5 * Math.sin(exitPulseT * 3.2 + e.pulsePhase);
+        e.zoneMat.opacity = Math.min(0.95,
+          (0.24 + 0.22 * glow) * (0.85 + 0.3 * pulse) + e.zoneFlash * 0.45);
+        const iconScale = 2.1 * (1 + pulse * 0.05 + e.zoneFlash * 0.28);
+        e.iconSprite.scale.set(iconScale, iconScale, 1);
+        e.iconSprite.material.opacity = Math.min(1, 0.82 + 0.18 * glow);
+
+        e.labelSprite.visible = dist > -8 && dist < 105;
+        if (e.labelSprite.visible) {
+          e.labelSprite.material.opacity = clamp((105 - dist) / 38, 0, 1) * (0.78 + 0.22 * glow);
+        }
+      } else {
+        e.labelSprite.visible = false;
+      }
+      if (e.zoneFlash > 0) e.zoneFlash = Math.max(0, e.zoneFlash - dt * 1.7);
+
+      // Отклик при въезде в зону: вспышка, подсказка и короткий звук
+      if (started && !ended && !uiModal && !paused && !e.used) {
+        const aligned = Math.abs(laneOffset - e.side * 7.1) < 2.6;
+        const dx = playerS - zoneS;
+        if (!e.zoneEntered && aligned && Math.abs(dx) < EXIT_ZONE_LENGTH * 0.5) {
+          e.zoneEntered = true;
+          e.zoneFlash = 1;
+          showExitHint(e);
+          playExitChime(e.type === 'restaurant');
+        }
+        if (Math.abs(dx) > EXIT_ZONE_LENGTH * 0.5 + 10) e.zoneEntered = false;
+      }
     }
 
     // Съезд срабатывает, когда игрок прижимается к нужному краю дороги
@@ -4561,10 +4865,17 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
         exitPool.push({
           group: obj.group,
           signMat: obj.signMat,
+          marker: obj.marker,
+          zoneMat: obj.zoneMat,
+          iconSprite: obj.iconSprite,
+          labelSprite: obj.labelSprite,
           s: 0,
           side: 1,
           type: 'restaurant',
-          used: false
+          used: false,
+          zoneEntered: false,
+          zoneFlash: 0,
+          pulsePhase: Math.random() * Math.PI * 2
         });
       }
     }
@@ -5044,8 +5355,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       }
     }
 
-    // 13. Съезды, указатели и маркер точки доставки
-    updateExitWorld();
+    // 13. Съезды, указатели, маркерные зоны и точка доставки
+    updateExitWorld(dt);
     updateDeliveryMarker();
 
     // 14. Пешеходы
