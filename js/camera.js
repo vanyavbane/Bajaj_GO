@@ -67,6 +67,13 @@ export function initCamera() {
   }
   G.toggleCameraMode = toggleCameraMode;
 
+  function formatRunDistance(km) {
+    const meters = Math.max(0, km * 1000);
+    if (meters < 1000) return `${Math.round(meters)} м`;
+    return `${km.toFixed(2)} км`;
+  }
+  G.formatRunDistance = formatRunDistance;
+
   let lastDashDraw = 0;
   let lastDashKey = '';
   let lastThirdKey = '';
@@ -79,7 +86,7 @@ export function initCamera() {
     const maxSpd = effStats.maxSpeed;
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
     const speedText = String(Math.round(speedVal));
-    const distText = distVal.toFixed(2);
+    const distText = formatRunDistance(distVal);
 
     if (G.cameraMode === 'third' && G.started && !G.ended) {
       const thirdKey = `${speedText}|${gear}|${distText}|${Math.floor(scoreVal)}`;
@@ -87,7 +94,7 @@ export function initCamera() {
         lastThirdKey = thirdKey;
         $('tp-speed').textContent = speedText;
         $('tp-gear').textContent = 'G' + gear;
-        $('tp-dist').textContent = distText + ' КМ';
+        $('tp-dist').textContent = distText;
         $('tp-rub').textContent = Math.floor(scoreVal) + ' ₽';
       }
       let pills = '';
@@ -159,7 +166,7 @@ export function initCamera() {
     G.dashCtx.fillText('ДИСТАНЦИЯ', 24, 178);
     G.dashCtx.fillStyle = '#ffffff';
     G.dashCtx.font = '900 26px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText(distVal.toFixed(2) + ' KM', 24, 208);
+    G.dashCtx.fillText(distText, 24, 208);
 
     G.dashCtx.fillStyle = '#ffcc80';
     G.dashCtx.font = '800 16px system-ui,Segoe UI,Arial';

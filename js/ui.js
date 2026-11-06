@@ -426,7 +426,7 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${heading('АВАРИЯ', 'ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ')}
         ${stats([
-          { label: 'Пройденная дистанция', value: `${G.distance.toFixed(2)} км` },
+          { label: 'Пройденная дистанция', value: G.formatRunDistance(G.distance) },
           { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${Math.floor(G.totalJumpBonusRun)} ₽)`, tone: 'signal' },
           { label: 'Заработано за заезд', value: `+${earned} ₽`, tone: 'gold' },
           { label: 'Баланс в банке', value: `${Math.floor(G.bankPoints)} ₽` }

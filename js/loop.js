@@ -143,16 +143,13 @@ export function initLoop() {
     G.quteSteeringWheelPivot.rotation.z = -G.steerVisual * 0.88;
 
     const roadEdge = 9.0;
-    if (G.laneOffset >= roadEdge) {
-      G.laneOffset = roadEdge;
-      G.speed = 0;
-      G.lateralVelocity = 0;
-      G.keys.gas = false;
-    } else if (G.laneOffset <= -roadEdge) {
-      G.laneOffset = -roadEdge;
-      G.speed = 0;
-      G.lateralVelocity = 0;
-      G.keys.gas = false;
+    const edgeSide = G.laneOffset > roadEdge ? 1 : (G.laneOffset < -roadEdge ? -1 : 0);
+    if (edgeSide !== 0) {
+      G.laneOffset = edgeSide * roadEdge;
+      G.lateralVelocity = -edgeSide * 4.5;
+      G.slipDriftVel = 0;
+      const scrape = 22 + G.speed * 0.28;
+      G.speed = Math.max(0, G.speed - scrape * dt);
     }
 
     // 3. Движение вперёд по трассе

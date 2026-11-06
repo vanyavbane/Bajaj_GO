@@ -139,10 +139,15 @@ try {
   const file = join(tmpdir(), 'bajaj-scene.jpg');
   const bytes = Buffer.from(frame.slice(frame.indexOf(',') + 1), 'base64');
   await writeFile(file, bytes);
+  await cdp.evaluate(`window.__bajaj.setKeys({ gas: true, right: true, left: false, brake: false })`);
+  await new Promise((r) => setTimeout(r, 700));
+  const wall = await cdp.evaluate(`window.__bajaj.snapshot()`);
+  await cdp.evaluate(`window.__bajaj.setKeys({ gas: false, right: false })`);
   const moved = ride.trace[ride.trace.length - 1].s - ride.trace[0].s;
   console.log(JSON.stringify({
     menu: { fps: menu.fps, calls: menu.render.calls, triangles: menu.render.triangles, scene: menu.scene, errors: menu.errors },
     ride: { speed: ride.snapshot.speed, playerS: ride.snapshot.playerS, lane: ride.snapshot.lane, camera: ride.snapshot.camera, trace: ride.trace, errors: ride.snapshot.errors },
+    wall: { speed: wall.speed, lane: wall.lane, playerS: wall.playerS },
     moved,
     frame: file,
     pageErrors: cdp.errors

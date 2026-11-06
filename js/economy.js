@@ -1052,7 +1052,7 @@ export function initEconomy() {
     overlay.innerHTML = panel(`
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
         ${stats([
-          { label: 'Пробег', value: `${G.distance.toFixed(2)} км` },
+          { label: 'Пробег', value: G.formatRunDistance(G.distance) },
           { label: 'Заработано за заезд', value: `${Math.floor(G.score).toLocaleString('ru-RU')} ₽` },
           { label: 'Баланс', value: `${Math.floor(G.bankPoints).toLocaleString('ru-RU')} ₽` },
           { label: 'Топливо', value: `${Math.round(clamp(G.fuelM / FUEL_RANGE_M, 0, 1) * 100)}%` },
