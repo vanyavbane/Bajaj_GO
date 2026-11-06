@@ -428,14 +428,18 @@ export function initEconomy() {
     const exit = ahead.exit;
     const sideWord = exit.side > 0 ? 'справа' : 'слева';
     const title = `${EXIT_HINT_LABELS[exit.type]} · ${sideWord.toUpperCase()} · ${meters(Math.max(0, ahead.dist))}`;
-    const how = 'Заезжай в коробку на полосе';
-    const key = `${exit.type}|${title}`;
+    const armed = exitIsArmed(exit);
+    const how = armed ? 'Ждёт въезда в коробку' : 'Меню откроется само в коробке';
+    const key = `${exit.type}|${title}|${armed ? 1 : 0}`;
     if (key === exitHintKey) return;
     exitHintKey = key;
     $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
-    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service');
+    const take = $('btn-take-exit');
+    take.textContent = armed ? 'Жду коробку' : 'Съехать';
+    take.setAttribute('aria-pressed', armed ? 'true' : 'false');
+    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service') + (armed ? ' armed' : '');
   }
 
   function openExitFromBox(exit) {
@@ -539,6 +543,17 @@ export function initEconomy() {
   }
 
   let exitPrevS = null;
+  let armedExit = null;
+  let armedS = NaN;
+
+  function exitIsArmed(exit) {
+    return !!exit && armedExit === exit && armedS === exit.s && !exit.used;
+  }
+
+  function clearArmedExit() {
+    armedExit = null;
+    armedS = NaN;
+  }
 
   function syncExitTrack() {
     exitPrevS = G.playerS;
@@ -591,16 +606,35 @@ export function initEconomy() {
       }
       if (e.zoneFlash > 0) e.zoneFlash = Math.max(0, e.zoneFlash - dt * 1.7);
 
-      if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used
+      if (exitIsArmed(e) && G.started && !G.ended && !G.uiModal && !G.paused
         && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, e.side, G.START_LANE)) {
+        clearArmedExit();
         openExitFromBox(e);
         break;
       }
     }
 
+    if (armedExit && (armedExit.s !== armedS || armedExit.used
+      || G.playerS > exitBoxCenter(armedExit.s) + EXIT_ZONE_LENGTH * 0.5)) {
+      clearArmedExit();
+    }
+
     exitPrevS = G.playerS;
     refreshExitHint();
   }
+
+  function armExit() {
+    if (!G.started || G.ended || G.uiModal || G.paused) return false;
+    const ahead = nearestExitAhead();
+    if (!ahead) return false;
+    if (exitIsArmed(ahead.exit)) return true;
+    armedExit = ahead.exit;
+    armedS = ahead.exit.s;
+    exitHintKey = '';
+    refreshExitHint();
+    return true;
+  }
+  G.armExit = armExit;
   G.updateExitWorld = updateExitWorld;
 
   G.debugPlaceAtExit = (inside) => {
@@ -617,12 +651,13 @@ export function initEconomy() {
     if (G.uiModal) closeOverlayToGame();
     best.used = false;
     G.speed = 0;
-    G.playerS = exitBoxCenter(best.s);
-    G.laneOffset = inside ? best.side * G.START_LANE : 0;
+    const where = inside === 'before' ? 'before' : (inside ? 'inside' : 'beside');
+    G.playerS = exitBoxCenter(best.s) - (where === 'before' ? 30 : 0);
+    G.laneOffset = where === 'beside' ? 0 : best.side * G.START_LANE;
     G.lateralVelocity = 0;
     G.slipDriftVel = 0;
     syncExitTrack();
-    return { type: best.type, side: best.side, s: best.s, inside: !!inside };
+    return { type: best.type, side: best.side, s: best.s, inside: where === 'inside', where };
   };
 
   // Маркер точки доставки заказа
@@ -1215,6 +1250,7 @@ export function initEconomy() {
       activeOrder.targetS = G.playerS + Math.max(60, activeOrder.remainingM || 60);
     }
     deliveryMarker.visible = !!activeOrder;
+    clearArmedExit();
     syncExitTrack();
     updateEcoHud(performance.now());
     saveEco();
@@ -1281,6 +1317,11 @@ export function initEconomy() {
     }
   }
   G.updateEcoHud = updateEcoHud;
+
+  $('btn-take-exit').addEventListener('click', e => {
+    e.preventDefault();
+    armExit();
+  });
 
   $('btn-pause').addEventListener('click', e => {
     e.preventDefault();

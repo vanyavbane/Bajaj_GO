@@ -81,7 +81,8 @@ canvas{display:block;width:100%;height:100%}
   text-shadow:0 2px 6px rgba(0,0,0,.85);
   max-width:min(92vw,440px);
 }
-#exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+#exit-hint #btn-take-exit{flex:none;width:auto;margin:0;white-space:nowrap}
 #exit-hint.service{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
 #exit-hint .exit-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 #exit-hint small{

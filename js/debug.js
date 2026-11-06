@@ -151,7 +151,11 @@ export function initDebug() {
 
   function placeAtExit(inside) {
     setKeys({ gas: false, brake: false, left: false, right: false });
-    return G.debugPlaceAtExit ? G.debugPlaceAtExit(!!inside) : null;
+    return G.debugPlaceAtExit ? G.debugPlaceAtExit(inside) : null;
+  }
+
+  function armExit() {
+    return { ok: G.armExit ? !!G.armExit() : false, ...exitHint() };
   }
 
   function exitHint() {
@@ -161,10 +165,12 @@ export function initDebug() {
       shown: !!(el && el.classList.contains('show')),
       text: document.getElementById('exit-hint-text')?.textContent || '',
       how: document.getElementById('exit-hint-how')?.textContent || '',
+      armed: !!(el && el.classList.contains('armed')),
+      button: document.getElementById('btn-take-exit')?.textContent || '',
       modal: !!G.uiModal,
       feed: feed ? [...feed.children].map((node) => node.textContent) : []
     };
   }
 
-  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint, replayAfterMenu };
+  window.__bajaj = { snapshot, ride, setKeys, frame, errors, feed, placeAtExit, armExit, exitHint, replayAfterMenu };
 }

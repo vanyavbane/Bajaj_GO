@@ -156,12 +156,19 @@ try {
   await new Promise((r) => setTimeout(r, 400));
   const afterReplay = await cdp.evaluate(`window.__bajaj.exitHint()`);
   const feed = await cdp.evaluate(`window.__bajaj.feed('КОМБО ×2 · +50 ₽', 'combo', 2)`);
-  const outside = await cdp.evaluate(`window.__bajaj.placeAtExit(false)`);
+  const bareInside = await cdp.evaluate(`window.__bajaj.placeAtExit(true)`);
   await new Promise((r) => setTimeout(r, 300));
-  const missed = await cdp.evaluate(`window.__bajaj.exitHint()`);
+  const bare = await cdp.evaluate(`window.__bajaj.exitHint()`);
+  const before = await cdp.evaluate(`window.__bajaj.placeAtExit('before')`);
+  const armed = await cdp.evaluate(`(document.getElementById('btn-take-exit').click(), window.__bajaj.exitHint())`);
+  await new Promise((r) => setTimeout(r, 300));
+  const early = await cdp.evaluate(`window.__bajaj.exitHint()`);
   const inside = await cdp.evaluate(`window.__bajaj.placeAtExit(true)`);
   await new Promise((r) => setTimeout(r, 300));
   const hit = await cdp.evaluate(`window.__bajaj.exitHint()`);
+  if (bare.modal || early.modal || !early.armed || !hit.modal) {
+    throw new Error(`съезд: коробка без кнопки ${bare.modal}, кнопка до коробки ${early.modal}/${early.armed}, въезд ${hit.modal}`);
+  }
   const exitFrame = await cdp.evaluate(`window.__bajaj.frame()`, 15000);
   const exitFile = join(tmpdir(), 'bajaj-exit.jpg');
   await writeFile(exitFile, Buffer.from(exitFrame.slice(exitFrame.indexOf(',') + 1), 'base64'));
@@ -169,7 +176,7 @@ try {
   const pageFile = join(tmpdir(), 'bajaj-exit-page.jpg');
   await writeFile(pageFile, Buffer.from(pageShot.data, 'base64'));
   console.log(JSON.stringify({
-    replay, afterReplay, feed, outside, missed, inside, hit, exitFile, pageFile
+    replay, afterReplay, feed, bareInside, bare, before, armed, early, inside, hit, exitFile, pageFile
   }, null, 2));
   cdp.ws.close();
 } finally {
