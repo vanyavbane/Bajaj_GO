@@ -1,9 +1,9 @@
 # Архитектура
 
-Всё приложение — один файл `bajaj go.html`. Внутри он логически разбит на 16 секций,
+Всё приложение — один файл `bajaj go.html`. Внутри он логически разбит на 17 секций,
 помеченных комментариями вида `/* ===== N. НАЗВАНИЕ ===== */`.
 
-> Номера строк — ориентир на момент коммита `c5ba168`. После правок они смещаются,
+> Номера строк — ориентир на момент коммита `862deb9`. После правок они смещаются,
 > ищите по названию секции.
 
 ## Карта секций
@@ -25,7 +25,8 @@
 | 13 | Дальний свет | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | Состояние игры и UI | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, `renderTuning` |
 | 15 | Ввод | `handleKey`, экранные кнопки |
-| 16 | Главный цикл | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
+| 16 | Съезды, экономика, критические ситуации и пауза | `exitPool`, меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
+| 17 | Главный цикл | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
 
 ## Ключевые переменные
 
@@ -40,12 +41,22 @@
 | `bikeTuningData` | `bajajGO_tuning` | Установленные улучшения |
 | `lightingQuality` | `bajajGO_lighting` | `'dlss'` \| `'normal'` |
 | `cameraMode` | `bajajGO_camera` | `'cockpit'` \| `'third'` |
+| `fuelM` | `bajajGO_fuel` | Остаток топлива в метрах (0…`FUEL_RANGE_M` = 25 000) |
+| `wearM` | `bajajGO_wear` | JSON `{pads, oil, plugs}` — пройденные метры с момента замены |
+| `limpMode` | `bajajGO_limp` | `'1'` — езда «своим ходом» после пустого бака (5 км/ч) |
+| `activeOrder` | `bajajGO_order` | JSON активного заказа: ресторан, остаток пути/времени, награда |
 
 **Состояние заезда (в памяти):** `speed`, `distance`, `score`, `playerS`,
-`laneOffset`, `lateralVelocity`, `jumpState`, `comboCount`, `todCycleTime`.
+`laneOffset`, `lateralVelocity`, `jumpState`, `comboCount`, `todCycleTime`,
+`paused`, `uiModal`, `bankedOrderRun`.
+
+`bankedOrderRun` — сколько рублей за заказы уже зачислено на баланс во время
+заезда. В конце заезда `score - bankedOrderRun` добавляется к `bankPoints`,
+чтобы награда не зачислилась дважды.
 
 **Мир:** `trafficPool` (18 машин), `roadsideSlots`, `megaStructures`,
-`rampsPool`, `pedestrians`, `lampLights` (8 активных фонарей).
+`rampsPool`, `pedestrians`, `lampLights` (8 активных фонарей), `exitPool`
+(5 съездов), `deliveryMarker`.
 
 ## Система координат
 
@@ -66,14 +77,36 @@ z = -s
 ```
 animate(now)
   ├─ dt
+  ├─ пауза / открытое модальное окно → только renderer.render, симуляция стоит
   ├─ updateAtmosphereAndTimeOfDay()  → небо, туман, свет, фазы суток
   ├─ ввод → speed, lateralOffset, прыжок
+  ├─ tickEconomy() → топливо, износ; tickOrder() → таймер и доставка
   ├─ дорога/ленты → updateRoadSurface()
-  ├─ трафик → движение, перестроения, коллизии
+  ├─ трафик → движение, перестроения, коллизии → handleAccident()
   ├─ рампы/прыжки → перелёты, бонусы
-  ├─ HUD → приборная панель, бейджи, подсказки
+  ├─ updateExitWorld() / updateDeliveryMarker() → съезды и точка заказа
+  ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)
 ```
+
+## Экономика и съезды
+
+- `exitPool` — 5 объектов-съездов, которые переиспользуются (пулинг): когда съезд
+  уходит за игрока, он переносится вперёд на `EXIT_MIN_GAP…EXIT_MAX_GAP` (300–800 м).
+- Съезд срабатывает, когда игрок прижимается к краю (`laneOffset > 7.45` справа
+  или `< -7.45` слева) в радиусе 11 м от `exit.s`. Открывается локальное меню.
+- Топливо: полного бака хватает на 25 000 м. Заправка — 500 ₽.
+- Пустой бак: эвакуатор за 1000 ₽ (перемещает на 120 м вперёд и открывает АЗС)
+  либо отказ → `limpMode`, максимум 5 км/ч, аварийная АЗС ставится в 70 м.
+- Износ: колодки 60 000 м (−35% торможения), масло 40 000 м (−30% динамики),
+  свечи 100 000 м (−18% максималки). Замена — на СТО.
+- Заказ: 150–760 м, 30–120 с, база 300–1000 ₽. Награда = база × (0.45 + 0.55 ×
+  доля оставшегося времени). Просрочка — штраф 25% базы (мин. 100 ₽), заказ
+  остаётся. Награда сразу зачисляется на баланс.
+- ДТП с активным заказом: скорая 250 ₽ (заказ сохраняется) или конец заезда.
+  Без заказа — прежний `crashGame()`.
+- Пауза (Esc / P / кнопка ⏸): замораживает `animate`, включая таймер заказа.
+  Меню: продолжить, настройки (свет/камера), в главное меню.
 
 ## Где что менять
 
@@ -85,8 +118,13 @@ animate(now)
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` (секция 12) |
 | Рекламные баннеры | `buildBillboardTextures`, `createBillboardMesh` (секция 6) |
 | Физика разгона/торможения | `animate` (секция 16) |
-| Прыжки и бонусы за перелёт | `jumpState`, `finishJumpLanding`, секция 16 |
-| Экономика (цены, награды) | `bikeCatalog`, `tuningCatalog`, `crashGame` |
+| Прыжки и бонусы за перелёт | `jumpState`, `finishJumpLanding`, секция 17 |
+| Экономика (цены, награды) | `bikeCatalog`, `tuningCatalog`, `crashGame`, секция 16 |
+| Съезды и точки интереса | `EXIT_TYPES`, `EXIT_META`, `resetExits`, `openExitMenu` (секция 16) |
+| Заказы и доставка | `RESTAURANTS`, `createOrder`, `tickOrder`, `deliverOrder` (секция 16) |
+| Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` (секция 16) |
+| Критические ситуации | `openFuelEmpty`, `handleAccident` (секция 16) |
+| Пауза | `togglePause`, `renderPauseMenu`, `resumeGame` (секция 16) |
 
 ## Технические ограничения
 

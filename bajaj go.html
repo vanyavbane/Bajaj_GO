@@ -15,7 +15,7 @@ canvas{display:block;width:100%;height:100%}
 .brand{position:absolute;top:16px;left:20px;font-weight:900;font-style:italic;letter-spacing:2px;font-size:clamp(20px,3vw,32px)}
 .brand span{color:#fff176}
 .brand small{display:block;font-size:10px;letter-spacing:3px;color:#9cb8d8;font-style:normal;margin-top:2px}
-#status-badges{position:absolute;top:16px;right:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+#status-badges{position:absolute;top:70px;right:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .badge{background:rgba(9,17,29,.84);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:800;letter-spacing:1px;backdrop-filter:blur(4px)}
 .badge.x2{border-color:#ff5252;color:#ff8a80;background:rgba(60,10,15,.85)}
 .badge.combo{border-color:#ffb64e;color:#ffd180}
@@ -24,6 +24,96 @@ canvas{display:block;width:100%;height:100%}
 #hint{position:absolute;top:15%;left:50%;transform:translateX(-50%);font-weight:900;text-align:center;letter-spacing:2px;white-space:nowrap;font-size:clamp(13px,2vw,22px);transition:opacity .35s}
 #hint small{display:block;font-size:11px;letter-spacing:1px;color:#c8d8e8;margin-top:5px}
 #bottom{position:absolute;left:18px;bottom:16px;background:rgba(9,17,29,.84);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:9px 13px;font-size:11px;color:#d6e2f1;line-height:1.45;backdrop-filter:blur(4px)}
+
+/* ЭКОНОМИКА В HUD: ТОПЛИВО, ИЗНОС, ЗАКАЗ, ПАУЗА */
+#eco-hud{
+  position:absolute;top:82px;left:20px;width:218px;
+  background:rgba(9,17,29,.84);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;padding:10px 12px;
+  backdrop-filter:blur(4px);font-size:11px;color:#d6e2f1;
+}
+.eco-row{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;letter-spacing:1px;color:#9cb8d8}
+.eco-row b{color:#fff;font-size:12px;letter-spacing:0}
+.eco-bar{height:6px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin:4px 0 9px}
+.eco-bar i{display:block;height:100%;width:100%;background:#6f9ab0;border-radius:4px;transition:width .25s linear,background .25s}
+.eco-bar i.mid{background:#b09060}
+.eco-bar i.low{background:#b0605a}
+.eco-wear{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+.eco-wear>div{min-width:0}
+.eco-wear span{display:block;font-size:9px;color:#9cb8d8;letter-spacing:.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eco-wear .wbar{height:4px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-top:3px}
+.eco-wear .wbar i{display:block;height:100%;width:100%;background:#6f9ab0;transition:width .25s linear,background .25s}
+.eco-wear .wbar i.mid{background:#b09060}
+.eco-wear .wbar i.low{background:#b0605a}
+.eco-bank{display:flex;justify-content:space-between;margin-top:8px;border-top:1px solid rgba(255,255,255,.12);padding-top:7px;font-weight:800;letter-spacing:1px;color:#9cb8d8}
+.eco-bank b{color:#ffd08a;letter-spacing:0;font-size:12px}
+
+#order-hud{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  min-width:250px;max-width:min(360px,44vw);
+  background:rgba(9,17,29,.86);border:1px solid rgba(255,205,130,.4);
+  border-radius:12px;padding:7px 14px;text-align:center;
+  backdrop-filter:blur(4px);z-index:2;
+}
+#order-hud[hidden]{display:none!important}
+#order-hud .order-title{font-size:10px;font-weight:900;letter-spacing:1.5px;color:#ffd08a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#order-hud .order-row{display:flex;justify-content:center;gap:14px;margin-top:2px;font-size:12px;font-weight:900;color:#fff}
+#order-hud .order-row .t{color:#ffd08a;font-variant-numeric:tabular-nums}
+#order-hud.late{border-color:#b0605a;background:rgba(40,16,18,.88)}
+#order-hud.late .t{color:#ff9a90}
+
+#btn-pause{
+  position:absolute;top:16px;right:20px;pointer-events:auto;
+  width:44px;height:44px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.28);background:rgba(9,17,29,.84);
+  color:#e8eef5;font-size:18px;font-weight:900;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);transition:background .15s,transform .15s;z-index:3;
+}
+#btn-pause:hover{background:rgba(28,48,78,.95);transform:translateY(-1px)}
+
+#eco-toast{
+  position:absolute;top:26%;left:50%;transform:translateX(-50%) translateY(-6px);
+  background:rgba(9,17,29,.92);border:1px solid rgba(255,205,130,.45);
+  border-radius:11px;padding:8px 16px;font-size:12px;font-weight:900;letter-spacing:.5px;
+  color:#ffe0a8;white-space:nowrap;opacity:0;transition:opacity .25s,transform .25s;
+  pointer-events:none;z-index:4;max-width:84vw;overflow:hidden;text-overflow:ellipsis;
+}
+#eco-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#eco-toast.bad{border-color:rgba(255,120,110,.55);color:#ffb0a8}
+
+/* МЕНЮ СЪЕЗДОВ, КРИТИЧЕСКИЕ СИТУАЦИИ И ПАУЗА */
+.poi-card{width:min(560px,96vw)}
+.poi-title{font-size:24px;font-weight:900;letter-spacing:1px;margin:0}
+.poi-sub{color:#9ec2e6;letter-spacing:2px;font-size:11px;margin:6px 0 12px;font-weight:800}
+.poi-list{display:grid;gap:8px;margin:10px 0;max-height:52vh;overflow-y:auto;padding-right:4px}
+.poi-row{
+  display:flex;align-items:center;gap:10px;text-align:left;width:100%;
+  border:1px solid rgba(255,255,255,.18);background:#0c1625;border-radius:11px;
+  padding:9px 12px;color:#fff;cursor:pointer;font-size:13px;font-weight:800;
+  transition:background .15s,border-color .15s;
+}
+.poi-row:hover{background:#112238;border-color:rgba(140,190,230,.5)}
+.poi-row .poi-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;background:rgba(255,255,255,.08);flex:0 0 auto}
+.poi-row .poi-body{flex:1;min-width:0}
+.poi-row .poi-body small{display:block;color:#9bb4cf;font-weight:600;font-size:11px;margin-top:2px;white-space:normal}
+.poi-row .poi-price{color:#ffd08a;white-space:nowrap;font-size:12px}
+.poi-row:disabled,.poi-row.disabled{opacity:.45;cursor:default}
+.poi-note{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:9px 12px;font-size:12px;color:#c6d6e8;text-align:left;line-height:1.45;margin:8px 0}
+.poi-balance{display:inline-block;background:rgba(255,208,138,.14);border:1px solid rgba(255,208,138,.4);color:#ffe0a8;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:900;margin-bottom:6px}
+.pause-card{width:min(420px,94vw)}
+.pause-stats{display:grid;gap:6px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 14px;margin:12px 0;font-size:12px;text-align:left;color:#c6d6e8}
+.pause-stats div{display:flex;justify-content:space-between;gap:10px}
+.pause-stats b{color:#fff}
+
+@media(max-width:700px){
+  #eco-hud{width:172px;top:72px;padding:8px 9px;font-size:10px}
+  #status-badges{top:64px}
+  #order-hud{max-width:48vw;min-width:0;padding:5px 9px}
+  #order-hud .order-title{font-size:9px}
+  #order-hud .order-row{font-size:10px;gap:8px}
+}
 
 /* HUD ТРЕТЬЕГО ЛИЦА (ПРАВЫЙ НИЖНИЙ УГОЛ) */
 #tp-hud{
@@ -569,6 +659,31 @@ canvas{display:block;width:100%;height:100%}
     <b>W / ↑ / ПРОБЕЛ</b> — ГАЗ &nbsp;·&nbsp; <b>S / ↓</b> — ТОРМОЗ &nbsp;·&nbsp; <b>A / D / ← / →</b> — ПОВОРОТ<br>
     <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА (1-е / 3-е лицо) &nbsp;·&nbsp; Трамплины: ПЕРЕЛЁТ МАШИН
   </div>
+
+  <!-- ЭКОНОМИКА: ТОПЛИВО, ИЗНОС, БАЛАНС -->
+  <div id="eco-hud">
+    <div class="eco-row"><span>⛽ ТОПЛИВО</span><b id="eco-fuel-val">100%</b></div>
+    <div class="eco-bar"><i id="eco-fuel-bar"></i></div>
+    <div class="eco-wear">
+      <div><span id="wear-pads-val">🛑 100%</span><div class="wbar"><i id="wear-pads-bar"></i></div></div>
+      <div><span id="wear-oil-val">🛢 100%</span><div class="wbar"><i id="wear-oil-bar"></i></div></div>
+      <div><span id="wear-plugs-val">⚡ 100%</span><div class="wbar"><i id="wear-plugs-bar"></i></div></div>
+    </div>
+    <div class="eco-bank"><span>БАЛАНС</span><b id="eco-bank">0 ₽</b></div>
+  </div>
+
+  <!-- ТАЙМЕР АКТИВНОГО ЗАКАЗА -->
+  <div id="order-hud" hidden>
+    <div class="order-title" id="order-title">🍔 ЗАКАЗ</div>
+    <div class="order-row">
+      <span class="t" id="order-time">2:00</span>
+      <span id="order-dist">— м</span>
+      <span id="order-reward">~0 ₽</span>
+    </div>
+  </div>
+
+  <button id="btn-pause" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
+  <div id="eco-toast"></div>
 </div>
 
 <!-- ПАНЕЛЬ ТРЕТЬЕГО ЛИЦА В ПРАВОМ НИЖНЕМ УГОЛ -->
@@ -2761,6 +2876,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
   let lastDashDraw = 0;
   function updateCockpitDashboard(now, speedVal, distVal, scoreVal, multVal, highBeamActive) {
     const effStats = getBikeEffectiveStats(selectedBikeId);
+    applyWearToStats(effStats);
     const maxSpd = effStats.maxSpeed;
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
 
@@ -3419,6 +3535,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       resetTrafficVehicle(trafficPool[i], 38 + i * 24, i % 4);
     }
 
+    prepareRunEconomy();
+
     $('overlay').style.display = 'none';
     $('hud').hidden = false;
     $('controls').hidden = false;
@@ -3436,7 +3554,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     currentScreen = 'crash';
 
     const earned = Math.floor(score);
-    bankPoints += earned;
+    bankPoints += Math.max(0, earned - bankedOrderRun);
+    bankedOrderRun = 0;
     saveGarage();
 
     $('hud').hidden = true;
@@ -3474,6 +3593,18 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     const k = e.key.toLowerCase();
 
     if (isDown) {
+      if (e.key === 'Escape' || e.code === 'KeyP' || k === 'p' || k === 'з') {
+        if (uiModal) {
+          if (modalKind === 'exit') { e.preventDefault(); closeOverlayToGame(); }
+          return;
+        }
+        if (started && !ended) {
+          e.preventDefault();
+          togglePause();
+          return;
+        }
+      }
+
       if (currentScreen === 'crash') {
         if (e.key === 'Enter') { e.preventDefault(); startGame(); return; }
         if (e.key === 'Escape') { e.preventDefault(); renderMainMenu(); return; }
@@ -3527,7 +3658,994 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
   });
 
   /* =========================================================================
-   * 16. ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ, ФИЗИКА ТЮНИНГА, ТРАМПЛИНОВ И РЕНДЕРИНГ
+   * 16. СЪЕЗДЫ, ЭКОНОМИКА (ТОПЛИВО / ИЗНОС / ДОСТАВКА),
+   *     КРИТИЧЕСКИЕ СИТУАЦИИ И ПАУЗА
+   * ========================================================================= */
+  const FUEL_RANGE_M = 25000;
+  const REFUEL_PRICE = 500;
+  const TOW_PRICE = 1000;
+  const MEDKIT_PRICE = 250;
+  const LIMP_MAX_SPEED = 5;
+  const ORDER_MIN_M = 150;
+  const ORDER_MAX_M = 760;
+  const ORDER_MIN_TIME = 30;
+  const ORDER_MAX_TIME = 120;
+  const EXIT_MIN_GAP = 300;
+  const EXIT_MAX_GAP = 800;
+  const EXIT_COUNT = 5;
+
+  const WEAR_LIMITS = { pads: 60000, oil: 40000, plugs: 100000 };
+  const WEAR_LABELS = { pads: 'Колодки', oil: 'Масло', plugs: 'Свечи' };
+  const WEAR_ICONS = { pads: '🛑', oil: '🛢', plugs: '⚡' };
+  const SERVICE_BASE_PRICE = { pads: 400, oil: 600, plugs: 500 };
+
+  const RESTAURANTS = [
+    { name: "McDonald's", badge: 'MCD' },
+    { name: 'Вкусно — и точка', badge: 'ВК' },
+    { name: 'KFC', badge: 'KFC' },
+    { name: 'Burger King', badge: 'BK' },
+    { name: 'Суши Wok', badge: 'WOK' },
+    { name: 'Додо Пицца', badge: 'ДОДО' },
+    { name: 'Пицца Хат', badge: 'PH' }
+  ];
+
+  const EXIT_TYPES = ['restaurant', 'fuel', 'sto', 'tuning'];
+  const EXIT_META = {
+    restaurant: { title: 'РЕСТОРАНЫ', sub: 'ДОСТАВКА ЕДЫ', badge: 'FOOD' },
+    fuel:       { title: 'АЗС',       sub: 'ЗАПРАВКА · 500 ₽', badge: 'FUEL' },
+    sto:        { title: 'СТО',       sub: 'РЕМОНТ И ОБСЛУЖИВАНИЕ', badge: 'STO' },
+    tuning:     { title: 'ТЮНИНГ',    sub: 'УЛУЧШЕНИЯ МОТОЦИКЛА', badge: 'TUNE' }
+  };
+
+  /* ---------- Персистентное состояние экономики ---------- */
+  function readStoredNumber(key, fallback) {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    const v = Number(raw);
+    return Number.isFinite(v) ? v : fallback;
+  }
+
+  let fuelM = clamp(readStoredNumber('bajajGO_fuel', FUEL_RANGE_M), 0, FUEL_RANGE_M);
+  let wearM = { pads: 0, oil: 0, plugs: 0 };
+  try {
+    const w = JSON.parse(localStorage.getItem('bajajGO_wear') || '{}');
+    if (w && typeof w === 'object') {
+      for (const p of Object.keys(WEAR_LIMITS)) {
+        const v = Number(w[p]);
+        wearM[p] = Number.isFinite(v) ? clamp(v, 0, WEAR_LIMITS[p] * 3) : 0;
+      }
+    }
+  } catch { /* повреждённое сохранение — начинаем с новых деталей */ }
+
+  let limpMode = localStorage.getItem('bajajGO_limp') === '1';
+  let activeOrder = null;
+  let bankedOrderRun = 0;
+  try {
+    const o = JSON.parse(localStorage.getItem('bajajGO_order') || 'null');
+    if (o && typeof o === 'object' && o.restaurant) {
+      activeOrder = {
+        restaurant: String(o.restaurant),
+        targetS: null,
+        remainingM: Math.max(0, Number(o.remainingM) || 0),
+        timeLimit: Math.max(1, Number(o.timeLimit) || ORDER_MIN_TIME),
+        timeLeft: Number(o.timeLeft) || 0,
+        baseReward: Math.max(1, Number(o.baseReward) || 100),
+        penaltyApplied: !!o.penaltyApplied
+      };
+    }
+  } catch { activeOrder = null; }
+
+  let paused = false;
+  let uiModal = false;
+  let modalKind = '';
+  let ecoSaveTimer = 0;
+  let lastEcoHudDraw = 0;
+  let accidentCooldown = 0;
+  let pendingAccidentCar = null;
+  let toastTimer = null;
+
+  function saveEco() {
+    localStorage.setItem('bajajGO_fuel', String(Math.round(fuelM)));
+    localStorage.setItem('bajajGO_wear', JSON.stringify({
+      pads: Math.round(wearM.pads),
+      oil: Math.round(wearM.oil),
+      plugs: Math.round(wearM.plugs)
+    }));
+    localStorage.setItem('bajajGO_limp', limpMode ? '1' : '0');
+    if (activeOrder) {
+      localStorage.setItem('bajajGO_order', JSON.stringify({
+        restaurant: activeOrder.restaurant,
+        remainingM: Math.max(0, Math.round(activeOrder.remainingM)),
+        timeLimit: activeOrder.timeLimit,
+        timeLeft: Number(activeOrder.timeLeft.toFixed(2)),
+        baseReward: activeOrder.baseReward,
+        penaltyApplied: activeOrder.penaltyApplied
+      }));
+    } else {
+      localStorage.removeItem('bajajGO_order');
+    }
+  }
+
+  function getWearLeftPct(part) {
+    return clamp(1 - wearM[part] / WEAR_LIMITS[part], 0, 1) * 100;
+  }
+
+  // Износ ухудшает торможение, динамику и максимальную скорость
+  function applyWearToStats(stats) {
+    const padsFrac = clamp(wearM.pads / WEAR_LIMITS.pads, 0, 1);
+    const oilFrac = clamp(wearM.oil / WEAR_LIMITS.oil, 0, 1);
+    const plugsFrac = clamp(wearM.plugs / WEAR_LIMITS.plugs, 0, 1);
+    stats.brakeDecel *= (1 - 0.35 * padsFrac);
+    stats.accel *= (1 - 0.30 * oilFrac);
+    stats.maxSpeed = Math.max(45, stats.maxSpeed * (1 - 0.18 * plugsFrac));
+    stats.wearBrakePct = Math.round(padsFrac * 35);
+    stats.wearAccelPct = Math.round(oilFrac * 30);
+    stats.wearSpeedPct = Math.round(plugsFrac * 18);
+    return stats;
+  }
+
+  function getServicePrice(part) {
+    const bike = selectedBike();
+    const factor = 1 + (bike.price > 0 ? bike.price / 12000 : 0);
+    return Math.round(SERVICE_BASE_PRICE[part] * factor / 50) * 50;
+  }
+
+  function formatClock(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  /* ---------- Всплывающие сообщения в HUD ---------- */
+  function showEcoToast(text, bad = false) {
+    const el = $('eco-toast');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'show' + (bad ? ' bad' : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 3200);
+  }
+
+  /* ---------- 3D-указатели съездов ---------- */
+  function buildExitSignTexture(type, side) {
+    const meta = EXIT_META[type];
+    return createCanvasTexture(512, 160, (ctx, w, h) => {
+      ctx.fillStyle = '#101620';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#486090';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, w - 8, h - 8);
+
+      ctx.fillStyle = '#c8a05a';
+      ctx.fillRect(20, 20, 96, 120);
+      ctx.fillStyle = '#101620';
+      ctx.font = '900 26px system-ui,Segoe UI,Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(meta.badge, 68, 82);
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#e8eef5';
+      ctx.font = '900 42px system-ui,Segoe UI,Arial';
+      ctx.fillText(meta.title, 136, 68);
+      ctx.fillStyle = '#9cb8d8';
+      ctx.font = '800 23px system-ui,Segoe UI,Arial';
+      ctx.fillText(meta.sub, 136, 108);
+
+      ctx.fillStyle = '#d6e2f1';
+      ctx.font = '900 62px system-ui,Segoe UI,Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(side > 0 ? '→' : '←', w - 26, 104);
+    });
+  }
+
+  const exitSignTextures = {};
+  for (const t of EXIT_TYPES) {
+    exitSignTextures[t] = {
+      right: buildExitSignTexture(t, 1),
+      left: buildExitSignTexture(t, -1)
+    };
+  }
+
+  const exitPool = [];
+  const deliveryMarker = new THREE.Group();
+
+  function createExitObject() {
+    const group = new THREE.Group();
+
+    const spurMat = new THREE.MeshStandardMaterial({ color: 0x1d232e, roughness: 0.95, metalness: 0.05 });
+    const spur = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.14, 30), spurMat);
+    spur.position.y = 0.07;
+    spur.receiveShadow = true;
+    group.add(spur);
+
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: 0x9a9a8a, emissive: 0x2a2a22, emissiveIntensity: 0.35, roughness: 0.7
+    });
+    for (const off of [-3.25, 3.25]) {
+      const ln = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 28), lineMat);
+      ln.position.set(off, 0.16, 0);
+      group.add(ln);
+    }
+    for (const z of [-9, 0, 9]) {
+      const chev = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.04, 0.6), lineMat);
+      chev.position.set(0, 0.17, z);
+      group.add(chev);
+    }
+
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x2c3440, roughness: 0.7, metalness: 0.45 });
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.22, 4.4, 0.22), poleMat);
+    pole.position.set(0, 2.2, 5.5);
+    group.add(pole);
+
+    const back = new THREE.Mesh(
+      new THREE.BoxGeometry(6.3, 2.15, 0.14),
+      new THREE.MeshStandardMaterial({ color: 0x141a24, roughness: 0.8 })
+    );
+    back.position.set(0, 4.0, 5.44);
+    group.add(back);
+
+    const signMat = new THREE.MeshBasicMaterial({ map: exitSignTextures.restaurant.right });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 1.95), signMat);
+    sign.position.set(0, 4.0, 5.52);
+    group.add(sign);
+
+    const lamp = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, 0.14, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xc8a05a, emissive: 0x8a6a2a, emissiveIntensity: 0.8 })
+    );
+    lamp.position.set(0, 5.25, 5.5);
+    group.add(lamp);
+
+    scene.add(group);
+    return { group, signMat };
+  }
+
+  function updateExitSign(exit) {
+    exit.signMat.map = exitSignTextures[exit.type][exit.side > 0 ? 'right' : 'left'];
+    exit.signMat.needsUpdate = true;
+  }
+
+  function chooseExitType() {
+    const ahead = exitPool.filter(o => o.s > playerS - 10).map(o => o.type);
+    if (!ahead.includes('fuel')) return 'fuel';
+    if (!activeOrder && !ahead.includes('restaurant')) return 'restaurant';
+    if (!ahead.includes('sto')) return 'sto';
+    if (!ahead.includes('tuning')) return 'tuning';
+    return EXIT_TYPES[Math.floor(Math.random() * EXIT_TYPES.length)];
+  }
+
+  function resetExits() {
+    let s = playerS + 360;
+    for (let i = 0; i < exitPool.length; i++) {
+      const e = exitPool[i];
+      e.type = EXIT_TYPES[i % EXIT_TYPES.length];
+      e.side = (i % 2 === 0) ? 1 : -1;
+      e.s = s;
+      e.used = false;
+      updateExitSign(e);
+      s += EXIT_MIN_GAP + Math.random() * (EXIT_MAX_GAP - EXIT_MIN_GAP);
+    }
+  }
+
+  function updateExitWorld() {
+    let maxS = playerS;
+    for (const e of exitPool) if (e.s > maxS) maxS = e.s;
+
+    for (const e of exitPool) {
+      if (e.s < playerS - 50) {
+        maxS += EXIT_MIN_GAP + Math.random() * (EXIT_MAX_GAP - EXIT_MIN_GAP);
+        e.s = maxS;
+        e.side = Math.random() < 0.5 ? 1 : -1;
+        e.type = chooseExitType();
+        e.used = false;
+        updateExitSign(e);
+      }
+      placeOnRoad(e.group, e.s, e.side * 12.6, 0);
+    }
+
+    // Съезд срабатывает, когда игрок прижимается к нужному краю дороги
+    if (started && !ended && !uiModal && !paused) {
+      for (const e of exitPool) {
+        if (e.used) continue;
+        const onSide = e.side > 0 ? laneOffset > 7.45 : laneOffset < -7.45;
+        if (onSide && Math.abs(playerS - e.s) < 11) {
+          e.used = true;
+          openExitMenu(e);
+          break;
+        }
+      }
+    }
+  }
+
+  // Маркер точки доставки заказа
+  (function buildDeliveryMarker() {
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x2c3440, roughness: 0.7, metalness: 0.45 });
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.6, 0.18), poleMat);
+    pole.position.y = 2.3;
+    deliveryMarker.add(pole);
+
+    const flagTex = createCanvasTexture(256, 128, (ctx, w, h) => {
+      ctx.fillStyle = '#16304a';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#c8a05a';
+      ctx.lineWidth = 7;
+      ctx.strokeRect(4, 4, w - 8, h - 8);
+      ctx.fillStyle = '#ffe0a8';
+      ctx.font = '900 40px system-ui,Segoe UI,Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ЗАКАЗ', w / 2, h / 2 + 2);
+    });
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.4, 1.2),
+      new THREE.MeshBasicMaterial({ map: flagTex, side: THREE.DoubleSide })
+    );
+    flag.position.set(1.3, 4.0, 0);
+    deliveryMarker.add(flag);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.5, 2.1, 24),
+      new THREE.MeshBasicMaterial({ color: 0xc8a05a, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.12;
+    deliveryMarker.add(ring);
+
+    deliveryMarker.visible = false;
+    scene.add(deliveryMarker);
+  })();
+
+  function updateDeliveryMarker() {
+    if (activeOrder && activeOrder.targetS != null) {
+      deliveryMarker.visible = true;
+      placeOnRoad(deliveryMarker, activeOrder.targetS, 7.1, 0);
+    } else {
+      deliveryMarker.visible = false;
+    }
+  }
+
+  /* ---------- Модальные окна ---------- */
+  function openModal(html, kind) {
+    uiModal = true;
+    modalKind = kind || 'exit';
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+    overlay.innerHTML = html;
+  }
+
+  function closeOverlayToGame() {
+    uiModal = false;
+    modalKind = '';
+    const overlay = $('overlay');
+    overlay.style.display = 'none';
+    overlay.innerHTML = '';
+    if (started && !ended) {
+      $('hud').hidden = false;
+      $('controls').hidden = false;
+    }
+    lastTime = performance.now();
+  }
+
+  function exitMenuBackButton() {
+    return `<button class="secondary" id="poi-close">← ПРОДОЛЖИТЬ ПУТЬ</button>`;
+  }
+
+  function bindExitClose() {
+    const btn = $('poi-close');
+    if (btn) btn.addEventListener('click', () => closeOverlayToGame());
+  }
+
+  function openExitMenu(exit) {
+    if (exit.type === 'restaurant') renderRestaurantMenu();
+    else if (exit.type === 'fuel') renderFuelMenu();
+    else if (exit.type === 'sto') renderServiceMenu();
+    else renderExitTuning();
+  }
+
+  /* ---------- Рестораны и заказы ---------- */
+  function renderRestaurantMenu(message = '') {
+    const rows = RESTAURANTS.map((r, i) => {
+      const busy = !!activeOrder;
+      return `
+        <button class="poi-row ${busy ? 'disabled' : ''}" data-rest="${i}" ${busy ? 'disabled' : ''}>
+          <div class="poi-ico">${r.badge}</div>
+          <div class="poi-body">
+            <span>${r.name}</span>
+            <small>${busy ? 'Сначала доставьте текущий заказ' : 'Взять заказ на доставку'}</small>
+          </div>
+          <div class="poi-price">${busy ? '—' : 'ЗАКАЗ'}</div>
+        </button>`;
+    }).join('');
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">🍔 РЕСТОРАНЫ</h2>
+        <div class="poi-sub">СЪЕЗД · ДОСТАВКА ЕДЫ</div>
+        ${activeOrder ? `<div class="poi-note">Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${Math.max(0, Math.ceil(activeOrder.remainingM))} м до заказчика.</div>` : ''}
+        ${message ? `<div class="tuning-msg ok">${message}</div>` : ''}
+        <div class="poi-list">${rows}</div>
+        ${exitMenuBackButton()}
+      </div>
+    `, 'exit');
+
+    document.querySelectorAll('[data-rest]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (activeOrder) return;
+        const r = RESTAURANTS[Number(btn.dataset.rest)];
+        createOrder(r.name);
+        closeOverlayToGame();
+        showEcoToast(`🍔 Заказ принят: ${r.name} · ${Math.round(activeOrder.remainingM)} м · ${formatClock(activeOrder.timeLimit)}`);
+      });
+    });
+    bindExitClose();
+  }
+
+  function createOrder(restaurantName) {
+    const dist = Math.round(ORDER_MIN_M + Math.random() * (ORDER_MAX_M - ORDER_MIN_M));
+    const ratio = (dist - ORDER_MIN_M) / (ORDER_MAX_M - ORDER_MIN_M);
+    const timeLimit = Math.round(ORDER_MIN_TIME + ratio * (ORDER_MAX_TIME - ORDER_MIN_TIME));
+    const baseReward = Math.round(300 + ratio * 700);
+    activeOrder = {
+      restaurant: restaurantName,
+      targetS: playerS + dist,
+      remainingM: dist,
+      timeLimit,
+      timeLeft: timeLimit,
+      baseReward,
+      penaltyApplied: false
+    };
+    saveEco();
+  }
+
+  function tickOrder(dt) {
+    if (!activeOrder) return;
+    if (activeOrder.targetS == null) activeOrder.targetS = playerS + activeOrder.remainingM;
+
+    activeOrder.timeLeft -= dt;
+    if (activeOrder.timeLeft <= 0 && !activeOrder.penaltyApplied) {
+      const penalty = Math.min(Math.floor(bankPoints), Math.max(100, Math.round(activeOrder.baseReward * 0.25)));
+      bankPoints -= penalty;
+      activeOrder.penaltyApplied = true;
+      saveGarage();
+      saveEco();
+      showEcoToast(`⏱ ПРОСРОЧКА! Штраф −${penalty} ₽ · заказ всё равно нужно доставить`, true);
+    }
+
+    activeOrder.remainingM = Math.max(0, activeOrder.targetS - playerS);
+    if (activeOrder.remainingM <= 0) deliverOrder();
+  }
+
+  function deliverOrder() {
+    if (!activeOrder) return;
+    const frac = clamp(activeOrder.timeLeft / activeOrder.timeLimit, 0, 1);
+    const reward = Math.round(activeOrder.baseReward * (0.45 + 0.55 * frac));
+    const name = activeOrder.restaurant;
+    score += reward;
+    // Награда сразу зачисляется на баланс: её можно потратить на этом же заезде.
+    // bankedOrderRun не даёт зачислить её повторно в конце заезда.
+    bankPoints += reward;
+    bankedOrderRun += reward;
+    activeOrder = null;
+    deliveryMarker.visible = false;
+    saveGarage();
+    saveEco();
+    showEcoToast(`✅ Заказ «${name}» доставлен · +${reward} ₽ на баланс`);
+  }
+
+  /* ---------- АЗС ---------- */
+  function spawnEmergencyFuelExit() {
+    let best = null;
+    for (const e of exitPool) {
+      if (e.s < playerS + 20) continue;
+      if (!best || e.s < best.s) best = e;
+    }
+    if (!best) best = exitPool[0];
+    best.type = 'fuel';
+    best.side = 1;
+    best.s = playerS + 70;
+    best.used = false;
+    updateExitSign(best);
+  }
+
+  function renderFuelMenu(opts = {}) {
+    const pct = Math.round(clamp(fuelM / FUEL_RANGE_M, 0, 1) * 100);
+    const full = fuelM >= FUEL_RANGE_M - 1;
+    const canPay = bankPoints >= REFUEL_PRICE;
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">⛽ АЗС</h2>
+        <div class="poi-sub">СЪЕЗД · ЗАПРАВКА</div>
+        <div class="poi-balance">Баланс: ${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽</div>
+        ${opts.message ? `<div class="tuning-msg ok">${opts.message}</div>` : ''}
+        <div class="poi-note">
+          ${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}
+          Бак: <b>${pct}%</b> · запас хода ≈ <b>${Math.round(fuelM).toLocaleString('ru-RU')} м</b>.<br>
+          Полного бака хватает на ${FUEL_RANGE_M.toLocaleString('ru-RU')} м.
+        </div>
+        <button class="primary ${(!canPay || full) ? 'disabled' : ''}" id="fuel-fill" ${(!canPay || full) ? 'disabled' : ''}>
+          ${full ? 'БАК ПОЛОН' : `ЗАЛИТЬ ПОЛНЫЙ БАК — ${REFUEL_PRICE} ₽`}
+        </button>
+        ${(!canPay && !full) ? `<div class="poi-note">Не хватает ${Math.ceil(REFUEL_PRICE - bankPoints).toLocaleString('ru-RU')} ₽.</div>` : ''}
+        ${exitMenuBackButton()}
+      </div>
+    `, 'exit');
+
+    $('fuel-fill').addEventListener('click', () => {
+      if (bankPoints < REFUEL_PRICE || fuelM >= FUEL_RANGE_M - 1) return;
+      bankPoints -= REFUEL_PRICE;
+      fuelM = FUEL_RANGE_M;
+      limpMode = false;
+      saveGarage();
+      saveEco();
+      renderFuelMenu({ message: '✅ Бак заправлен полностью. Можно ехать дальше!' });
+    });
+
+    $('poi-close').addEventListener('click', () => {
+      if (fuelM <= 0 && !opts.viaTow) {
+        limpMode = true;
+        saveEco();
+        spawnEmergencyFuelExit();
+        closeOverlayToGame();
+        showEcoToast('⛽ Топлива нет: максимум 5 км/ч. Доедьте до АЗС', true);
+      } else if (fuelM <= 0 && opts.viaTow) {
+        limpMode = true;
+        saveEco();
+        spawnEmergencyFuelExit();
+        closeOverlayToGame();
+        showEcoToast('⛽ Бак пуст: максимум 5 км/ч. Ближайшая АЗС отмечена на трассе', true);
+      } else {
+        closeOverlayToGame();
+      }
+    });
+  }
+
+  function openFuelEmpty() {
+    if (uiModal || ended) return;
+    speed = 0;
+    keys.gas = false;
+    const canPay = bankPoints >= TOW_PRICE;
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">⛽ БЕНЗИН ЗАКОНЧИЛСЯ</h2>
+        <div class="poi-sub">МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ</div>
+        <div class="poi-balance">Баланс: ${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽</div>
+        <div class="poi-note">
+          Можно вызвать эвакуатор до ближайшей АЗС за <b>${TOW_PRICE} ₽</b> (заправка на месте — ещё ${REFUEL_PRICE} ₽)
+          или отказаться и ехать своим ходом с ограничением <b>${LIMP_MAX_SPEED} км/ч</b>.
+        </div>
+        <button class="primary ${canPay ? '' : 'disabled'}" id="fuel-tow" ${canPay ? '' : 'disabled'}>
+          🚐 ЭВАКУАТОР ДО АЗС — ${TOW_PRICE} ₽
+        </button>
+        ${canPay ? '' : `<div class="poi-note">Не хватает ${Math.ceil(TOW_PRICE - bankPoints).toLocaleString('ru-RU')} ₽ на эвакуатор.</div>`}
+        <button class="secondary" id="fuel-selftow">ОТКАЗАТЬСЯ · ЕХАТЬ СВОИМ ХОДОМ (${LIMP_MAX_SPEED} КМ/Ч)</button>
+      </div>
+    `, 'critical');
+
+    $('fuel-tow').addEventListener('click', () => {
+      if (bankPoints < TOW_PRICE) return;
+      bankPoints -= TOW_PRICE;
+      saveGarage();
+      playerS += 120;
+      laneOffset = 7.1;
+      lateralVelocity = 0;
+      speed = 0;
+      accidentCooldown = 2.0;
+      saveEco();
+      renderFuelMenu({ viaTow: true });
+    });
+
+    $('fuel-selftow').addEventListener('click', () => {
+      limpMode = true;
+      saveEco();
+      spawnEmergencyFuelExit();
+      closeOverlayToGame();
+      showEcoToast(`⛽ Режим «своим ходом»: максимум ${LIMP_MAX_SPEED} км/ч до АЗС`, true);
+    });
+  }
+
+  /* ---------- СТО ---------- */
+  function renderServiceMenu(message = '') {
+    const bike = selectedBike();
+    const rows = ['pads', 'oil', 'plugs'].map(part => {
+      const left = getWearLeftPct(part);
+      const price = getServicePrice(part);
+      const needed = wearM[part] >= 300;
+      const canPay = bankPoints >= price;
+      const disabled = !needed || !canPay;
+      return `
+        <button class="poi-row ${disabled ? 'disabled' : ''}" data-service="${part}" ${disabled ? 'disabled' : ''}>
+          <div class="poi-ico">${WEAR_ICONS[part]}</div>
+          <div class="poi-body">
+            <span>${WEAR_LABELS[part]}</span>
+            <small>Осталось ${Math.round(left)}% · замена каждые ${WEAR_LIMITS[part].toLocaleString('ru-RU')} м${(!needed ? ' · пока не требуется' : (!canPay ? ' · не хватает денег' : ''))}</small>
+          </div>
+          <div class="poi-price">${needed ? price.toLocaleString('ru-RU') + ' ₽' : 'НОРМА'}</div>
+        </button>`;
+    }).join('');
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">🔧 СТО</h2>
+        <div class="poi-sub">СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ</div>
+        <div class="poi-balance">Баланс: ${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name}</div>
+        ${message ? `<div class="tuning-msg ok">${message}</div>` : ''}
+        <div class="poi-note">Изношенные детали ухудшают торможение, динамику и максимальную скорость. После замены ресурс сбрасывается на 100%.</div>
+        <div class="poi-list">${rows}</div>
+        ${exitMenuBackButton()}
+      </div>
+    `, 'exit');
+
+    document.querySelectorAll('[data-service]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const part = btn.dataset.service;
+        const price = getServicePrice(part);
+        if (wearM[part] < 300 || bankPoints < price) return;
+        bankPoints -= price;
+        wearM[part] = 0;
+        saveGarage();
+        saveEco();
+        renderServiceMenu(`✅ ${WEAR_LABELS[part]}: деталь заменена, ресурс восстановлен.`);
+      });
+    });
+    bindExitClose();
+  }
+
+  /* ---------- Тюнинг на съезде ---------- */
+  function renderExitTuning(message = '', statusType = '') {
+    const bike = selectedBike();
+    const eff = getBikeEffectiveStats(bike.id);
+
+    const cardsHtml = tuningCatalog.map(upg => {
+      const price = getUpgradePrice(bike, upg);
+      const installed = hasUpgradeInstalled(bike.id, upg.id);
+      const owned = hasUpgradeOwned(bike.id, upg.id);
+      let statusBadge = '';
+      let actionBtn = '';
+      if (installed) {
+        statusBadge = `<span class="tune-price" style="color:#69f0ae">✓ Установлено</span>`;
+        actionBtn = `<button class="tune-btn installed-btn" data-toggle-upg="${upg.id}">УСТАНОВЛЕНО ✓</button>`;
+      } else if (owned) {
+        statusBadge = `<span class="tune-price" style="color:#81d4fa">Куплено</span>`;
+        actionBtn = `<button class="tune-btn owned-btn" data-toggle-upg="${upg.id}">УСТАНОВИТЬ</button>`;
+      } else {
+        statusBadge = `<span class="tune-price">${price.toLocaleString('ru-RU')} ₽</span>`;
+        actionBtn = `<button class="tune-btn buy" data-buy-upg="${upg.id}">КУПИТЬ</button>`;
+      }
+      return `
+        <div class="tune-card ${installed ? 'installed' : ''}">
+          <div class="tune-ico">${upg.icon}</div>
+          <div class="tune-info">
+            <strong>
+              <span>${upg.name}</span>
+              <span class="effect-tag ${upg.isWarn ? 'warn' : ''}">${upg.effectLabel}</span>
+            </strong>
+            <small>${upg.desc}</small>
+          </div>
+          <div class="tune-act">
+            ${statusBadge}
+            ${actionBtn}
+          </div>
+        </div>`;
+    }).join('');
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">🔧 ТЮНИНГ</h2>
+        <div class="poi-sub">СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА</div>
+        <div class="poi-balance">Баланс: ${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽ · ${bike.name} · макс. ${eff.maxSpeed} км/ч</div>
+        ${message ? `<div class="tuning-msg ${statusType}">${message}</div>` : ''}
+        <div class="poi-list">${cardsHtml}</div>
+        ${exitMenuBackButton()}
+      </div>
+    `, 'exit');
+
+    document.querySelectorAll('[data-buy-upg]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const upg = tuningCatalog.find(u => u.id === btn.dataset.buyUpg);
+        if (!upg) return;
+        const price = getUpgradePrice(bike, upg);
+        if (bankPoints < price) {
+          renderExitTuning(`⚠ Не хватает ${Math.ceil(price - bankPoints).toLocaleString('ru-RU')} ₽ на «${upg.shortName}»`, 'err');
+          return;
+        }
+        bankPoints -= price;
+        const rec = getBikeTuningRecord(bike.id);
+        if (!rec.owned.includes(upg.id)) rec.owned.push(upg.id);
+        if (!rec.installed.includes(upg.id)) rec.installed.push(upg.id);
+        saveGarage();
+        syncVehicleAndCameraVisibility(true);
+        renderExitTuning(`✓ «${upg.shortName}» куплено и установлено!`, 'ok');
+      });
+    });
+
+    document.querySelectorAll('[data-toggle-upg]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const upg = tuningCatalog.find(u => u.id === btn.dataset.toggleUpg);
+        if (!upg) return;
+        const rec = getBikeTuningRecord(bike.id);
+        if (!rec.owned.includes(upg.id)) return;
+        const idx = rec.installed.indexOf(upg.id);
+        let msg = '';
+        if (idx >= 0) {
+          rec.installed.splice(idx, 1);
+          msg = `Деталь «${upg.shortName}» снята (остаётся в гараже)`;
+        } else {
+          rec.installed.push(upg.id);
+          msg = `✓ Деталь «${upg.shortName}» установлена`;
+        }
+        saveGarage();
+        syncVehicleAndCameraVisibility(true);
+        renderExitTuning(msg, 'ok');
+      });
+    });
+    bindExitClose();
+  }
+
+  /* ---------- ДТП ---------- */
+  function handleAccident(car) {
+    if (ended || uiModal) return;
+    if (!activeOrder) {
+      crashGame();
+      return;
+    }
+
+    pendingAccidentCar = car || null;
+    speed = Math.max(0, speed * 0.2);
+    const canPay = bankPoints >= MEDKIT_PRICE;
+
+    openModal(`
+      <div class="modal-card poi-card">
+        <h2 class="poi-title">💥 ДТП</h2>
+        <div class="poi-sub">У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ</div>
+        <div class="poi-balance">Баланс: ${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽</div>
+        <div class="poi-note">
+          Скорая помощь и лекарства стоят <b>${MEDKIT_PRICE} ₽</b>. После оплаты заезд продолжается,
+          заказ «${activeOrder.restaurant}» сохраняется.
+        </div>
+        <button class="primary ${canPay ? '' : 'disabled'}" id="acc-med" ${canPay ? '' : 'disabled'}>
+          🚑 СКОРАЯ + ЛЕКАРСТВА — ${MEDKIT_PRICE} ₽
+        </button>
+        ${canPay ? '' : `<div class="poi-note">Недостаточно денег на лекарства (${Math.ceil(MEDKIT_PRICE - bankPoints).toLocaleString('ru-RU')} ₽). Остаётся только закончить заезд.</div>`}
+        <button class="secondary" id="acc-end">ОТКАЗАТЬСЯ · ЗАЕЗД ЗАКОНЧИТСЯ</button>
+      </div>
+    `, 'critical');
+
+    $('acc-med').addEventListener('click', () => {
+      if (bankPoints < MEDKIT_PRICE) return;
+      bankPoints -= MEDKIT_PRICE;
+      saveGarage();
+      if (pendingAccidentCar) {
+        pendingAccidentCar.s = playerS + 120;
+        pendingAccidentCar.lateralOffset = LANE_OFFSETS[pendingAccidentCar.laneIdx];
+        pendingAccidentCar.changingLane = false;
+      }
+      for (const c of trafficPool) {
+        if (Math.abs(c.s - playerS) < 32 && Math.abs(c.lateralOffset - laneOffset) < 6) {
+          c.s = playerS + 130 + Math.random() * 40;
+        }
+      }
+      pendingAccidentCar = null;
+      accidentCooldown = 2.5;
+      speed = 0;
+      saveEco();
+      closeOverlayToGame();
+      showEcoToast(`🚑 Лекарства куплены (−${MEDKIT_PRICE} ₽). Заказ сохранён`, false);
+    });
+
+    $('acc-end').addEventListener('click', () => {
+      pendingAccidentCar = null;
+      activeOrder = null;
+      saveEco();
+      uiModal = false;
+      modalKind = '';
+      crashGame();
+    });
+  }
+
+  /* ---------- Пауза ---------- */
+  function renderPauseMenu(showSettings = false) {
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+
+    const isDlss = lightingQuality === 'dlss';
+    const orderLine = activeOrder
+      ? `<div><span>Заказ:</span><b>${activeOrder.restaurant} · ${formatClock(activeOrder.timeLeft)}</b></div>`
+      : `<div><span>Заказ:</span><b>нет</b></div>`;
+
+    overlay.innerHTML = `
+      <div class="modal-card pause-card">
+        <h2 class="poi-title">⏸ ПАУЗА</h2>
+        <div class="poi-sub">ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ</div>
+        <div class="pause-stats">
+          <div><span>Пробег:</span><b>${distance.toFixed(2)} км</b></div>
+          <div><span>Заработано за заезд:</span><b>${Math.floor(score).toLocaleString('ru-RU')} ₽</b></div>
+          <div><span>Баланс:</span><b>${Math.floor(bankPoints).toLocaleString('ru-RU')} ₽</b></div>
+          <div><span>Топливо:</span><b>${Math.round(clamp(fuelM / FUEL_RANGE_M, 0, 1) * 100)}%</b></div>
+          ${orderLine}
+        </div>
+        ${showSettings ? `
+          <div class="pause-stats">
+            <div>
+              <span>Качество освещения</span>
+              <button class="secondary" id="pause-quality" style="width:auto;margin:0;padding:5px 10px;font-size:11px">${isDlss ? 'DLSS-стиль' : 'Обычное'}</button>
+            </div>
+            <div>
+              <span>Камера</span>
+              <button class="secondary" id="pause-cam" style="width:auto;margin:0;padding:5px 10px;font-size:11px">${cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо'}</button>
+            </div>
+          </div>
+          <button class="secondary" id="pause-settings-back">← НАЗАД</button>
+        ` : `
+          <button class="secondary" id="pause-settings">⚙ НАСТРОЙКИ</button>
+        `}
+        <button class="primary" id="pause-resume">▶ ПРОДОЛЖИТЬ</button>
+        <button class="secondary" id="pause-menu">В ГЛАВНОЕ МЕНЮ</button>
+      </div>
+    `;
+
+    $('pause-resume').addEventListener('click', resumeGame);
+    $('pause-menu').addEventListener('click', exitToMenuFromPause);
+    if (showSettings) {
+      $('pause-settings-back').addEventListener('click', () => renderPauseMenu(false));
+      $('pause-quality').addEventListener('click', () => {
+        lightingQuality = (lightingQuality === 'dlss') ? 'normal' : 'dlss';
+        saveGarage();
+        applyLightingSettings();
+        renderPauseMenu(true);
+      });
+      $('pause-cam').addEventListener('click', () => {
+        toggleCameraMode();
+        renderPauseMenu(true);
+      });
+    } else {
+      $('pause-settings').addEventListener('click', () => renderPauseMenu(true));
+    }
+  }
+
+  function togglePause() {
+    if (!started || ended) return;
+    if (paused) {
+      resumeGame();
+      return;
+    }
+    paused = true;
+    keys.gas = keys.brake = keys.left = keys.right = false;
+    renderPauseMenu(false);
+  }
+
+  function resumeGame() {
+    paused = false;
+    const overlay = $('overlay');
+    overlay.style.display = 'none';
+    overlay.innerHTML = '';
+    $('hud').hidden = false;
+    $('controls').hidden = false;
+    lastTime = performance.now();
+  }
+
+  function exitToMenuFromPause() {
+    paused = false;
+    bankPoints += Math.max(0, Math.floor(score) - bankedOrderRun);
+    bankedOrderRun = 0;
+    score = 0;
+    started = false;
+    ended = false;
+    speed = 0;
+    saveGarage();
+    saveEco();
+    const overlay = $('overlay');
+    overlay.style.display = 'none';
+    overlay.innerHTML = '';
+    renderMainMenu();
+  }
+
+  /* ---------- Подготовка заезда и HUD ---------- */
+  function prepareRunEconomy() {
+    paused = false;
+    uiModal = false;
+    modalKind = '';
+    accidentCooldown = 0;
+    pendingAccidentCar = null;
+    ecoSaveTimer = 0;
+    bankedOrderRun = 0;
+    $('eco-toast').className = '';
+
+    for (let i = 0; i < EXIT_COUNT; i++) {
+      if (!exitPool[i]) {
+        const obj = createExitObject();
+        exitPool.push({
+          group: obj.group,
+          signMat: obj.signMat,
+          s: 0,
+          side: 1,
+          type: 'restaurant',
+          used: false
+        });
+      }
+    }
+    resetExits();
+    // Если заезд начинается с пустым баком, ближайшая АЗС должна быть рядом
+    if (fuelM <= 0) spawnEmergencyFuelExit();
+
+    if (activeOrder) {
+      activeOrder.targetS = playerS + Math.max(60, activeOrder.remainingM || 60);
+    }
+    deliveryMarker.visible = !!activeOrder;
+    updateEcoHud(performance.now());
+    saveEco();
+  }
+
+  function tickEconomy(dt, meters) {
+    if (meters > 0) {
+      if (fuelM > 0) fuelM = Math.max(0, fuelM - meters);
+      wearM.pads = Math.min(WEAR_LIMITS.pads * 3, wearM.pads + meters);
+      wearM.oil = Math.min(WEAR_LIMITS.oil * 3, wearM.oil + meters);
+      wearM.plugs = Math.min(WEAR_LIMITS.plugs * 3, wearM.plugs + meters);
+    }
+    ecoSaveTimer += dt;
+    if (ecoSaveTimer >= 3) {
+      ecoSaveTimer = 0;
+      saveEco();
+    }
+    if (fuelM <= 0 && !limpMode && !uiModal) {
+      speed = 0;
+      keys.gas = false;
+      openFuelEmpty();
+    }
+  }
+
+  function updateEcoHud(now) {
+    if (now - lastEcoHudDraw < 100) return;
+    lastEcoHudDraw = now;
+    if (!$('eco-fuel-val')) return;
+
+    const fuelPct = clamp(fuelM / FUEL_RANGE_M, 0, 1) * 100;
+    $('eco-fuel-val').textContent = Math.round(fuelPct) + '%';
+    const fuelBar = $('eco-fuel-bar');
+    fuelBar.style.width = fuelPct.toFixed(1) + '%';
+    fuelBar.className = fuelPct < 12 ? 'low' : (fuelPct < 32 ? 'mid' : '');
+
+    for (const p of ['pads', 'oil', 'plugs']) {
+      const left = getWearLeftPct(p);
+      const val = $('wear-' + p + '-val');
+      const bar = $('wear-' + p + '-bar');
+      if (val) val.textContent = `${WEAR_ICONS[p]} ${Math.round(left)}%`;
+      if (bar) {
+        bar.style.width = Math.max(2, left).toFixed(0) + '%';
+        bar.className = left < 20 ? 'low' : (left < 45 ? 'mid' : '');
+      }
+    }
+
+    $('eco-bank').textContent = Math.floor(bankPoints).toLocaleString('ru-RU') + ' ₽';
+
+    const orderHud = $('order-hud');
+    if (activeOrder) {
+      orderHud.hidden = false;
+      orderHud.classList.toggle('late', activeOrder.timeLeft <= 0);
+      $('order-title').textContent = `🍔 ЗАКАЗ · ${activeOrder.restaurant}`;
+      $('order-time').textContent = activeOrder.timeLeft >= 0
+        ? formatClock(activeOrder.timeLeft)
+        : '−' + formatClock(-activeOrder.timeLeft);
+      $('order-dist').textContent = Math.max(0, Math.ceil(activeOrder.remainingM)) + ' м';
+      const est = Math.round(activeOrder.baseReward * (0.45 + 0.55 * clamp(activeOrder.timeLeft / activeOrder.timeLimit, 0, 1)));
+      $('order-reward').textContent = '~' + est.toLocaleString('ru-RU') + ' ₽';
+    } else {
+      orderHud.hidden = true;
+    }
+  }
+
+  $('btn-pause').addEventListener('click', e => {
+    e.preventDefault();
+    if (started && !ended && !uiModal) togglePause();
+  });
+
+  /* =========================================================================
+   * 17. ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ, ФИЗИКА ТЮНИНГА, ТРАМПЛИНОВ И РЕНДЕРИНГ
    * ========================================================================= */
   renderMainMenu();
 
@@ -3579,6 +4697,13 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     const dt = Math.min(0.04, (now - lastTime) / 1000);
     lastTime = now;
 
+    // Пауза и открытые модальные окна (съезды, ДТП, пустой бак) полностью
+    // останавливают симуляцию: таймеры заказов и износ не тикают.
+    if (paused || uiModal) {
+      renderer.render(scene, camera);
+      return;
+    }
+
     if (highBeamTimer > 0) {
       highBeamTimer -= dt;
       if (highBeamTimer <= 0) $('badge-beam').hidden = true;
@@ -3591,6 +4716,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
     const bike = selectedBike();
     const effStats = getBikeEffectiveStats(bike.id);
+    applyWearToStats(effStats);
     const isQute = bike.vType === 'qute' || bike.vType === 'yura';
     const isYura = bike.vType === 'yura';
     const hasUpgradedBrakes = hasUpgradeInstalled(bike.id, 'new_brakes');
@@ -3609,7 +4735,11 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
     if (started && !ended) {
       const prevSpeed = speed;
-      const effectiveMaxSpeed = effStats.maxSpeed;
+      accidentCooldown = Math.max(0, accidentCooldown - dt);
+      // Пустой бак без эвакуатора: жёсткое ограничение 5 км/ч, не зависит от тюнинга
+      const effectiveMaxSpeed = (limpMode && fuelM <= 0)
+        ? Math.min(effStats.maxSpeed, LIMP_MAX_SPEED)
+        : effStats.maxSpeed;
       const effectiveAccel = effStats.accel;
       const speedRatio = speed / effectiveMaxSpeed;
 
@@ -3623,6 +4753,9 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       }
       if (keys.brake) {
         speed = Math.max(0, speed - effStats.brakeDecel * dt);
+      }
+      if (speed > effectiveMaxSpeed) {
+        speed = Math.max(effectiveMaxSpeed, speed - 60 * dt);
       }
 
       tailLightBrakeMat.emissiveIntensity = keys.brake ? 3.4 : 1.1;
@@ -3680,6 +4813,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       const forwardMeters = (speed / 3.6) * dt * 1.45;
       playerS += forwardMeters;
       distance += (speed * dt) / 3600;
+
+      // 3.1 Экономика: расход топлива, износ деталей и таймер заказа
+      tickEconomy(dt, forwardMeters);
+      tickOrder(dt);
 
       // 4. ФИЗИКА ТРАМПЛИНОВ И ПРЫЖКОВ
       let surfaceRampHeight = 0;
@@ -3907,7 +5044,11 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
       }
     }
 
-    // 13. Пешеходы
+    // 13. Съезды, указатели и маркер точки доставки
+    updateExitWorld();
+    updateDeliveryMarker();
+
+    // 14. Пешеходы
     for (const ped of pedestrians) {
       ped.s += ped.walkSpeed * dt;
       if (ped.s < playerS - 30) ped.s += 26 * 16;
@@ -3993,8 +5134,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
             spawnFloatingPopup(`+${popVal} ₽ (ПЕРЕЛЁТ ×${cCount})`, car.model.root.position, cCount >= 2 ? '#00e5ff' : '#fff176');
             playJumpSound('overfly', cCount);
           }
-        } else if (horizOverlap && speed > 22) {
-          crashGame();
+        } else if (horizOverlap && speed > 22 && accidentCooldown <= 0) {
+          handleAccident(car);
         } else if (!jumpState.airborne && !car.nearMissAwarded && dS < 2.2 && dLat < (car.model.halfWidth + 1.15) && speed > 80) {
           car.nearMissAwarded = true;
           comboCount++;
@@ -4007,6 +5148,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
     // 15. Обновление приборной панели или экранного HUD
     const activeMult = (laneOffset < -0.15 ? 2 : 1);
     updateCockpitDashboard(now, speed, distance, score, activeMult, highBeamTimer > 0);
+    updateEcoHud(now);
 
     renderer.render(scene, camera);
   }
