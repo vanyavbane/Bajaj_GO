@@ -12,6 +12,49 @@ export function initRoadSurface() {
   const RIBBON_LEN = 350;
   const RIBBON_SEGS = 140;
   const RIBBON_BEHIND = 30;
+  const ROW = RIBBON_SEGS + 1;
+  const sampleX = new Float32Array(ROW);
+  const sampleY = new Float32Array(ROW);
+  const sampleZ = new Float32Array(ROW);
+  const rightX = new Float32Array(ROW);
+  const rightZ = new Float32Array(ROW);
+
+  function sampleCenterline(playerS) {
+    for (let r = 0; r < ROW; r++) {
+      const frac = r / RIBBON_SEGS;
+      const s = playerS - RIBBON_BEHIND + (1 - frac) * RIBBON_LEN;
+      const dx = G.roadDX(s);
+      const lh = Math.hypot(dx, 1) || 1;
+      sampleX[r] = G.roadX(s);
+      sampleY[r] = G.roadY(s);
+      sampleZ[r] = -s;
+      rightX[r] = 1 / lh;
+      rightZ[r] = dx / lh;
+    }
+  }
+
+  function shadeStrip(geo) {
+    const norm = geo.attributes.normal.array;
+    for (let r = 0; r < ROW; r++) {
+      const ahead = r < ROW - 1;
+      const r2 = ahead ? r + 1 : r - 1;
+      const sign = ahead ? 1 : -1;
+      const ax = (sampleX[r2] - sampleX[r]) * sign;
+      const ay = (sampleY[r2] - sampleY[r]) * sign;
+      const az = (sampleZ[r2] - sampleZ[r]) * sign;
+      const bx = rightX[r];
+      const bz = rightZ[r];
+      let nx = ay * bz;
+      let ny = az * bx - ax * bz;
+      let nz = -ay * bx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      nx /= len; ny /= len; nz /= len;
+      const o = r * 6;
+      norm[o] = nx; norm[o + 1] = ny; norm[o + 2] = nz;
+      norm[o + 3] = nx; norm[o + 4] = ny; norm[o + 5] = nz;
+    }
+    geo.attributes.normal.needsUpdate = true;
+  }
 
   function makeRibbon(width, mat) {
     const geo = new THREE.PlaneGeometry(width, RIBBON_LEN, 1, RIBBON_SEGS);
@@ -56,64 +99,91 @@ export function initRoadSurface() {
     dashMeshes.push({ mesh: dm, laneX: i % 2 === 0 ? -4.75 : 4.75, baseIdx: Math.floor(i / 2) });
   }
 
-  function updateStripRibbon(mesh, playerS, lateralCenter, width, yOffset) {
+  function updateStripRibbon(mesh, lateralCenter, width, yOffset) {
     const pos = mesh.geometry.attributes.position;
     const halfW = width * 0.5;
-    for (let r = 0; r <= RIBBON_SEGS; r++) {
-      const frac = r / RIBBON_SEGS;
-      const s = playerS - RIBBON_BEHIND + (1 - frac) * RIBBON_LEN;
-      const yaw = -Math.atan(G.roadDX(s));
-      const cosY = Math.cos(-yaw), sinY = Math.sin(-yaw);
-      const cx = G.roadX(s), cy = G.roadY(s) + yOffset, cz = -s;
-
-      const oL = lateralCenter - halfW;
-      const oR = lateralCenter + halfW;
+    const oL = lateralCenter - halfW;
+    const oR = lateralCenter + halfW;
+    for (let r = 0; r < ROW; r++) {
+      const cx = sampleX[r];
+      const cy = sampleY[r] + yOffset;
+      const cz = sampleZ[r];
+      const rx = rightX[r];
+      const rz = rightZ[r];
       const idx = r * 2;
-      pos.setXYZ(idx,     cx + cosY * oL, cy, cz + sinY * oL);
-      pos.setXYZ(idx + 1, cx + cosY * oR, cy, cz + sinY * oR);
+      pos.setXYZ(idx, cx + rx * oL, cy, cz + rz * oL);
+      pos.setXYZ(idx + 1, cx + rx * oR, cy, cz + rz * oR);
     }
     pos.needsUpdate = true;
-    mesh.geometry.computeVertexNormals();
+    shadeStrip(mesh.geometry);
   }
 
-  function updateSlopeRibbons(playerS) {
+  function shadeSlope(geo, y0, y1, y2, x0, x1, x2) {
+    const norm = geo.attributes.normal.array;
+    for (let r = 0; r < ROW; r++) {
+      const ahead = r < ROW - 1;
+      const r2 = ahead ? r + 1 : r - 1;
+      const sign = ahead ? 1 : -1;
+      const ax = (sampleX[r2] - sampleX[r]) * sign;
+      const ay = (sampleY[r2] - sampleY[r]) * sign;
+      const az = (sampleZ[r2] - sampleZ[r]) * sign;
+      const rx = rightX[r];
+      const rz = rightZ[r];
+      const write = (slot, latA, latB, hA, hB) => {
+        const vx = rx * (latB - latA);
+        const vy = hB - hA;
+        const vz = rz * (latB - latA);
+        let nx = ay * vz - az * vy;
+        let ny = az * vx - ax * vz;
+        let nz = ax * vy - ay * vx;
+        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const len = Math.hypot(nx, ny, nz) || 1;
+        const o = (r * 3 + slot) * 3;
+        norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
+      };
+      write(0, x0, x1, y0, y1);
+      write(1, x0, x2, y0, y2);
+      write(2, x1, x2, y1, y2);
+    }
+    geo.attributes.normal.needsUpdate = true;
+  }
+
+  function updateSlopeRibbons() {
     const posL = slopeLeftMesh.geometry.attributes.position;
     const posR = slopeRightMesh.geometry.attributes.position;
-    for (let r = 0; r <= RIBBON_SEGS; r++) {
-      const frac = r / RIBBON_SEGS;
-      const s = playerS - RIBBON_BEHIND + (1 - frac) * RIBBON_LEN;
-      const yaw = -Math.atan(G.roadDX(s));
-      const cosY = Math.cos(-yaw), sinY = Math.sin(-yaw);
-      const cx = G.roadX(s), cy = G.roadY(s), cz = -s;
+    for (let r = 0; r < ROW; r++) {
+      const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
+      const rx = rightX[r], rz = rightZ[r];
       const idx = r * 3;
 
       const l0 = -95, l1 = -22, l2 = -12.7;
-      posL.setXYZ(idx,     cx + cosY * l0, cy - 4.5, cz + sinY * l0);
-      posL.setXYZ(idx + 1, cx + cosY * l1, cy + 1.8, cz + sinY * l1);
-      posL.setXYZ(idx + 2, cx + cosY * l2, cy + 0.08, cz + sinY * l2);
+      posL.setXYZ(idx,     cx + rx * l0, cy - 4.5, cz + rz * l0);
+      posL.setXYZ(idx + 1, cx + rx * l1, cy + 1.8, cz + rz * l1);
+      posL.setXYZ(idx + 2, cx + rx * l2, cy + 0.08, cz + rz * l2);
 
       const r0 = 12.7, r1 = 22, r2 = 95;
-      posR.setXYZ(idx,     cx + cosY * r0, cy + 0.08, cz + sinY * r0);
-      posR.setXYZ(idx + 1, cx + cosY * r1, cy + 1.8, cz + sinY * r1);
-      posR.setXYZ(idx + 2, cx + cosY * r2, cy - 4.5, cz + sinY * r2);
+      posR.setXYZ(idx,     cx + rx * r0, cy + 0.08, cz + rz * r0);
+      posR.setXYZ(idx + 1, cx + rx * r1, cy + 1.8, cz + rz * r1);
+      posR.setXYZ(idx + 2, cx + rx * r2, cy - 4.5, cz + rz * r2);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
-    slopeLeftMesh.geometry.computeVertexNormals();
-    slopeRightMesh.geometry.computeVertexNormals();
+    shadeSlope(slopeLeftMesh.geometry, -4.5, 1.8, 0.08, -95, -22, -12.7);
+    shadeSlope(slopeRightMesh.geometry, 0.08, 1.8, -4.5, 12.7, 22, 95);
   }
 
   function updateRoadSurface(playerS) {
-    updateStripRibbon(roadMesh, playerS, 0, G.ROAD_WIDTH, 0);
-    updateStripRibbon(curbLeftMesh, playerS, -9.68, 0.35, 0.12);
-    updateStripRibbon(curbRightMesh, playerS, 9.68, 0.35, 0.12);
-    updateStripRibbon(sidewalkLeftMesh, playerS, -11.3, 3.2, 0.11);
-    updateStripRibbon(sidewalkRightMesh, playerS, 11.3, 3.2, 0.11);
-    updateStripRibbon(centerDoubleLine1, playerS, -0.22, 0.13, 0.025);
-    updateStripRibbon(centerDoubleLine2, playerS, 0.22, 0.13, 0.025);
-    updateStripRibbon(edgeLineLeft, playerS, -9.25, 0.15, 0.025);
-    updateStripRibbon(edgeLineRight, playerS, 9.25, 0.15, 0.025);
-    updateSlopeRibbons(playerS);
+    sampleCenterline(playerS);
+    updateStripRibbon(roadMesh, 0, G.ROAD_WIDTH, 0);
+    updateStripRibbon(curbLeftMesh, -9.68, 0.35, 0.12);
+    updateStripRibbon(curbRightMesh, 9.68, 0.35, 0.12);
+    updateStripRibbon(sidewalkLeftMesh, -11.3, 3.2, 0.11);
+    updateStripRibbon(sidewalkRightMesh, 11.3, 3.2, 0.11);
+    updateStripRibbon(centerDoubleLine1, -0.22, 0.13, 0.025);
+    updateStripRibbon(centerDoubleLine2, 0.22, 0.13, 0.025);
+    updateStripRibbon(edgeLineLeft, -9.25, 0.15, 0.025);
+    updateStripRibbon(edgeLineRight, 9.25, 0.15, 0.025);
+    updateSlopeRibbons();
 
     const startDashS = Math.floor((playerS - 20) / 11) * 11;
     for (const d of dashMeshes) {

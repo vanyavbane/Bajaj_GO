@@ -107,45 +107,46 @@ export function initCamera() {
     for (let i = 0; i < bars; i++) {
       const active = (i / bars) <= rpmFrac;
       G.dashCtx.fillStyle = !active ? '#163042' : (i > 17 ? '#ff1744' : i > 13 ? '#ffab00' : '#00e5ff');
-      G.dashCtx.fillRect(24 + i * 21, 22, 16, 20);
+      G.dashCtx.fillRect(24 + i * 21, 16, 16, 16);
     }
-
-    G.dashCtx.fillStyle = '#ffffff';
-    G.dashCtx.font = '900 108px system-ui,Segoe UI,Arial';
-    G.dashCtx.textAlign = 'right';
-    G.dashCtx.fillText(String(Math.round(speedVal)), 255, 162);
-
-    G.dashCtx.fillStyle = '#4fc3f7';
-    G.dashCtx.font = '900 22px system-ui,Segoe UI,Arial';
-    G.dashCtx.textAlign = 'left';
-    G.dashCtx.fillText(`KM/H (MAX ${maxSpd})`, 265, 108);
-
-    G.dashCtx.fillStyle = '#ffd54f';
-    G.dashCtx.font = '900 32px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText('GEAR ' + gear, 265, 152);
-
-    G.dashCtx.fillStyle = '#90caf9';
-    G.dashCtx.font = '800 18px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText('ДИСТАНЦИЯ', 24, 198);
-    G.dashCtx.fillStyle = '#ffffff';
-    G.dashCtx.font = '900 30px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText(distVal.toFixed(2) + ' KM', 24, 232);
-
-    G.dashCtx.fillStyle = '#ffcc80';
-    G.dashCtx.font = '800 18px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText('РУБЛИ ' + (multVal > 1 ? '(×' + multVal + ')' : ''), 265, 198);
-    G.dashCtx.fillStyle = '#ffb64e';
-    G.dashCtx.font = '900 32px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText(String(Math.floor(scoreVal)), 265, 232);
 
     G.dashCtx.fillStyle = highBeamActive ? '#00b0ff' : '#132a3a';
     G.dashCtx.beginPath();
-    G.dashCtx.arc(465, 82, 18, 0, Math.PI * 2);
+    G.dashCtx.arc(470, 46, 16, 0, Math.PI * 2);
     G.dashCtx.fill();
     G.dashCtx.fillStyle = highBeamActive ? '#ffffff' : '#375368';
-    G.dashCtx.font = '900 16px Arial';
+    G.dashCtx.font = '900 15px Arial';
     G.dashCtx.textAlign = 'center';
-    G.dashCtx.fillText('HI', 465, 88);
+    G.dashCtx.fillText('HI', 470, 51);
+
+    G.dashCtx.fillStyle = '#ffffff';
+    G.dashCtx.font = '900 96px system-ui,Segoe UI,Arial';
+    G.dashCtx.textAlign = 'right';
+    G.dashCtx.fillText(String(Math.round(speedVal)), 248, 142);
+
+    G.dashCtx.textAlign = 'left';
+    G.dashCtx.fillStyle = '#4fc3f7';
+    G.dashCtx.font = '900 20px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText('КМ/Ч', 264, 86);
+    G.dashCtx.fillText('MAX ' + Math.round(maxSpd), 264, 112);
+
+    G.dashCtx.fillStyle = '#ffd54f';
+    G.dashCtx.font = '900 28px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText('GEAR ' + gear, 264, 148);
+
+    G.dashCtx.fillStyle = '#90caf9';
+    G.dashCtx.font = '800 16px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText('ДИСТАНЦИЯ', 24, 178);
+    G.dashCtx.fillStyle = '#ffffff';
+    G.dashCtx.font = '900 26px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText(distVal.toFixed(2) + ' KM', 24, 208);
+
+    G.dashCtx.fillStyle = '#ffcc80';
+    G.dashCtx.font = '800 16px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText('РУБЛИ' + (multVal > 1 ? ' ×' + multVal : ''), 264, 178);
+    G.dashCtx.fillStyle = '#ffb64e';
+    G.dashCtx.font = '900 26px system-ui,Segoe UI,Arial';
+    G.dashCtx.fillText(String(Math.floor(scoreVal)), 264, 208);
 
     G.dashTex.needsUpdate = true;
   }

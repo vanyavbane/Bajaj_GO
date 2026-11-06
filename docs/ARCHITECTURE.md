@@ -1,11 +1,11 @@
 # Архитектура
 
-Разметка и CSS — в `index.html`. Логика — ES-модули в `js/`, без сборщика.
+Разметка — в `index.html`, стили — в `css/game.css`, логика — ES-модули в `js/`, без сборщика.
 Точка входа — `js/main.js`: она вызывает `init…()` строго по порядку секций.
 Общее состояние и функции, которые нужны соседним секциям, лежат на объекте `G`
 из `js/state.js`. Секции не импортируют друг друга: чужой код зовут как `G.placeOnRoad`,
-`G.selectedBike` и так далее. Three.js подключается один раз, через import map в HTML
-(`import * as THREE from 'three'`).
+`G.selectedBike` и так далее. Three.js r160 лежит в `vendor/three/three.module.js`
+и подключается один раз, через import map в HTML (`import * as THREE from 'three'`).
 
 Имена секций совпадают с комментариями в файлах.
 
@@ -22,8 +22,13 @@
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
 |   | `js/effects.js` | частицы прыжка, всплывающие очки, звуки прыжка и маркерной зоны |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах |
-| 9 | `js/traffic.js` | `createVehicleModel`, `vehicleTypes`, `trafficPool`, `resetTrafficVehicle`, перестроения, мигание фар |
-| 10 | `js/bike.js` | сборка моделей мотоциклов, кокпит, тюнинг-детали, `applyVisualTuningToModel` |
+| 9 | `js/traffic.js` | `vehicleTypes`, `trafficPool`, `resetTrafficVehicle`, перестроения, мигание фар |
+|   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике |
+|   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
+| 10 | `js/bike.js` | сборка байка: материалы, фары, `applyVisualTuningToModel` |
+|   | `js/models/motorcycle.js` | меш мотоцикла, райдер, детали тюнинга |
+|   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
+|   | `js/models/cockpit.js` | кокпит мотоцикла и Qute от первого лица |
 | 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
@@ -72,9 +77,12 @@ y = roadY(s)                   // рельеф
 z = -s
 ```
 
-`placeOnRoad(obj, s, lateralOffset, heightOffset)` — ставит объект на дорогу
-с учётом поворота и уклона. Любой новый объект на трассе ставить только через неё,
-иначе он «повиснет» в воздухе или уедет с полотна.
+`placeOnRoad(obj, s, lateralOffset, heightOffset, extraYaw, extraPitch, extraRoll)` —
+ставит объект на дорогу. Ориентация строится по касательной `(roadDX, roadDY, -1)`,
+нос модели смотрит вдоль неё (−Z). Смещение по полосе остаётся горизонтальным:
+полотно без крена. Дополнительные рыскание, тангаж и крен — в локальных осях
+уже поставленного объекта (руль, прыжок, наклон байка). Любой новый объект на
+трассе ставить только через неё, иначе он «повиснет» в воздухе или уедет с полотна.
 
 ## Цикл игры
 
@@ -150,7 +158,8 @@ animate(now)
 
 | Задача | Где |
 |---|---|
-| Добавить машину в трафик | `createVehicleModel` (новая ветка) + `vehicleTypes` в `js/traffic.js` |
+| Добавить машину в трафик | `createVehicleModel` в `js/models/vehicles.js` + `vehicleTypes` в `js/traffic.js` |
+| Общая геометрия кузовов | `box` / `cylinder` / `plane` в `js/geom.js`. Геометрию после выдачи не крутить |
 | Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` |
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` в `js/atmosphere.js` |
@@ -170,7 +179,7 @@ animate(now)
 
 - **ES-модули**: состояние на объекте `G`, в `window` его нет.
   Из консоли браузера к полям не достучаться — только через отладчик/точки останова.
-- **Three.js с CDN**: единственная внешняя зависимость, адрес в import map в `index.html`.
-  Для офлайна и APK библиотеку нужно положить рядом и поменять эту запись.
+- **Three.js локально**: `vendor/three/three.module.js`, ревизия 160, лицензия MIT.
+  Import map в `index.html` указывает на этот файл. Внешних скриптов нет.
 - **Никаких сборщиков**: нет `package.json`, нет бандлера. Модули грузятся браузером напрямую,
   поэтому файл нужно открывать через локальный HTTP-сервер, а не двойным щелчком.
