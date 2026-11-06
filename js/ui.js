@@ -195,7 +195,8 @@ export function initUi() {
       </div>
     `;
 
-    overlay.querySelectorAll('[data-buy]').forEach(btn =>
+    overlay.querySelectorAll('[data-buy]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const bike = G.bikeCatalog.find(x => x.id === btn.dataset.buy);
         if (!bike || G.ownedBikes.includes(bike.id) || G.bankPoints < bike.price) return;
@@ -205,17 +206,19 @@ export function initUi() {
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
-      })
-    );
-    overlay.querySelectorAll('[data-select]').forEach(btn =>
+      });
+    });
+    overlay.querySelectorAll('[data-select]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         G.selectedBikeId = btn.dataset.select;
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
-      })
-    );
-    overlay.querySelectorAll('[data-swatch-bike]').forEach(btn =>
+      });
+    });
+    overlay.querySelectorAll('[data-swatch-bike]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const bId = btn.dataset.swatchBike;
         const hex = Number(btn.dataset.swatchHex);
@@ -225,8 +228,8 @@ export function initUi() {
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
-      })
-    );
+      });
+    });
     $('shop-back').addEventListener('click', renderMainMenu);
   }
 
@@ -322,6 +325,7 @@ export function initUi() {
     `;
 
     overlay.querySelectorAll('[data-buy-upg]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upgId = btn.dataset.buyUpg;
         const upg = G.tuningCatalog.find(u => u.id === upgId);
@@ -343,6 +347,7 @@ export function initUi() {
     });
 
     overlay.querySelectorAll('[data-toggle-upg]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upgId = btn.dataset.toggleUpg;
         const upg = G.tuningCatalog.find(u => u.id === upgId);

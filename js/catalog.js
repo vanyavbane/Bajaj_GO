@@ -231,7 +231,8 @@ export function initCatalog() {
 
   const isHighEndDevice = (navigator.hardwareConcurrency || 4) >= 6 && (window.devicePixelRatio || 1) >= 1;
   G.lightingQuality = localStorage.getItem('bajajGO_lighting') || (isHighEndDevice ? 'dlss' : 'normal');
-  G.cameraMode = localStorage.getItem('bajajGO_camera') || 'cockpit'; // 'cockpit' | 'third'
+  const savedCamera = localStorage.getItem('bajajGO_camera');
+  G.cameraMode = savedCamera === 'third' ? 'third' : 'cockpit';
 
   function selectedBike() {
     const b = G.bikeCatalog.find(x => x.id === G.selectedBikeId) || G.bikeCatalog[0];

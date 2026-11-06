@@ -675,6 +675,7 @@ export function initEconomy() {
     `, 'exit');
 
     document.querySelectorAll('[data-rest]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         if (activeOrder) return;
         const r = RESTAURANTS[Number(btn.dataset.rest)];
@@ -885,6 +886,7 @@ export function initEconomy() {
     `, 'exit');
 
     document.querySelectorAll('[data-service]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const part = btn.dataset.service;
         const price = getServicePrice(part);
@@ -949,6 +951,7 @@ export function initEconomy() {
     `, 'exit');
 
     document.querySelectorAll('[data-buy-upg]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upg = G.tuningCatalog.find(u => u.id === btn.dataset.buyUpg);
         if (!upg) return;
@@ -968,6 +971,7 @@ export function initEconomy() {
     });
 
     document.querySelectorAll('[data-toggle-upg]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         const upg = G.tuningCatalog.find(u => u.id === btn.dataset.toggleUpg);
         if (!upg) return;

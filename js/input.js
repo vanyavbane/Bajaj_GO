@@ -59,6 +59,7 @@ export function initInput() {
   addEventListener('blur', () => Object.keys(G.keys).forEach(k => (G.keys[k] = false)));
 
   document.querySelectorAll('.ctrl[data-key]').forEach(btn => {
+    if (!(btn instanceof HTMLElement)) return;
     const k = btn.dataset.key;
     const down = e => { e.preventDefault(); G.keys[k] = true; btn.classList.add('on'); };
     const up = e => { e.preventDefault(); G.keys[k] = false; btn.classList.remove('on'); };
