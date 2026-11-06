@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>bajaj GO</title>
+<style>
+*{box-sizing:border-box;user-select:none;-webkit-user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a101d;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+#view{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%}
+
+/* ИГРОВОЙ HUD */
+#hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:8}
+.brand{position:absolute;top:16px;left:20px;font-weight:900;font-style:italic;letter-spacing:2px;font-size:clamp(20px,3vw,32px)}
+.brand span{color:#fff176}
+.brand small{display:block;font-size:10px;letter-spacing:3px;color:#9cb8d8;font-style:normal;margin-top:2px}
+#status-badges{position:absolute;top:70px;right:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.badge{background:rgba(9,17,29,.84);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:800;letter-spacing:1px;backdrop-filter:blur(4px)}
+.badge.x2{border-color:#ff5252;color:#ff8a80;background:rgba(60,10,15,.85)}
+.badge.combo{border-color:#ffb64e;color:#ffd180}
+.badge.beam{border-color:#4fc3f7;color:#81d4fa}
+.badge.cam{border-color:#81c784;color:#c8e6c9}
+#hint{position:absolute;top:15%;left:50%;transform:translateX(-50%);font-weight:900;text-align:center;letter-spacing:2px;white-space:nowrap;font-size:clamp(13px,2vw,22px);transition:opacity .35s}
+#hint small{display:block;font-size:11px;letter-spacing:1px;color:#c8d8e8;margin-top:5px}
+#bottom{position:absolute;left:18px;bottom:16px;background:rgba(9,17,29,.84);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:9px 13px;font-size:11px;color:#d6e2f1;line-height:1.45;backdrop-filter:blur(4px)}
+
+/* ЭКОНОМИКА В HUD: ТОПЛИВО, ИЗНОС, ЗАКАЗ, ПАУЗА */
+#eco-hud{
+  position:absolute;top:82px;left:20px;width:218px;
+  background:rgba(9,17,29,.84);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;padding:10px 12px;
+  backdrop-filter:blur(4px);font-size:11px;color:#d6e2f1;
+}
+.eco-row{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;letter-spacing:1px;color:#9cb8d8}
+.eco-row b{color:#fff;font-size:12px;letter-spacing:0}
+.eco-bar{height:6px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin:4px 0 9px}
+.eco-bar i{display:block;height:100%;width:100%;background:#6f9ab0;border-radius:4px;transition:width .25s linear,background .25s}
+.eco-bar i.mid{background:#b09060}
+.eco-bar i.low{background:#b0605a}
+.eco-wear{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+.eco-wear>div{min-width:0}
+.eco-wear span{display:block;font-size:9px;color:#9cb8d8;letter-spacing:.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eco-wear .wbar{height:4px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-top:3px}
+.eco-wear .wbar i{display:block;height:100%;width:100%;background:#6f9ab0;transition:width .25s linear,background .25s}
+.eco-wear .wbar i.mid{background:#b09060}
+.eco-wear .wbar i.low{background:#b0605a}
+.eco-bank{display:flex;justify-content:space-between;margin-top:8px;border-top:1px solid rgba(255,255,255,.12);padding-top:7px;font-weight:800;letter-spacing:1px;color:#9cb8d8}
+.eco-bank b{color:#ffd08a;letter-spacing:0;font-size:12px}
+
+#order-hud{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  min-width:250px;max-width:min(360px,44vw);
+  background:rgba(9,17,29,.86);border:1px solid rgba(255,205,130,.4);
+  border-radius:12px;padding:7px 14px;text-align:center;
+  backdrop-filter:blur(4px);z-index:2;
+}
+#order-hud[hidden]{display:none!important}
+#order-hud .order-title{font-size:10px;font-weight:900;letter-spacing:1.5px;color:#ffd08a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#order-hud .order-row{display:flex;justify-content:center;gap:14px;margin-top:2px;font-size:12px;font-weight:900;color:#fff}
+#order-hud .order-row .t{color:#ffd08a;font-variant-numeric:tabular-nums}
+#order-hud.late{border-color:#b0605a;background:rgba(40,16,18,.88)}
+#order-hud.late .t{color:#ff9a90}
+
+#btn-pause{
+  position:absolute;top:16px;right:20px;pointer-events:auto;
+  width:44px;height:44px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.28);background:rgba(9,17,29,.84);
+  color:#e8eef5;font-size:18px;font-weight:900;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);transition:background .15s,transform .15s;z-index:3;
+}
+#btn-pause:hover{background:rgba(28,48,78,.95);transform:translateY(-1px)}
+
+#eco-toast{
+  position:absolute;top:26%;left:50%;transform:translateX(-50%) translateY(-6px);
+  background:rgba(9,17,29,.92);border:1px solid rgba(255,205,130,.45);
+  border-radius:11px;padding:8px 16px;font-size:12px;font-weight:900;letter-spacing:.5px;
+  color:#ffe0a8;white-space:nowrap;opacity:0;transition:opacity .25s,transform .25s;
+  pointer-events:none;z-index:4;max-width:84vw;overflow:hidden;text-overflow:ellipsis;
+}
+#eco-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#eco-toast.bad{border-color:rgba(255,120,110,.55);color:#ffb0a8}
+
+/* ПОДСКАЗКА ПРИ ВЪЕЗДЕ В МАРКЕРНУЮ ЗОНУ СЪЕЗДА */
+#exit-hint{
+  position:absolute;top:72px;left:50%;
+  transform:translateX(-50%) translateY(-8px);
+  display:flex;align-items:center;gap:8px;
+  background:rgba(9,17,29,.9);
+  border:1px solid rgba(90,235,150,.6);
+  border-radius:11px;padding:7px 14px;
+  font-size:13px;font-weight:900;letter-spacing:1px;
+  color:#c6f7d8;white-space:nowrap;
+  opacity:0;pointer-events:none;z-index:3;
+  transition:opacity .2s,transform .2s;
+  text-shadow:0 2px 6px rgba(0,0,0,.85);
+}
+#exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#exit-hint.service{border-color:rgba(255,210,74,.65);color:#ffe6a3}
+#exit-hint .arr{font-size:15px;letter-spacing:0}
+
+/* МЕНЮ СЪЕЗДОВ, КРИТИЧЕСКИЕ СИТУАЦИИ И ПАУЗА */
+.poi-card{width:min(560px,96vw)}
+.poi-title{font-size:24px;font-weight:900;letter-spacing:1px;margin:0}
+.poi-sub{color:#9ec2e6;letter-spacing:2px;font-size:11px;margin:6px 0 12px;font-weight:800}
+.poi-list{display:grid;gap:8px;margin:10px 0;max-height:52vh;overflow-y:auto;padding-right:4px}
+.poi-row{
+  display:flex;align-items:center;gap:10px;text-align:left;width:100%;
+  border:1px solid rgba(255,255,255,.18);background:#0c1625;border-radius:11px;
+  padding:9px 12px;color:#fff;cursor:pointer;font-size:13px;font-weight:800;
+  transition:background .15s,border-color .15s;
+}
+.poi-row:hover{background:#112238;border-color:rgba(140,190,230,.5)}
+.poi-row .poi-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;background:rgba(255,255,255,.08);flex:0 0 auto}
+.poi-row .poi-body{flex:1;min-width:0}
+.poi-row .poi-body small{display:block;color:#9bb4cf;font-weight:600;font-size:11px;margin-top:2px;white-space:normal}
+.poi-row .poi-price{color:#ffd08a;white-space:nowrap;font-size:12px}
+.poi-row:disabled,.poi-row.disabled{opacity:.45;cursor:default}
+.poi-note{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:9px 12px;font-size:12px;color:#c6d6e8;text-align:left;line-height:1.45;margin:8px 0}
+.poi-balance{display:inline-block;background:rgba(255,208,138,.14);border:1px solid rgba(255,208,138,.4);color:#ffe0a8;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:900;margin-bottom:6px}
+.pause-card{width:min(420px,94vw)}
+.pause-stats{display:grid;gap:6px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 14px;margin:12px 0;font-size:12px;text-align:left;color:#c6d6e8}
+.pause-stats div{display:flex;justify-content:space-between;gap:10px}
+.pause-stats b{color:#fff}
+
+@media(max-width:700px){
+  #eco-hud{width:172px;top:72px;padding:8px 9px;font-size:10px}
+  #status-badges{top:64px}
+  #order-hud{max-width:48vw;min-width:0;padding:5px 9px}
+  #order-hud .order-title{font-size:9px}
+  #order-hud .order-row{font-size:10px;gap:8px}
+  #exit-hint{top:64px;font-size:11px;padding:6px 10px;max-width:90vw;overflow:hidden}
+}
+
+/* HUD ТРЕТЬЕГО ЛИЦА (ПРАВЫЙ НИЖНИЙ УГОЛ) */
+#tp-hud{
+  position:fixed;
+  right:20px;
+  bottom:82px;
+  min-width:215px;
+  background:linear-gradient(155deg,rgba(10,19,33,.88),rgba(6,12,22,.94));
+  border:2px solid rgba(100,190,255,.35);
+  border-radius:16px;
+  padding:12px 16px;
+  box-shadow:0 12px 32px rgba(0,0,0,.65);
+  backdrop-filter:blur(6px);
+  pointer-events:none;
+  z-index:9;
+  transition:opacity .22s ease, transform .22s ease;
+}
+#tp-hud[hidden]{display:none!important}
+.tp-speed-row{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.14);padding-bottom:6px;margin-bottom:8px}
+.tp-speed-val{font-size:44px;font-weight:900;line-height:1;color:#fff;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.tp-speed-unit{font-size:12px;font-weight:900;color:#4fc3f7;letter-spacing:1.5px;margin-left:6px}
+.tp-gear{font-size:13px;font-weight:900;color:#ffd54f;background:rgba(255,213,79,.14);border:1px solid rgba(255,213,79,.4);padding:2px 7px;border-radius:6px}
+.tp-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px}
+.tp-stat-box{background:rgba(255,255,255,.04);border-radius:8px;padding:5px 8px}
+.tp-stat-box span{display:block;color:#90caf9;font-size:9px;font-weight:800;letter-spacing:1px}
+.tp-stat-box strong{display:block;color:#fff;font-size:14px;font-weight:900;margin-top:1px;font-variant-numeric:tabular-nums}
+.tp-stat-box.rub strong{color:#ffb64e}
+.tp-extra{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
+.tp-pill{font-size:10px;font-weight:900;padding:3px 7px;border-radius:6px;letter-spacing:.5px}
+.tp-pill.x2{background:rgba(244,67,54,.25);border:1px solid #ff5252;color:#ff8a80}
+.tp-pill.jump{background:rgba(0,229,255,.2);border:1px solid #00e5ff;color:#84ffff}
+
+/* ИНДИКАТОР ПРЫЖКА И ВСПЛЫВАЮЩИЕ БОНУСЫ */
+#jump-live{
+  position:fixed;
+  top:23%;
+  left:50%;
+  transform:translateX(-50%);
+  background:linear-gradient(135deg,rgba(12,28,48,.92),rgba(8,16,30,.95));
+  border:2px solid #00e5ff;
+  border-radius:14px;
+  padding:8px 18px;
+  text-align:center;
+  box-shadow:0 10px 30px rgba(0,229,255,.3);
+  pointer-events:none;
+  z-index:10;
+}
+#jump-live .jl-title{font-size:11px;font-weight:900;color:#80d8ff;letter-spacing:2px}
+#jump-live .jl-stats{font-size:20px;font-weight:900;color:#fff176;margin-top:2px}
+#jump-summary{
+  position:fixed;
+  top:31%;
+  left:50%;
+  transform:translateX(-50%) scale(0.95);
+  background:linear-gradient(135deg,rgba(25,45,25,.94),rgba(10,22,14,.96));
+  border:2px solid #69f0ae;
+  border-radius:14px;
+  padding:10px 22px;
+  text-align:center;
+  font-weight:900;
+  box-shadow:0 12px 35px rgba(0,0,0,.7);
+  pointer-events:none;
+  z-index:10;
+  opacity:0;
+  transition:opacity .25s ease, transform .25s ease;
+}
+#jump-summary.show{opacity:1;transform:translateX(-50%) scale(1)}
+#jump-summary.hard{border-color:#ff5252;background:linear-gradient(135deg,rgba(55,18,22,.94),rgba(28,10,12,.96))}
+
+#floating-popups{position:fixed;inset:0;pointer-events:none;z-index:10;overflow:hidden}
+.float-pop{
+  position:absolute;
+  transform:translate(-50%,-50%);
+  font-weight:900;
+  font-size:18px;
+  color:#fff176;
+  text-shadow:0 2px 8px rgba(0,0,0,.95),0 0 12px rgba(255,193,7,.65);
+  white-space:nowrap;
+  animation:popUp 1.05s cubic-bezier(.16,1,.3,1) forwards;
+}
+@keyframes popUp{
+  0%{opacity:0;transform:translate(-50%,-20%) scale(.7)}
+  20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+  100%{opacity:0;transform:translate(-50%,-135%) scale(.95)}
+}
+
+/* ЭКРАННЫЕ КНОПКИ УПРАВЛЕНИЯ */
+#controls{position:fixed;right:16px;bottom:16px;display:flex;gap:7px;z-index:12}
+.ctrl{width:52px;height:52px;border:1px solid rgba(255,255,255,.4);background:rgba(17,29,49,.82);color:#fff;border-radius:13px;font-size:19px;font-weight:900;touch-action:none;cursor:pointer}
+.ctrl:active,.ctrl.on{background:#2d93a8;border-color:#fff}
+
+/* ГЛАВНОЕ МЕНЮ И ЭКРАНЫ (БЕЗ ЗАТЕМНЕНИЯ ВСЕЙ СЦЕНЫ) */
+#overlay{
+  position:fixed;
+  inset:0;
+  pointer-events:auto;
+  z-index:15;
+  transition:background .3s ease, opacity .25s ease;
+}
+#overlay.mode-main{
+  background:linear-gradient(90deg,rgba(6,11,22,.78) 0%,rgba(6,11,22,.38) 42%,rgba(6,11,22,.05) 100%);
+}
+#overlay.mode-shop{
+  background:radial-gradient(circle at center,rgba(10,20,36,.68),rgba(5,10,18,.88));
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+#overlay.mode-crash{
+  background:rgba(215,35,45,.28);
+  backdrop-filter:blur(2px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+
+/* ЛЕВАЯ КОЛОНКА ГЛАВНОГО МЕНЮ ПО РЕФЕРЕНСУ */
+.main-menu-layout{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  padding:28px 34px;
+  pointer-events:none;
+}
+.mm-top-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  width:100%;
+}
+.mm-left-col{
+  pointer-events:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  max-width:390px;
+}
+/* Voxel-логотип bajaj GO со скоростными штрихами слева */
+.voxel-logo-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:6px;
+}
+.speed-lines{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  align-items:flex-end;
+}
+.speed-lines span{
+  display:block;
+  height:5px;
+  border-radius:3px;
+  background:linear-gradient(90deg,rgba(0,176,255,0),#00e5ff);
+  box-shadow:0 0 10px rgba(0,229,255,.75);
+}
+.speed-lines span:nth-child(1){width:34px}
+.speed-lines span:nth-child(2){width:52px}
+.speed-lines span:nth-child(3){width:26px}
+.voxel-logo{
+  font-size:clamp(44px,6.5vw,68px);
+  font-weight:900;
+  font-style:italic;
+  letter-spacing:-2px;
+  line-height:.95;
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+}
+.voxel-logo .w-bajaj{
+  color:#f5f7fa;
+  text-shadow:
+    0 3px 0 #1b2838,
+    0 6px 0 #0d1520,
+    0 8px 18px rgba(0,0,0,.85);
+  -webkit-text-stroke:2px #0f1824;
+}
+.voxel-logo .w-go{
+  color:#fff59d;
+  text-shadow:
+    -3px 0 0 #00b0ff,
+    0 3px 0 #c79100,
+    0 6px 0 #101926,
+    0 8px 20px rgba(0,176,255,.55);
+  -webkit-text-stroke:2px #101926;
+}
+.mm-selected-badge{
+  font-size:12px;
+  font-weight:800;
+  color:#d0e2f5;
+  background:rgba(10,19,33,.76);
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:9px;
+  padding:6px 11px;
+  margin:6px 0 16px;
+  backdrop-filter:blur(4px);
+}
+.mm-selected-badge b{color:#fff59d}
+.mm-selected-badge .tune-plus{color:#69f0ae;margin-left:4px}
+.mm-btn-stack{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  width:min(340px,86vw);
+}
+.mm-btn-start{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  width:100%;
+  padding:15px 20px;
+  border:2px solid #80d8ff;
+  border-radius:14px;
+  background:linear-gradient(135deg,#0288d1 0%,#00b0ff 55%,#00e5ff 100%);
+  color:#fff;
+  font-size:17px;
+  font-weight:900;
+  letter-spacing:1px;
+  cursor:pointer;
+  box-shadow:0 6px 0 #01579b,0 12px 28px rgba(0,176,255,.5);
+  text-shadow:0 2px 4px rgba(0,0,0,.45);
+  transition:transform .14s ease, filter .14s ease, box-shadow .14s ease;
+}
+.mm-btn-start:hover{
+  filter:brightness(1.08);
+  transform:translateY(-2px);
+  box-shadow:0 8px 0 #01579b,0 16px 34px rgba(0,229,255,.65);
+}
+.mm-btn-start:active{
+  transform:translateY(3px);
+  box-shadow:0 3px 0 #01579b,0 6px 16px rgba(0,176,255,.4);
+}
+.mm-btn-start .ico{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:30px;
+  height:30px;
+  border-radius:8px;
+  background:rgba(0,0,0,.22);
+  font-size:16px;
+}
+.mm-btn-sec{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:12px 16px;
+  border:1px solid rgba(255,255,255,.26);
+  border-radius:12px;
+  background:rgba(12,22,36,.82);
+  color:#fff;
+  font-size:14px;
+  font-weight:800;
+  letter-spacing:.5px;
+  cursor:pointer;
+  backdrop-filter:blur(6px);
+  box-shadow:0 4px 0 rgba(0,0,0,.45),0 8px 20px rgba(0,0,0,.4);
+  transition:transform .14s ease, background .14s ease, border-color .14s ease;
+  text-align:left;
+}
+.mm-btn-sec:hover{
+  background:rgba(22,38,62,.92);
+  border-color:rgba(128,216,255,.55);
+  transform:translateY(-1px);
+}
+.mm-btn-sec:active{transform:translateY(2px)}
+.mm-btn-sec .ico{font-size:17px;width:24px;text-align:center}
+.mm-btn-sec .sub-val{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.1);color:#90caf9}
+.mm-btn-sec .sub-val.on{background:rgba(0,200,83,.25);color:#69f0ae;border:1px solid rgba(105,240,174,.5)}
+
+/* ПРАВЫЙ ВЕРХНИЙ СЧЁТЧИК ВАЛЮТЫ И НИЖНЯЯ ПАНЕЛЬ */
+.mm-currency{
+  pointer-events:auto;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:rgba(10,19,33,.86);
+  border:2px solid rgba(255,182,78,.55);
+  border-radius:14px;
+  padding:9px 16px;
+  font-weight:900;
+  font-size:16px;
+  color:#fff59d;
+  box-shadow:0 8px 24px rgba(0,0,0,.55);
+  backdrop-filter:blur(6px);
+}
+.mm-currency span{color:#9ec2e6;font-size:11px;letter-spacing:1px;text-transform:uppercase}
+.mm-bottom-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  width:100%;
+}
+.mm-dev-info{
+  pointer-events:auto;
+  font-size:12px;
+  font-weight:700;
+  color:#c6d6e8;
+  background:rgba(9,17,29,.75);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:10px;
+  padding:8px 13px;
+  backdrop-filter:blur(4px);
+}
+.mm-corner-icons{
+  pointer-events:auto;
+  display:flex;
+  gap:8px;
+}
+.mm-icon-btn{
+  width:44px;
+  height:44px;
+  border-radius:11px;
+  border:1px solid rgba(255,255,255,.28);
+  background:rgba(12,22,36,.84);
+  color:#fff;
+  font-size:18px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  backdrop-filter:blur(4px);
+  transition:background .15s, transform .15s;
+}
+.mm-icon-btn:hover{background:rgba(28,48,78,.95);transform:translateY(-1px)}
+
+/* МОДАЛЬНОЕ ОКНО ГАРАЖА, ТЮНИНГА И МЕНЮ СМЕРТИ */
+.modal-card{
+  width:min(620px,100%);
+  max-height:92vh;
+  overflow-y:auto;
+  padding:22px 24px;
+  border:1px solid rgba(255,255,255,.26);
+  border-radius:22px;
+  background:linear-gradient(155deg,rgba(18,31,50,.94),rgba(8,14,25,.97));
+  box-shadow:0 24px 80px rgba(0,0,0,.85);
+  text-align:center;
+  backdrop-filter:blur(8px);
+  animation:modalIn .22s cubic-bezier(.16,1,.3,1);
+}
+.modal-card.crash-card{
+  width:min(440px,94vw);
+  border:2px solid rgba(255,100,100,.55);
+  background:linear-gradient(160deg,rgba(26,18,28,.92),rgba(12,14,24,.95));
+  box-shadow:0 20px 70px rgba(0,0,0,.85),0 0 40px rgba(255,50,50,.22);
+}
+@keyframes modalIn{
+  from{opacity:0;transform:scale(.92) translateY(8px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+.sub{color:#9ec2e6;letter-spacing:3px;font-size:11px;margin:6px 0 12px;font-weight:800}
+.crash-title{font-size:32px;font-weight:900;color:#ff8a80;letter-spacing:1px;margin:0}
+.crash-stats{
+  background:rgba(0,0,0,.32);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  padding:12px 16px;
+  margin:14px 0;
+  text-align:left;
+  display:grid;
+  gap:7px;
+  font-size:13px;
+}
+.crash-stats div{display:flex;justify-content:space-between;align-items:center}
+.crash-stats b{font-size:15px;color:#fff}
+.crash-stats b.gold{color:#ffd54f}
+.crash-stats b.cyan{color:#80d8ff}
+
+.primary{width:100%;border:0;border-radius:12px;padding:14px;background:linear-gradient(90deg,#00b0ff,#0288d1);color:#fff;font-weight:900;letter-spacing:1px;font-size:15px;cursor:pointer;margin-top:8px;box-shadow:0 6px 20px rgba(0,176,255,.35)}
+.primary:hover{filter:brightness(1.08)}
+.secondary{width:100%;border:1px solid rgba(255,255,255,.28);border-radius:12px;padding:12px;background:#16263b;color:#fff;font-weight:800;letter-spacing:1px;font-size:13px;cursor:pointer;margin-top:9px}
+.secondary:hover{background:#1e334f}
+
+.shop-list{display:grid;gap:10px;margin:10px 0;text-align:left;max-height:50vh;overflow-y:auto;padding-right:4px}
+.bike-card{border:1px solid rgba(255,255,255,.18);background:#0c1625;border-radius:13px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.bike-card.active-card{border-color:#00e5ff;background:#112238;box-shadow:0 0 18px rgba(0,229,255,.15)}
+.bike-card strong{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#fff;flex-wrap:wrap;gap:4px}
+.bike-card .vtype{font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.1);color:#90caf9;font-weight:800}
+.bike-card .vtype.qute{background:rgba(255,182,78,.2);color:#ffd54f}
+.bike-card .vtype.yura{background:rgba(224,64,251,.25);color:#ea80fc;border:1px solid rgba(224,64,251,.5)}
+.bike-card small{color:#acc2d9;font-size:12px}
+.color-swatches{display:flex;align-items:center;gap:6px;margin-top:3px}
+.color-swatches span{font-size:11px;color:#9bb4cf;margin-right:4px}
+.swatch{width:22px;height:22px;border-radius:6px;border:2px solid rgba(255,255,255,.35);cursor:pointer;transition:transform .12s}
+.swatch.active{border-color:#fff;transform:scale(1.15);box-shadow:0 0 8px rgba(255,255,255,.7)}
+.bike-actions{display:flex;gap:8px;margin-top:4px}
+.bike-actions button{flex:1;border:0;border-radius:8px;padding:9px;font-weight:800;cursor:pointer;font-size:12px}
+.buy{background:#ffb64e;color:#17191d}
+.choose{background:#0277bd;color:#fff}
+.installed-btn{background:rgba(0,200,83,.22);color:#69f0ae;border:1px solid rgba(105,240,174,.55)!important}
+.owned-btn{background:rgba(2,136,209,.28);color:#81d4fa;border:1px solid rgba(129,212,250,.45)!important}
+.disabled{opacity:.48;cursor:default!important}
+
+/* ЭКРАН ТЮНИНГА (КАРТОЧКИ, ХАРАКТЕРИСТИКИ, УВЕДОМЛЕНИЯ) */
+.tuning-summary{
+  background:rgba(8,15,27,.82);
+  border:1px solid rgba(0,229,255,.35);
+  border-radius:14px;
+  padding:11px 14px;
+  margin:8px 0 10px;
+  text-align:left;
+}
+.tuning-bike-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-bottom:8px;
+}
+.tuning-bike-header strong{font-size:16px;color:#fff}
+.tuning-bike-header .balance-pill{
+  background:rgba(255,182,78,.16);
+  border:1px solid rgba(255,182,78,.55);
+  color:#fff59d;
+  padding:4px 10px;
+  border-radius:8px;
+  font-weight:900;
+  font-size:13px;
+}
+.tuning-stats-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+}
+.t-stat{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:9px;
+  padding:6px 9px;
+}
+.t-stat span{display:block;font-size:9px;color:#90caf9;font-weight:800;letter-spacing:.8px;text-transform:uppercase}
+.t-stat b{display:block;font-size:14px;color:#fff;margin-top:2px}
+.t-stat b em{font-style:normal;color:#69f0ae;font-size:11px;margin-left:3px}
+.t-stat b em.neg{color:#ff8a80}
+
+.tuning-msg{
+  min-height:22px;
+  font-size:12px;
+  font-weight:800;
+  margin:4px 0;
+  color:#ffd54f;
+  transition:opacity .2s;
+}
+.tuning-msg.err{color:#ff8a80}
+.tuning-msg.ok{color:#69f0ae}
+
+.tune-card{
+  border:1px solid rgba(255,255,255,.18);
+  background:#0c1625;
+  border-radius:13px;
+  padding:11px 13px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.tune-card.installed{
+  border-color:rgba(105,240,174,.55);
+  background:linear-gradient(90deg,rgba(12,26,38,.95),rgba(14,38,34,.88));
+}
+.tune-ico{
+  width:42px;
+  height:42px;
+  border-radius:10px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.16);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:21px;
+  flex-shrink:0;
+}
+.tune-info{flex:1;min-width:0}
+.tune-info strong{display:flex;align-items:center;gap:7px;font-size:13.5px;color:#fff;flex-wrap:wrap}
+.tune-info .effect-tag{
+  font-size:10px;
+  padding:2px 6px;
+  border-radius:5px;
+  background:rgba(0,229,255,.15);
+  color:#80d8ff;
+  font-weight:800;
+}
+.tune-info .effect-tag.warn{
+  background:rgba(255,138,128,.16);
+  color:#ffab91;
+}
+.tune-info small{display:block;color:#acc2d9;font-size:11.5px;margin-top:3px;line-height:1.35}
+.tune-act{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.tune-price{font-size:12px;font-weight:900;color:#ffd54f}
+.tune-btn{
+  border:0;
+  border-radius:8px;
+  padding:8px 12px;
+  font-weight:800;
+  font-size:11.5px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+#fatal{display:none;position:fixed;inset:0;background:#101827;color:#fff;padding:25px;z-index:30}
+
+@media(max-width:680px){
+  .brand{top:10px;left:12px}
+  .ctrl{width:45px;height:46px;font-size:16px}
+  #controls{right:10px;bottom:10px;gap:5px}
+  #bottom{left:10px;bottom:64px;font-size:9.5px;padding:6px 9px;max-width:52vw}
+  #tp-hud{right:10px;bottom:64px;min-width:165px;padding:9px 12px}
+  .tp-speed-val{font-size:32px}
+  .main-menu-layout{padding:16px}
+  .mm-btn-stack{width:min(290px,88vw)}
+  .mm-btn-start{padding:13px 16px;font-size:15px}
+  .mm-btn-sec{padding:10px 13px;font-size:13px}
+  .tuning-stats-row{grid-template-columns:1fr}
+  .tune-card{flex-direction:column;align-items:stretch}
+  .tune-act{flex-direction:row;justify-content:space-between;align-items:center;margin-top:4px}
+}
+</style>
+</head>
+<body>
+<div id="view"></div>
+
+<!-- ИГРОВОЙ ИНТЕРФЕЙС -->
+<div id="hud" hidden>
+  <div class="brand">bajaj <span>GO</span><small>Game by a fan</small></div>
+  <div id="status-badges">
+    <div class="badge" id="badge-tod">☀ ДЕНЬ</div>
+    <div class="badge cam" id="badge-cam">🎥 КОКПИТ (T/C)</div>
+    <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
+    <div class="badge combo" id="badge-combo" hidden>🔥 КОМБО ×1</div>
+    <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
+  </div>
+  <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
+  <div id="bottom">
+    <b>W / ↑ / ПРОБЕЛ</b> — ГАЗ &nbsp;·&nbsp; <b>S / ↓</b> — ТОРМОЗ &nbsp;·&nbsp; <b>A / D / ← / →</b> — ПОВОРОТ<br>
+    <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА (1-е / 3-е лицо) &nbsp;·&nbsp; Трамплины: ПЕРЕЛЁТ МАШИН
+  </div>
+
+  <!-- ЭКОНОМИКА: ТОПЛИВО, ИЗНОС, БАЛАНС -->
+  <div id="eco-hud">
+    <div class="eco-row"><span>⛽ ТОПЛИВО</span><b id="eco-fuel-val">100%</b></div>
+    <div class="eco-bar"><i id="eco-fuel-bar"></i></div>
+    <div class="eco-wear">
+      <div><span id="wear-pads-val">🛑 100%</span><div class="wbar"><i id="wear-pads-bar"></i></div></div>
+      <div><span id="wear-oil-val">🛢 100%</span><div class="wbar"><i id="wear-oil-bar"></i></div></div>
+      <div><span id="wear-plugs-val">⚡ 100%</span><div class="wbar"><i id="wear-plugs-bar"></i></div></div>
+    </div>
+    <div class="eco-bank"><span>БАЛАНС</span><b id="eco-bank">0 ₽</b></div>
+  </div>
+
+  <!-- ТАЙМЕР АКТИВНОГО ЗАКАЗА -->
+  <div id="order-hud" hidden>
+    <div class="order-title" id="order-title">🍔 ЗАКАЗ</div>
+    <div class="order-row">
+      <span class="t" id="order-time">2:00</span>
+      <span id="order-dist">— м</span>
+      <span id="order-reward">~0 ₽</span>
+    </div>
+  </div>
+
+  <!-- ПОДСКАЗКА ПРИ ВЪЕЗДЕ В ЗОНУ СЪЕЗДА -->
+  <div id="exit-hint">
+    <span id="exit-hint-ico">🍔</span>
+    <span id="exit-hint-text">РЕСТОРАН · СЪЕЗД</span>
+    <span class="arr" id="exit-hint-arr">→</span>
+  </div>
+
+  <button id="btn-pause" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
+  <div id="eco-toast"></div>
+</div>
+
+<!-- ПАНЕЛЬ ТРЕТЬЕГО ЛИЦА В ПРАВОМ НИЖНЕМ УГОЛ -->
+<div id="tp-hud" hidden>
+  <div class="tp-speed-row">
+    <div><span class="tp-speed-val" id="tp-speed">0</span><span class="tp-speed-unit">КМ/Ч</span></div>
+    <span class="tp-gear" id="tp-gear">N</span>
+  </div>
+  <div class="tp-stats-grid">
+    <div class="tp-stat-box">
+      <span>ДИСТАНЦИЯ</span>
+      <strong id="tp-dist">0.00 КМ</strong>
+    </div>
+    <div class="tp-stat-box rub">
+      <span>РУБЛИ</span>
+      <strong id="tp-rub">0 ₽</strong>
+    </div>
+  </div>
+  <div class="tp-extra" id="tp-extra"></div>
+</div>
+
+<!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
+<div id="jump-live" hidden>
+  <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
+  <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
+</div>
+<div id="jump-summary"></div>
+<div id="floating-popups"></div>
+
+<!-- МОБИЛЬНЫЕ И ЭКРАННЫЕ КНОПКИ -->
+<div id="controls" hidden>
+  <button class="ctrl" data-key="left" title="Влево">←</button>
+  <button class="ctrl" data-key="brake" title="Тормоз">▼</button>
+  <button class="ctrl" data-key="gas" title="Газ">▲</button>
+  <button class="ctrl" data-key="right" title="Вправо">→</button>
+  <button class="ctrl" id="btn-flash" title="Дальний свет (F)">💡</button>
+  <button class="ctrl" id="btn-camera" title="Камера (T / C / V)">🎥</button>
+</div>
+
+<!-- ОВЕРЛЕЙ ГЛАВНОГО МЕНЮ / МАГАЗИНА / ТЮНИНГА / АВАРИИ -->
+<div id="overlay" class="mode-main"></div>
+
+<div id="fatal">
+  <h2>Не удалось инициализировать WebGL / Three.js</h2>
+  <p>Проверьте подключение к интернету и откройте файл в современном браузере с поддержкой аппаратного ускорения.</p>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -33,7 +33,7 @@
 
 ## Палитра времени суток
 
-Задаётся в `todPalettes` (секция 12 кода) и интерполируется в
+Задаётся в `todPalettes` (`js/atmosphere.js`) и интерполируется в
 `updateAtmosphereAndTimeOfDay`.
 
 | Параметр | День | Закат | Ночь |
