@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bikePaint, isQuteBody, isYuraType } from './vehicle.js';
+import { bikePaint, isQuteBody, isYuraType } from './engine/vehicle.js';
 import { G } from './state.js';
 
 export function initCamera() {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { keepInWindow } from './stream.js';
+import { keepInWindow } from './engine/stream.js';
 import { G } from './state.js';
 
 export function initPedestrians() {

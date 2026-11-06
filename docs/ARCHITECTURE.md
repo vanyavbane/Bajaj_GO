@@ -22,18 +22,14 @@
 | 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
-|   | `js/rules.js` | очки прыжка, встречки и дистанции, жёсткая посадка, порог съезда, сброс заезда. Без Three.js |
-|   | `js/motion.js` | шаг байка и чужой машины, контакт с игроком, уступка дальнему свету. Без Three.js |
-|   | `js/stream.js` | окно вдоль дороги и `placeIfMoved`: ставить объект только когда его `s` сменилось |
-|   | `js/vehicle.js` | `isQuteBody`, `isYuraType`, `bikePaint`: тип кузова и окраска без порчи каталога |
-|   | `js/money.js` | `rubles`, `grouped`, `meters`, `shortfall`: один вид сумм и метров |
+|   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money` |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
 |   | `js/effects.js` | частицы прыжка, всплывающие очки, звуки прыжка и маркерной зоны |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах |
-| 9 | `js/traffic.js` | `vehicleTypes`, `trafficPool`, `resetTrafficVehicle`, перестроения, мигание фар |
+| 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic` |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике |
 |   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
 | 10 | `js/bike.js` | сборка байка: материалы, фары, `applyVisualTuningToModel` |
@@ -111,7 +107,7 @@ animate(now)
   ├─ updateRoadside, updateMegaStructures
   ├─ updateExitWorld / updateDeliveryMarker
   ├─ updatePedestrians
-  ├─ трафик: движение, перелёты, столкновения → handleAccident()
+  ├─ updateTraffic: движение, перелёты, столкновения → handleAccident()
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)
 ```

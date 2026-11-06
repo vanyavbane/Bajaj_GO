@@ -1,4 +1,4 @@
-import { highbeamYieldLane } from './motion.js';
+import { highbeamYieldLane } from './engine/motion.js';
 import { G } from './state.js';
 
 export function initHighbeam() {

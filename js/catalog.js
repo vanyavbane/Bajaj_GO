@@ -1,5 +1,5 @@
-import { shortfall } from './money.js';
-import { isQuteBody, isYuraType } from './vehicle.js';
+import { shortfall } from './engine/money.js';
+import { isQuteBody, isYuraType } from './engine/vehicle.js';
 import { G } from './state.js';
 
 export function initCatalog() {

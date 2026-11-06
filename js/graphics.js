@@ -62,12 +62,10 @@ export function initGraphics() {
     }
   }
   G.graphics = graphics;
-  G.lightingQuality = graphics.exposure === 1.18 ? 'dlss' : 'normal';
   G.graphicsLabel = LABELS[graphics.preset];
 
   function applyGraphics() {
     const current = G.graphics;
-    G.lightingQuality = current.exposure === 1.18 ? 'dlss' : 'normal';
     G.graphicsLabel = LABELS[current.preset];
     if (!G.renderer || !G.sunLight || !G.M) return;
 

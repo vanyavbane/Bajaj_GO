@@ -25,7 +25,7 @@ export function initInput() {
       if (G.currentScreen === 'crash') {
         if (e.key === 'Enter') { e.preventDefault(); G.startGame(); return; }
         if (e.key === 'Escape') { e.preventDefault(); G.renderMainMenu(); return; }
-      } else if (G.currentScreen === 'shop' || G.currentScreen === 'tuning') {
+      } else if (G.currentScreen === 'shop') {
         if (e.key === 'Escape') { e.preventDefault(); G.renderMainMenu(); return; }
       }
 

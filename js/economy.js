@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { meters, rubles, shortfall } from './money.js';
-import { atExitShoulder } from './rules.js';
+import { meters, rubles, shortfall } from './engine/money.js';
+import { atExitShoulder } from './engine/rules.js';
 import { G } from './state.js';
-import { placeIfMoved } from './stream.js';
+import { placeIfMoved } from './engine/stream.js';
 
 export function initEconomy() {
   const $ = G.$;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { keepInWindow, placeIfMoved } from './stream.js';
+import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
 export function initStructures() {

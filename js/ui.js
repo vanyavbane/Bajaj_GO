@@ -1,8 +1,8 @@
 import { balance, button, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
-import { grouped, rubles } from './money.js';
-import { resetRun } from './rules.js';
+import { grouped, rubles } from './engine/money.js';
+import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
-import { bikePaint } from './vehicle.js';
+import { bikePaint } from './engine/vehicle.js';
 
 export function initUi() {
   const $ = G.$;
@@ -11,7 +11,7 @@ export function initUi() {
    * 14. ИГРОВОЕ СОСТОЯНИЕ, ГЛАВНОЕ МЕНЮ, МАГАЗИН, ТЮНИНГ И ОКНО СМЕРТИ
    * ========================================================================= */
   G.keys = { left: false, right: false, gas: false, brake: false };
-  G.currentScreen = 'main'; // 'main' | 'shop' | 'tuning' | 'playing' | 'crash'
+  G.currentScreen = 'main';
   G.started = false;
   G.ended = false;
   G.lastTime = performance.now();
