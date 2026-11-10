@@ -20,22 +20,22 @@ export function initCatalog() {
     { name: 'Кровавый хром',   hex: 0x260c12 }
   ];
 
-  // Фиксированные цены и характеристики строго по ТЗ.
+  // Фиксированные цены и характеристики.
   //
-  // Ценовая шкала (ТЗ «Добавление мотоциклов»):
-  //  • Pulsar NS125 теперь платный стартовый мотоцикл — 850 ₽.
-  //  • Boxer 100 ES — бесплатная альтернатива для новичка (0 ₽).
-  //  • Boxer 125 / 150 — рекомендованные абсолютные цены из таблицы ТЗ (150 / 250 ₽).
-  //    В ТЗ есть оговорка: «дешевле Pulsar на 150 ₽» при цене Pulsar 850 ₽ дало бы 700 ₽,
-  //    но канонической считается таблица рекомендуемых абсолютных цен.
-  //  • Pulsar 150 NS / 180 / Avenger 220 — цены из таблицы ТЗ (150 / 180 / 220 ₽):
-  //    это «+N ₽ к базовой цене Pulsar» в трактовке ТЗ, где за базу взята отметка 0 ₽.
-  //  • Dominar 250 — ровно на 100 ₽ дороже N250 (1500 + 100 = 1600 ₽).
+  // Ценовая шкала:
+  //  • Boxer 100 ES — бесплатный стартовый мотоцикл новичка (0 ₽).
+  //  • Boxer 125 — 700 ₽, Boxer 150 — 850 ₽.
+  //  • Pulsar 125 NS — 850 ₽, Pulsar 150 NS — 900 ₽, Pulsar 180 NS — 950 ₽,
+  //    Pulsar 200 NS — 1200 ₽.
+  //  • Avenger 220 — 1020 ₽, Dominar 250 — 1600 ₽.
   //  • variant — какую внешнюю модель строить: 'pulsar' | 'boxer' | 'avenger'.
   //  • hudStyle — 'round' рисует аналоговый спидометр + одометр, 'digital' — штатную панель.
+  //
+  // Порядок в этом массиве не важен для магазина: `renderShop` сортирует
+  // карточки по maxSpeed (от низкой к высокой), затем по цене.
   G.bikeCatalog = [
     { id: 'ns125',      name: 'Bajaj Pulsar NS125',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 850,   color: 0xcbd0d6, accent: 0xd9363e, accel: 26, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
-    { id: 'ns200',      name: 'Bajaj Pulsar NS200',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 140, price: 1000,  color: 0xc62832, accent: 0xff5252, accel: 31, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'ns200',      name: 'Bajaj Pulsar NS200',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 140, price: 1200,  color: 0xc62832, accent: 0xff5252, accel: 31, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
     { id: 'n250',       name: 'Bajaj Pulsar N250',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 155, price: 1500,  color: 0x17191d, accent: 0xe53935, accel: 36, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
     { id: 'dominar400', name: 'Bajaj Dominar 400',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 180, price: 3000,  color: 0x1b5e3a, accent: 0x69f0ae, accel: 44, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
     { id: 'dominar1000',name: 'Bajaj Dominar 1000RR',     vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 380, price: 10000, color: 0x10141d, accent: 0xffab00, accel: 82, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
@@ -44,11 +44,11 @@ export function initCatalog() {
 
     // --- 7 новых мотоциклов (ТЗ v19) ---
     { id: 'boxer100es', name: 'Bajaj Boxer 100 ES',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 90,  price: 0,     color: 0x1a1a1a, accent: 0xd4a017, accel: 18, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
-    { id: 'boxer125',   name: 'Bajaj Boxer 125',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 110, price: 150,   color: 0x1c2b3a, accent: 0xd4a017, accel: 22, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
-    { id: 'boxer150',   name: 'Bajaj Boxer 150',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 250,   color: 0x5a1b1b, accent: 0xc9a227, accel: 26, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
-    { id: 'pulsar150ns',name: 'Bajaj Pulsar 150 NS',      vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 130, price: 150,   color: 0x1f2f4a, accent: 0xff5252, accel: 27, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
-    { id: 'pulsar180',  name: 'Bajaj Pulsar 180',         vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 132, price: 180,   color: 0x2a1a2e, accent: 0xffb300, accel: 28, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
-    { id: 'avenger220', name: 'Bajaj Avenger 220',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 135, price: 220,   color: 0x0a0a0a, accent: 0x8b0000, accel: 30, massFactor: 1.0,  variant: 'avenger', hudStyle: 'round'   },
+    { id: 'boxer125',   name: 'Bajaj Boxer 125',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 110, price: 700,   color: 0x1c2b3a, accent: 0xd4a017, accel: 22, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
+    { id: 'boxer150',   name: 'Bajaj Boxer 150',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 850,   color: 0x5a1b1b, accent: 0xc9a227, accel: 26, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
+    { id: 'pulsar150ns',name: 'Bajaj Pulsar 150 NS',      vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 130, price: 900,   color: 0x1f2f4a, accent: 0xff5252, accel: 27, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'pulsar180',  name: 'Bajaj Pulsar 180 NS',      vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 132, price: 950,   color: 0x2a1a2e, accent: 0xffb300, accel: 28, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'avenger220', name: 'Bajaj Avenger 220',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 135, price: 1020,  color: 0x0a0a0a, accent: 0x8b0000, accel: 30, massFactor: 1.0,  variant: 'avenger', hudStyle: 'round'   },
     { id: 'dominar250', name: 'Bajaj Dominar 250',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 155, price: 1600,  color: 0xa5d6a7, accent: 0x66bb6a, accel: 36, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' }
   ];
 
@@ -153,7 +153,8 @@ export function initCatalog() {
     }
   ];
 
-  // Эталонная стоимость NS125 для расчёта пропорции остальных мотоциклов (750 ₽, так как в магазине NS125 бесплатный — 0 ₽)
+  // Историческая эталонная цена NS125 для пропорции тюнинга остальных байков.
+  // Для самого NS125 и бесплатного Boxer 100 ES действуют базовые цены.
   const NS125_REF_PRICE = 750;
 
   function getUpgradePrice(bike, upgrade) {

@@ -366,7 +366,13 @@ export function initUi() {
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
 
-    const cards = G.bikeCatalog.map(b => {
+    // Магазин: от самой медленной машины к самой быстрой. При равной скорости
+    // сначала идёт более дешёвая, затем — по названию.
+    const shopBikes = [...G.bikeCatalog].sort((a, b) =>
+      a.maxSpeed - b.maxSpeed || a.price - b.price || a.name.localeCompare(b.name, 'ru')
+    );
+
+    const cards = shopBikes.map(b => {
       const owned = G.ownedBikes.includes(b.id);
       const selected = G.selectedBikeId === b.id;
       const activeColor = bikePaint(b, G.customColors);
