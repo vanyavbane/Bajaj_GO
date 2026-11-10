@@ -400,14 +400,16 @@ export function initUi() {
       const speedBadgeText = eff.speedDelta !== 0
         ? `${b.maxSpeed} км/ч (с тюнингом ${eff.maxSpeed} км/ч)`
         : `${b.maxSpeed} км/ч`;
+      const hudBadgeText = b.hudStyle === 'round' ? 'Круглая приборка' : 'Цифровая приборка';
+      const hudBadgeTone = b.hudStyle === 'round' ? 'warm' : 'plain';
       const priceLine = b.price === 0
-        ? 'Стартовый мотоцикл · Цена: 0 ₽ (уже в гараже)'
+        ? (owned ? 'Стартовый мотоцикл · Бесплатно (уже в гараже)' : 'Стартовый мотоцикл · Бесплатно')
         : `Цена: ${rubles(b.price)}`;
 
       return card({
         on: selected,
         title: b.name,
-        meta: tag(b.typeLabel, b.vType === 'qute' ? 'warm' : 'plain') + tag(speedBadgeText, 'warm'),
+        meta: tag(b.typeLabel, b.vType === 'qute' ? 'warm' : 'plain') + tag(speedBadgeText, 'warm') + tag(hudBadgeText, hudBadgeTone),
         detail: `${priceLine} · Тюнинг: ${eff.installedCount}/${G.tuningCatalog.length}`,
         extra: paint,
         footer: btn

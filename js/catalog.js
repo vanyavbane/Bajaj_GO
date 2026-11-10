@@ -20,15 +20,36 @@ export function initCatalog() {
     { name: 'Кровавый хром',   hex: 0x260c12 }
   ];
 
-  // Фиксированные цены и характеристики строго по ТЗ
+  // Фиксированные цены и характеристики строго по ТЗ.
+  //
+  // Ценовая шкала (ТЗ «Добавление мотоциклов»):
+  //  • Pulsar NS125 теперь платный стартовый мотоцикл — 850 ₽.
+  //  • Boxer 100 ES — бесплатная альтернатива для новичка (0 ₽).
+  //  • Boxer 125 / 150 — рекомендованные абсолютные цены из таблицы ТЗ (150 / 250 ₽).
+  //    В ТЗ есть оговорка: «дешевле Pulsar на 150 ₽» при цене Pulsar 850 ₽ дало бы 700 ₽,
+  //    но канонической считается таблица рекомендуемых абсолютных цен.
+  //  • Pulsar 150 NS / 180 / Avenger 220 — цены из таблицы ТЗ (150 / 180 / 220 ₽):
+  //    это «+N ₽ к базовой цене Pulsar» в трактовке ТЗ, где за базу взята отметка 0 ₽.
+  //  • Dominar 250 — ровно на 100 ₽ дороже N250 (1500 + 100 = 1600 ₽).
+  //  • variant — какую внешнюю модель строить: 'pulsar' | 'boxer' | 'avenger'.
+  //  • hudStyle — 'round' рисует аналоговый спидометр + одометр, 'digital' — штатную панель.
   G.bikeCatalog = [
-    { id: 'ns125',      name: 'Bajaj Pulsar NS125',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 0,     color: 0xcbd0d6, accent: 0xd9363e, accel: 26, massFactor: 1.0 },
-    { id: 'ns200',      name: 'Bajaj Pulsar NS200',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 140, price: 1000,  color: 0xc62832, accent: 0xff5252, accel: 31, massFactor: 1.0 },
-    { id: 'n250',       name: 'Bajaj Pulsar N250',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 155, price: 1500,  color: 0x17191d, accent: 0xe53935, accel: 36, massFactor: 1.0 },
-    { id: 'dominar400', name: 'Bajaj Dominar 400',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 180, price: 3000,  color: 0x1b5e3a, accent: 0x69f0ae, accel: 44, massFactor: 1.0 },
-    { id: 'dominar1000',name: 'Bajaj Dominar 1000RR',     vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 380, price: 10000, color: 0x10141d, accent: 0xffab00, accel: 82, massFactor: 1.0 },
-    { id: 'qute',       name: 'Bajaj Qute',               vType: 'qute', typeLabel: 'Квадрицикл',             maxSpeed: 120, price: 1800,  color: 0xffca28, accent: 0x263238, accel: 22, massFactor: 0.84, swatches: quteColorSwatches },
-    { id: 'qute_yura',  name: 'Bajaj Qute ЮРЫ ВОЛКОВА',   vType: 'yura', typeLabel: 'Квадрицикл (заряженный)',maxSpeed: 350, price: 15000, color: 0x161224, accent: 0x00e5ff, accel: 78, massFactor: 1.08, swatches: yuraColorSwatches }
+    { id: 'ns125',      name: 'Bajaj Pulsar NS125',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 850,   color: 0xcbd0d6, accent: 0xd9363e, accel: 26, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'ns200',      name: 'Bajaj Pulsar NS200',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 140, price: 1000,  color: 0xc62832, accent: 0xff5252, accel: 31, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'n250',       name: 'Bajaj Pulsar N250',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 155, price: 1500,  color: 0x17191d, accent: 0xe53935, accel: 36, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'dominar400', name: 'Bajaj Dominar 400',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 180, price: 3000,  color: 0x1b5e3a, accent: 0x69f0ae, accel: 44, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'dominar1000',name: 'Bajaj Dominar 1000RR',     vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 380, price: 10000, color: 0x10141d, accent: 0xffab00, accel: 82, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'qute',       name: 'Bajaj Qute',               vType: 'qute', typeLabel: 'Квадрицикл',             maxSpeed: 120, price: 1800,  color: 0xffca28, accent: 0x263238, accel: 22, massFactor: 0.84, variant: 'pulsar',  hudStyle: 'digital', swatches: quteColorSwatches },
+    { id: 'qute_yura',  name: 'Bajaj Qute ЮРЫ ВОЛКОВА',   vType: 'yura', typeLabel: 'Квадрицикл (заряженный)',maxSpeed: 350, price: 15000, color: 0x161224, accent: 0x00e5ff, accel: 78, massFactor: 1.08, variant: 'pulsar',  hudStyle: 'digital', swatches: yuraColorSwatches },
+
+    // --- 7 новых мотоциклов (ТЗ v19) ---
+    { id: 'boxer100es', name: 'Bajaj Boxer 100 ES',       vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 90,  price: 0,     color: 0x1a1a1a, accent: 0xd4a017, accel: 18, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
+    { id: 'boxer125',   name: 'Bajaj Boxer 125',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 110, price: 150,   color: 0x1c2b3a, accent: 0xd4a017, accel: 22, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
+    { id: 'boxer150',   name: 'Bajaj Boxer 150',          vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 127, price: 250,   color: 0x5a1b1b, accent: 0xc9a227, accel: 26, massFactor: 1.0,  variant: 'boxer',   hudStyle: 'round'   },
+    { id: 'pulsar150ns',name: 'Bajaj Pulsar 150 NS',      vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 130, price: 150,   color: 0x1f2f4a, accent: 0xff5252, accel: 27, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'pulsar180',  name: 'Bajaj Pulsar 180',         vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 132, price: 180,   color: 0x2a1a2e, accent: 0xffb300, accel: 28, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' },
+    { id: 'avenger220', name: 'Bajaj Avenger 220',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 135, price: 220,   color: 0x0a0a0a, accent: 0x8b0000, accel: 30, massFactor: 1.0,  variant: 'avenger', hudStyle: 'round'   },
+    { id: 'dominar250', name: 'Bajaj Dominar 250',        vType: 'bike', typeLabel: 'Мотоцикл',               maxSpeed: 155, price: 1600,  color: 0xa5d6a7, accent: 0x66bb6a, accel: 36, massFactor: 1.0,  variant: 'pulsar',  hudStyle: 'digital' }
   ];
 
   // Каталог из 8 улучшений тюнинга (базовые эталонные цены указаны для Bajaj Pulsar NS125)
@@ -146,17 +167,25 @@ export function initCatalog() {
   }
   G.getUpgradePrice = getUpgradePrice;
 
+  // Стартовый мотоцикл для новых игроков — бесплатный Boxer 100 ES.
+  // Старые сохранения со списком ns125 продолжают работать как есть.
+  const STARTER_BIKE_ID = 'boxer100es';
   const storedBank = Number(localStorage.getItem('bajajGO_bank'));
   G.bankPoints = Number.isFinite(storedBank) && storedBank > 0 ? Math.floor(storedBank) : 0;
   G.ownedBikes = [];
   try {
-    G.ownedBikes = JSON.parse(localStorage.getItem('bajajGO_owned') || '["ns125"]');
-    if (!Array.isArray(G.ownedBikes) || !G.ownedBikes.length) G.ownedBikes = ['ns125'];
+    G.ownedBikes = JSON.parse(localStorage.getItem('bajajGO_owned') || '["boxer100es"]');
+    if (!Array.isArray(G.ownedBikes) || !G.ownedBikes.length) G.ownedBikes = [STARTER_BIKE_ID];
   } catch {
-    G.ownedBikes = ['ns125'];
+    G.ownedBikes = [STARTER_BIKE_ID];
   }
-  G.selectedBikeId = localStorage.getItem('bajajGO_selected') || 'ns125';
-  if (!G.bikeCatalog.some(b => b.id === G.selectedBikeId)) G.selectedBikeId = 'ns125';
+  // Чистим id, которых больше нет в каталоге, и гарантируем хотя бы один доступный байк.
+  G.ownedBikes = G.ownedBikes.filter(id => G.bikeCatalog.some(b => b.id === id));
+  if (!G.ownedBikes.length) G.ownedBikes = [STARTER_BIKE_ID];
+  G.selectedBikeId = localStorage.getItem('bajajGO_selected') || STARTER_BIKE_ID;
+  if (!G.bikeCatalog.some(b => b.id === G.selectedBikeId) || !G.ownedBikes.includes(G.selectedBikeId)) {
+    G.selectedBikeId = G.ownedBikes[0];
+  }
 
   G.customColors = {};
   try {

@@ -19,7 +19,7 @@
 | № | Файл | Что внутри |
 |---|---|---|
 |   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics`; экран — вкладка «Графика» в настройках |
-| 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
+| 1 | `js/catalog.js` | `bikeCatalog` (14 моделей, поля `variant` и `hudStyle`), `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
 |   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money` |
@@ -32,11 +32,11 @@
 | 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике |
 |   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
-| 10 | `js/bike.js` | сборка байка: материалы, фары, `applyVisualTuningToModel` |
-|   | `js/models/motorcycle.js` | меш мотоцикла, райдер, детали тюнинга |
+| 10 | `js/bike.js` | сборка байка: материалы, фары, `applyBikeVariant` (Pulsar / Boxer / Avenger), `applyVisualTuningToModel` |
+|   | `js/models/motorcycle.js` | меш мотоцикла, варианты Boxer и чоппер Avenger, райдер, детали тюнинга |
 |   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
-|   | `js/models/cockpit.js` | кокпит мотоцикла и Qute от первого лица |
-| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard`, профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота), экран `renderCameraSettings` с живым предпросмотром |
+|   | `js/models/cockpit.js` | кокпит мотоцикла (Pulsar / Boxer / Avenger) и Qute от первого лица |
+| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` (цифровая и круглая `drawRoundDashboard`), профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота), экран `renderCameraSettings` с живым предпросмотром |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
 |   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
@@ -214,8 +214,9 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
   `getCamProfile(id)` подставляет значения по умолчанию, если записи нет или
   она битая.
 - Диапазоны: FOV 60–110° (по умолчанию 75°), высота −1.5…+1.5 м
-  (по умолчанию 0). Высота прибавляется к базе кокпита: 1.56 м у мотоцикла,
-  1.33 м у Qute/Юры.
+  (по умолчанию 0). Заводские дефолты отдельных моделей — `CAM_PROFILE_DEFAULTS`
+  (Avenger 220: 78° / +0.15 м). Высота прибавляется к базе кокпита:
+  1.56 м у мотоцикла, 1.33 м у Qute/Юры.
 - Профиль применяется только в кокпите (`updateFollowCamera` и
   `applyCamProfileToCamera`). Третье лицо фиксированное: FOV 75°, профиль
   на него не влияет.
@@ -228,6 +229,37 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 - «Применить» сохраняет профиль и сразу обновляет активную камеру,
   «Сбросить по умолчанию» удаляет запись байка (75° / 0 м). Esc и «Назад»
   возвращают на предыдущий экран: в главное меню или в настройки паузы.
+
+## Мотоциклы, варианты и приборка
+
+- В каталоге 14 машин: 5 старых Pulsar/Dominar, Qute и Юра, плюс 7 новых —
+  Boxer 100 ES / 125 / 150, Pulsar 150 NS / 180, Avenger 220 и Dominar 250.
+  Стартовый байк нового игрока — бесплатный `boxer100es`; `ns125` стоит 850 ₽.
+  Старые сохранения с `ownedBikes: ['ns125']` продолжают работать.
+- `variant` задаёт внешнюю модель: `pulsar` (базовая), `boxer` (простая круглая
+  фара, хром-бак, плоское сиденье, овальная задняя фара) или `avenger` (чоппер:
+  низкое сиденье, длинная вилка, sissy bar, хром-дуги, длинный выхлоп).
+  `hudStyle` задаёт приборку: `digital` — штатная панель, `round` — аналоговый
+  спидометр и одометр (Boxer'ы и Avenger).
+- Общие колёса, двигатель и слоты тюнинга одни на все модели, поэтому тюнинг
+  визуально работает на любом байке. `applyBikeVariant()` переключает группы
+  обвесов, посадку райдера и вынос переднего колеса Avenger
+  (`G.frontWheelGroup.position.z = -1.78`); диски тюнинга висят на группе
+  колеса и переезжают вместе с ним.
+- Кокпит: руль и зеркала вынесены в `G.bikeCockpitHandlebarGroup`, у Avenger
+  своя группа `G.avengerCockpitGroup` (руль выше и ближе, высокие зеркала,
+  длинная вилка). Хром-ободки круглых приборов — `G.roundDashBezelGroup`,
+  видны только при `hudStyle === 'round'`.
+- `drawRoundDashboard` рисует на том же `G.dashTex` (512×256): круглый
+  спидометр (шкала 0…максималка, стрелка, дуга прогресса цветом акцента,
+  синяя точка дальнего света) и круглый одометр (`000.00` км, 5 цифр по дуге,
+  подпись «ОБЩИЙ ПРОБЕГ»). Баланс и множитель встречки — внизу панели.
+- В карточке магазина выводится бейдж «Круглая приборка» или
+  «Цифровая приборка».
+- Заводские дефолты камеры для отдельных моделей лежат в
+  `CAM_PROFILE_DEFAULTS` (`js/camera.js`): у Avenger FOV 78° и высота +0.15 м,
+  остальные — 75° / 0. Пользовательский профиль из `bajajGO_camprofiles`
+  по-прежнему важнее дефолта.
 
 ## Динамическая погода
 
@@ -305,7 +337,7 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 |---|---|
 | Добавить машину в трафик | `createVehicleModel` в `js/models/vehicles.js` + `vehicleTypes` в `js/traffic.js` |
 | Общая геометрия кузовов | `box` / `cylinder` / `plane` в `js/geom.js`. Геометрию после выдачи не крутить |
-| Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` |
+| Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` (поля `variant` и `hudStyle`); при новой геометрии — `js/models/motorcycle.js` + `applyBikeVariant` в `js/bike.js` |
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` в `js/atmosphere.js` |
 | Рекламные баннеры | `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js` |

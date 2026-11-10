@@ -42,6 +42,71 @@ export function buildMotorcycle() {
   const engineBlock = mesh(box(0.46, 0.48, 0.58), G.M.metalDark, 0, 0.55, -0.62);
   engineBlock.castShadow = true;
   G.bikeChassisGroup.add(brakeCaliper, frontFender, engineBlock);
+  const pulsarFender = frontFender;
+
+  /* =========================================================================
+   * ВАРИАНТЫ ВНЕШНЕГО ВИДА: BOXER И AVENGER (ТЗ v19)
+   * Общие колёса, двигатель и слоты тюнинга остаются одни на все модели,
+   * поэтому тюнинг визуально работает на любом байке.
+   * ========================================================================= */
+  G.bikeVariantGroups = { boxer: new THREE.Group(), avenger: new THREE.Group() };
+  G.bikeChassisGroup.add(G.bikeVariantGroups.boxer, G.bikeVariantGroups.avenger);
+
+  const boxerFender = mesh(box(0.24, 0.11, 0.5), G.tankMat, 0, 0.64, -1.42);
+  boxerFender.rotation.x = 0.16;
+  const avengerFender = mesh(box(0.26, 0.1, 0.58), G.tankMat, 0, 0.6, -1.78);
+  avengerFender.rotation.x = 0.14;
+  G.bikeVariantGroups.boxer.add(boxerFender);
+  G.bikeVariantGroups.avenger.add(avengerFender);
+
+  {
+    // Boxer: одна круглая фара вместо двойной, простая вилка и выхлоп.
+    const headlightBucket = new THREE.Mesh(cylinder(0.135, 0.115, 0.16, 16), G.M.chrome);
+    headlightBucket.rotation.x = Math.PI / 2;
+    headlightBucket.position.set(0, 0.92, -1.44);
+    const headlightLens = new THREE.Mesh(cylinder(0.112, 0.112, 0.03, 16), G.M.glass);
+    headlightLens.rotation.x = Math.PI / 2;
+    headlightLens.position.set(0, 0.92, -1.53);
+    for (const side of [-1, 1]) {
+      const forkLeg = new THREE.Mesh(cylinder(0.035, 0.035, 0.86, 8), G.M.chrome);
+      forkLeg.position.set(side * 0.1, 0.68, -1.5);
+      forkLeg.rotation.x = 0.42;
+      G.bikeVariantGroups.boxer.add(forkLeg);
+    }
+    const simplePipe = new THREE.Mesh(cylinder(0.055, 0.05, 1.05, 10), G.M.chrome);
+    simplePipe.rotation.x = Math.PI / 2;
+    simplePipe.position.set(0.24, 0.34, 0.12);
+    G.bikeVariantGroups.boxer.add(headlightBucket, headlightLens, simplePipe);
+  }
+
+  {
+    // Avenger: длинная вилка, большой круглый хром-фонарь, хром-дуги,
+    // низкое сиденье, sissy bar и один длинный выхлоп справа.
+    for (const side of [-1, 1]) {
+      const forkLeg = new THREE.Mesh(cylinder(0.036, 0.036, 1.02, 8), G.M.chrome);
+      forkLeg.position.set(side * 0.1, 0.7, -1.58);
+      forkLeg.rotation.x = 0.545;
+      const crashBar = new THREE.Mesh(cylinder(0.035, 0.035, 0.66, 8), G.M.chrome);
+      crashBar.position.set(side * 0.42, 0.5, -0.34);
+      crashBar.rotation.z = side * 0.95;
+      crashBar.rotation.x = 0.22;
+      G.bikeVariantGroups.avenger.add(forkLeg, crashBar);
+    }
+    const bigBucket = new THREE.Mesh(cylinder(0.16, 0.14, 0.2, 16), G.M.chrome);
+    bigBucket.rotation.x = Math.PI / 2;
+    bigBucket.position.set(0, 0.86, -1.8);
+    const bigLens = new THREE.Mesh(cylinder(0.14, 0.14, 0.03, 16), G.M.glass);
+    bigLens.rotation.x = Math.PI / 2;
+    bigLens.position.set(0, 0.86, -1.91);
+    const rearFender = mesh(box(0.3, 0.1, 0.62), G.M.chrome, 0, 0.63, 0.7);
+    rearFender.rotation.x = -0.12;
+    const sissyBar = mesh(box(0.06, 0.54, 0.06), G.M.chrome, 0, 1.02, 0.86);
+    const sissyPad = mesh(box(0.3, 0.16, 0.1), G.M.mattePlastic, 0, 1.18, 0.86);
+    const longPipe = new THREE.Mesh(cylinder(0.07, 0.06, 1.78, 10), G.M.chrome);
+    longPipe.rotation.x = Math.PI / 2;
+    longPipe.position.set(0.3, 0.3, 0.3);
+    G.bikeVariantGroups.avenger.add(bigBucket, bigLens, rearFender, sissyBar, sissyPad, longPipe);
+  }
 
   const tuneUpgradedBrakesGroup = new THREE.Group();
   {
@@ -145,6 +210,7 @@ export function buildMotorcycle() {
     tailCowling.rotation.x = 0.16;
     const tailLamp = mesh(box(0.24, 0.09, 0.06), G.tailLightBrakeMat, 0, 1.04, 0.95);
 
+    const riderGroup = new THREE.Group();
     const torso = mesh(box(0.52, 0.64, 0.32), jacketMat, 0, 1.38, 0.05);
     torso.rotation.x = -0.34;
     torso.castShadow = true;
@@ -153,6 +219,7 @@ export function buildMotorcycle() {
     const helmet = mesh(box(0.36, 0.38, 0.40), G.tankMat, 0, 1.78, -0.14);
     helmet.castShadow = true;
     const visor = mesh(box(0.38, 0.16, 0.22), G.M.glass, 0, 1.79, -0.26);
+    riderGroup.add(torso, stripe, helmet, visor);
 
     for (const side of [-1, 1]) {
       const arm = mesh(box(0.16, 0.16, 0.62), jacketMat, side * 0.34, 1.36, -0.34);
@@ -160,14 +227,43 @@ export function buildMotorcycle() {
       arm.rotation.y = -side * 0.15;
       const leg = mesh(box(0.18, 0.56, 0.22), G.M.mattePlastic, side * 0.28, 0.72, 0.02);
       leg.rotation.x = 0.35;
-      G.bikeThirdPersonBody.add(arm, leg);
+      riderGroup.add(arm, leg);
     }
 
-    G.bikeThirdPersonBody.add(swingarm, exhaust, extTank, seat, tailCowling, tailLamp, torso, stripe, helmet, visor);
+    const pulsarTp = new THREE.Group();
+    pulsarTp.add(swingarm, exhaust, extTank, seat, tailCowling, tailLamp);
+
+    // Boxer: хромированный простой бак, плоское сиденье, овальная задняя фара.
+    const boxerTp = new THREE.Group();
+    {
+      const chromeTank = mesh(box(0.5, 0.34, 0.68), G.tankMat, 0, 0.94, -0.52);
+      chromeTank.castShadow = true;
+      const flatSeat = mesh(box(0.42, 0.13, 0.92), G.M.mattePlastic, 0, 0.88, 0.2);
+      const simplePipe = mesh(box(0.13, 0.14, 1.0), G.M.chrome, 0.24, 0.33, 0.15);
+      const ovalTail = mesh(box(0.3, 0.1, 0.06), G.tailLightBrakeMat, 0, 0.98, 0.88);
+      boxerTp.add(chromeTank, flatSeat, simplePipe, ovalTail);
+    }
+
+    // Avenger: низкое сиденье, sissy bar, длинный выхлоп и чоппер-посадка.
+    const avengerTp = new THREE.Group();
+    {
+      const lowSeat = mesh(box(0.42, 0.14, 1.06), G.M.mattePlastic, 0, 0.7, 0.2);
+      const cruiserTank = mesh(box(0.52, 0.4, 0.72), G.tankMat, 0, 0.84, -0.5);
+      cruiserTank.castShadow = true;
+      const sissyBar = mesh(box(0.06, 0.54, 0.06), G.M.chrome, 0, 1.02, 0.86);
+      const sissyPad = mesh(box(0.3, 0.16, 0.1), G.M.mattePlastic, 0, 1.18, 0.86);
+      const longPipe = mesh(box(0.14, 0.16, 1.5), G.M.chrome, 0.3, 0.3, 0.32);
+      avengerTp.add(lowSeat, cruiserTank, sissyBar, sissyPad, longPipe);
+    }
+
+    G.bikeThirdPersonBody.add(pulsarTp, boxerTp, avengerTp, riderGroup);
+    G.bikeThirdPersonVariants = { pulsar: pulsarTp, boxer: boxerTp, avenger: avengerTp };
+    G.bikeThirdPersonRider = riderGroup;
   }
 
   return {
     fTire, fRim, rTire, rRim, frontFender,
+    frontFenders: { pulsar: pulsarFender, boxer: boxerFender, avenger: avengerFender },
     tuneUpgradedBrakesGroup,
     tuneZeroFilterGroup,
     tuneCarbReplaceGroup,

@@ -7,6 +7,12 @@ export interface ColorSwatch {
 
 export type VehicleKind = 'bike' | 'qute' | 'yura';
 
+/** Внешняя модель мотоцикла: обычный Pulsar, простой Boxer или чоппер Avenger. */
+export type BikeVariant = 'pulsar' | 'boxer' | 'avenger';
+
+/** Стиль приборной панели: цифровая штатная или аналоговая круглая. */
+export type HudStyle = 'digital' | 'round';
+
 export interface BikeStats {
   id: string;
   name: string;
@@ -18,6 +24,8 @@ export interface BikeStats {
   accent: number;
   accel: number;
   massFactor: number;
+  variant?: BikeVariant;
+  hudStyle?: HudStyle;
   swatches?: ColorSwatch[];
 }
 

@@ -31,13 +31,20 @@ export function initCamera() {
     camProfiles = {};
   }
 
+  // Заводские дефолты для отдельных моделей (не сохраняются в localStorage):
+  // у Avenger посадка ниже и обзор шире, у остальных — стандартные 75 / 0.
+  const CAM_PROFILE_DEFAULTS = {
+    avenger220: { fov: 78, height: 0.15 }
+  };
+
   function getCamProfile(bikeId = G.selectedBikeId) {
     const p = camProfiles[bikeId] || {};
+    const fallback = CAM_PROFILE_DEFAULTS[bikeId] || { fov: CAM_FOV_DEFAULT, height: CAM_HEIGHT_DEFAULT };
     const fov = Number(p.fov);
     const height = Number(p.height);
     return {
-      fov: clamp(Number.isFinite(fov) ? fov : CAM_FOV_DEFAULT, CAM_FOV_MIN, CAM_FOV_MAX),
-      height: clamp(Number.isFinite(height) ? height : CAM_HEIGHT_DEFAULT, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
+      fov: clamp(Number.isFinite(fov) ? fov : fallback.fov, CAM_FOV_MIN, CAM_FOV_MAX),
+      height: clamp(Number.isFinite(height) ? height : fallback.height, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
     };
   }
   G.getCamProfile = getCamProfile;
@@ -112,9 +119,196 @@ export function initCamera() {
   let lastPills = '';
   let dashGrad = null;
   let dashGradYura = null;
+
+  /* ---------- Круглая аналоговая приборка Boxer / Avenger ---------- */
+  const roundDash = { bg: null, chrome: null };
+
+  function drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd) {
+    const ctx = G.dashCtx;
+    if (!roundDash.bg) {
+      roundDash.bg = ctx.createLinearGradient(0, 0, 0, 256);
+      roundDash.bg.addColorStop(0, '#282828');
+      roundDash.bg.addColorStop(0.55, '#1a1a1a');
+      roundDash.bg.addColorStop(1, '#0e0e0e');
+      roundDash.chrome = ctx.createLinearGradient(0, 0, 512, 256);
+      roundDash.chrome.addColorStop(0, '#f4f4f4');
+      roundDash.chrome.addColorStop(0.32, '#9a9a9a');
+      roundDash.chrome.addColorStop(0.55, '#ededed');
+      roundDash.chrome.addColorStop(1, '#5f5f5f');
+    }
+
+    ctx.fillStyle = roundDash.bg;
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(10, 10, 492, 236);
+    ctx.strokeStyle = '#313131';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, 492, 236);
+
+    const accent = '#' + G.accentMat.color.getHexString();
+    const speedFrac = clamp(maxSpd > 0 ? speedVal / maxSpd : 0, 0, 1);
+    const gaugeStart = 150;
+    const gaugeSweep = 240;
+    const rad = deg => deg * Math.PI / 180;
+
+    function ring(x, y, r, width, stroke) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.lineWidth = width;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+
+    /* --- Круглый спидометр --- */
+    const cx = 128;
+    const cy = 126;
+    const R = 104;
+    ring(cx, cy, R, 8, roundDash.chrome);
+    ring(cx, cy, R - 8, 2, '#3d3d3d');
+    ctx.beginPath();
+    ctx.arc(cx, cy, R - 12, 0, Math.PI * 2);
+    ctx.fillStyle = '#151515';
+    ctx.fill();
+
+    const maxTick = Math.max(10, Math.ceil(maxSpd / 10) * 10);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let v = 0; v <= maxTick; v += 10) {
+      const a = rad(gaugeStart + gaugeSweep * (v / maxTick));
+      const major = v % 20 === 0;
+      const r1 = R - 14;
+      const r2 = R - (major ? 28 : 22);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      ctx.strokeStyle = major ? '#ffffff' : '#9e9e9e';
+      ctx.lineWidth = major ? 2.5 : 1.4;
+      ctx.stroke();
+      if (major) {
+        const rt = R - 40;
+        ctx.fillStyle = '#d8d8d8';
+        ctx.font = '700 12px system-ui,Arial';
+        ctx.fillText(String(v), cx + Math.cos(a) * rt, cy + Math.sin(a) * rt);
+      }
+    }
+
+    // Дуга прогресса в цвете акцента байка.
+    ctx.beginPath();
+    ctx.arc(cx, cy, R - 46, rad(gaugeStart), rad(gaugeStart + gaugeSweep * speedFrac));
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // Оранжевая стрелка.
+    const na = rad(gaugeStart + gaugeSweep * speedFrac);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(na);
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(0, -4.5);
+    ctx.lineTo(R - 32, 0);
+    ctx.lineTo(0, 4.5);
+    ctx.closePath();
+    ctx.fillStyle = '#ff9800';
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#cfcfcf';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#333333';
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 40px system-ui,Segoe UI,Arial';
+    ctx.fillText(String(Math.round(speedVal)), cx, cy + 32);
+    ctx.fillStyle = '#bdbdbd';
+    ctx.font = '700 12px system-ui,Arial';
+    ctx.fillText('км/ч', cx, cy + 56);
+
+    if (highBeamActive) {
+      ctx.beginPath();
+      ctx.arc(cx, cy - 58, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#2196f3';
+      ctx.fill();
+      ctx.strokeStyle = '#90caf9';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
+    /* --- Круглый одометр --- */
+    const ox = 372;
+    const oy = 126;
+    const OR = 92;
+    ring(ox, oy, OR, 7, roundDash.chrome);
+    ring(ox, oy, OR - 7, 2, '#3d3d3d');
+    ctx.beginPath();
+    ctx.arc(ox, oy, OR - 11, 0, Math.PI * 2);
+    ctx.fillStyle = '#141414';
+    ctx.fill();
+
+    const hundredths = Math.max(0, Math.floor((distVal || 0) * 100));
+    const digitStr = String(hundredths).padStart(5, '0').slice(-5);
+    for (let i = 0; i < 5; i++) {
+      const a = rad(215 + i * 27.5);
+      const dx = ox + Math.cos(a) * (OR - 24);
+      const dy = oy + Math.sin(a) * (OR - 24);
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.fillStyle = '#0c0c0c';
+      ctx.fillRect(-11, -14, 22, 28);
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-11, -14, 22, 28);
+      ctx.fillStyle = '#f5f5f5';
+      ctx.font = '900 18px Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(digitStr[i], 0, 1);
+      ctx.restore();
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f2f2f2';
+    ctx.font = '900 26px Consolas,monospace';
+    ctx.fillText((distVal || 0).toFixed(2).padStart(6, '0'), ox, oy - 4);
+    ctx.fillStyle = '#9e9e9e';
+    ctx.font = '700 10px system-ui,Arial';
+    ctx.fillText('ОБЩИЙ ПРОБЕГ', ox, oy + 30);
+
+    /* --- Баланс и множитель встречки --- */
+    const scoreText = `${grouped(scoreVal)} ₽`;
+    const multLabel = multVal > 1 ? ` ×${multVal}` : '';
+    ctx.font = '800 15px system-ui,Arial';
+    const wScore = ctx.measureText(scoreText).width;
+    let wMult = 0;
+    if (multLabel) {
+      ctx.font = '900 16px system-ui,Arial';
+      wMult = ctx.measureText(multLabel).width;
+    }
+    let sx = 256 - (wScore + wMult) / 2;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffcc80';
+    ctx.font = '800 15px system-ui,Arial';
+    ctx.fillText(scoreText, sx, 242);
+    if (multLabel) {
+      ctx.fillStyle = '#ff1744';
+      ctx.font = '900 16px system-ui,Arial';
+      ctx.fillText(multLabel, sx + wScore, 242);
+    }
+  }
+
   function updateCockpitDashboard(now, speedVal, distVal, scoreVal, multVal, highBeamActive) {
     const effStats = G.frameStats || G.applyWearToStats(G.getBikeEffectiveStats(G.selectedBikeId));
     const maxSpd = effStats.maxSpeed;
+    const bike = G.selectedBike();
+    const hudStyle = bike.hudStyle || 'digital';
     const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
     const speedText = String(Math.round(speedVal));
     const distText = runDistance(distVal);
@@ -139,10 +333,16 @@ export function initCamera() {
       return;
     }
 
-    const dashKey = `${speedText}|${distText}|${rubText}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
+    const dashKey = `${bike.id}|${hudStyle}|${speedText}|${distText}|${rubText}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
     if (dashKey === lastDashKey || now - lastDashDraw < 30) return;
     lastDashKey = dashKey;
     lastDashDraw = now;
+
+    if (hudStyle === 'round') {
+      drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd);
+      G.dashTex.needsUpdate = true;
+      return;
+    }
 
     const rpmFrac = clamp(speedVal / maxSpd, 0, 1);
     const isYura = effStats.isYura;

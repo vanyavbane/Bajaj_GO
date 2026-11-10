@@ -23,6 +23,7 @@ export function initBike() {
   G.dashTex.colorSpace = THREE.SRGBColorSpace;
 
   const bike = buildMotorcycle();
+  G.bikeParts = bike;
   const qute = buildQuteExterior();
   const pit = buildCockpits();
 
@@ -40,7 +41,49 @@ export function initBike() {
   G.yuraUnderGlowLight.position.set(0, 0.35, -0.3);
   G.bikeRoot.add(G.yuraUnderGlowLight);
 
+  // Переключение внешнего вида мотоцикла: Pulsar (базовая модель), Boxer или Avenger.
+  // Общие колёса/двигатель/тюнинг остаются на месте — меняются только обвесы и посадка.
+  function applyBikeVariant() {
+    const selected = G.selectedBike();
+    const variant = selected.variant || 'pulsar';
+    const isBoxer = variant === 'boxer';
+    const isAvenger = variant === 'avenger';
+    const hudStyle = selected.hudStyle || 'digital';
+
+    if (G.bikeVariantGroups) {
+      G.bikeVariantGroups.boxer.visible = isBoxer;
+      G.bikeVariantGroups.avenger.visible = isAvenger;
+    }
+    if (G.bikeThirdPersonVariants) {
+      G.bikeThirdPersonVariants.pulsar.visible = !isBoxer && !isAvenger;
+      G.bikeThirdPersonVariants.boxer.visible = isBoxer;
+      G.bikeThirdPersonVariants.avenger.visible = isAvenger;
+    }
+    if (G.bikeThirdPersonRider) {
+      G.bikeThirdPersonRider.position.set(0, isAvenger ? -0.2 : 0, isAvenger ? 0.08 : 0);
+      G.bikeThirdPersonRider.rotation.x = isAvenger ? 0.08 : 0;
+    }
+
+    // У Avenger длинная вилка выносит переднее колесо вперёд. Тюнинг-диски
+    // висят на группе колеса, поэтому переезжают вместе с ним.
+    G.frontWheelGroup.position.z = isAvenger ? -1.78 : -1.42;
+    bike.frontFender = bike.frontFenders[variant] || bike.frontFenders.pulsar;
+    for (const [key, fender] of Object.entries(bike.frontFenders)) {
+      fender.visible = key === variant;
+    }
+
+    // Ветровое стекло не должно «висеть в воздухе» над длинной вилкой.
+    bike.tuneBikeWindshieldExt.position.set(0, isAvenger ? -0.08 : 0, isAvenger ? -0.12 : 0);
+    bike.tuneBikeWindshieldExt.scale.setScalar(isAvenger ? 0.94 : 1);
+
+    if (G.bikeCockpitHandlebarGroup) G.bikeCockpitHandlebarGroup.visible = !isAvenger;
+    if (G.avengerCockpitGroup) G.avengerCockpitGroup.visible = isAvenger;
+    if (G.roundDashBezelGroup) G.roundDashBezelGroup.visible = hudStyle === 'round';
+  }
+  G.applyBikeVariant = applyBikeVariant;
+
   function applyVisualTuningToModel() {
+    applyBikeVariant();
     const installed = new Set(G.getBikeTuningRecord(G.selectedBikeId).installed);
     const hasFilter = installed.has('zero_filter');
     const hasCarb = installed.has('carb_replace');
@@ -62,7 +105,8 @@ export function initBike() {
     bike.fRim.scale.set(tireScaleX * 0.92, 1, 1);
     bike.rTire.scale.set(tireScaleX * 1.08, 1, 1);
     bike.rRim.scale.set(tireScaleX * 0.95, 1, 1);
-    bike.frontFender.scale.set(hasWideTires ? 1.38 : 1.0, 1, 1);
+    const fenderScale = hasWideTires ? 1.38 : 1.0;
+    for (const fender of Object.values(bike.frontFenders)) fender.scale.set(fenderScale, 1, 1);
     for (const qw of G.quteWheels) qw.scale.set(hasWideTires ? 1.44 : 1.0, 1, 1);
 
     bike.tuneUpgradedBrakesGroup.visible = hasBrakes;

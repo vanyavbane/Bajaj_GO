@@ -81,16 +81,47 @@ export function buildCockpits() {
   G.bikeCockpitGroup.add(bikeDashScreen);
 
   addBox(G.bikeCockpitGroup, 1.12, 0.055, 0.06, G.M.chrome, 0, -0.24, -0.92);
+  // Руль и зеркала вынесены в отдельную группу: у Avenger своя чоппер-посадка.
+  G.bikeCockpitHandlebarGroup = new THREE.Group();
+  G.bikeCockpitGroup.add(G.bikeCockpitHandlebarGroup);
+  const handlebars = G.bikeCockpitHandlebarGroup;
   for (const side of [-1, 1]) {
-    addCyl(G.bikeCockpitGroup, 0.04, 0.048, 0.28, G.M.chrome, side * 0.32, -0.28, -0.94, 0, side * 0.12);
-    addBox(G.bikeCockpitGroup, 0.22, 0.09, 0.34, G.M.mattePlastic, side * 0.78, -0.18, -0.82, 0, 0, side * 0.08);
-    addBox(G.bikeCockpitGroup, 0.16, 0.12, 0.18, G.M.metalDark, side * 0.58, -0.19, -0.86);
-    addBox(G.bikeCockpitGroup, 0.18, 0.025, 0.04, G.M.chrome, side * 0.74, -0.18, -0.97, 0, -side * 0.18, 0);
-    addCyl(G.bikeCockpitGroup, 0.018, 0.024, 0.55, G.M.mattePlastic, side * 0.82, 0.02, -0.78, 0, -side * 0.48);
-    addBox(G.bikeCockpitGroup, 0.34, 0.19, 0.045, G.M.mattePlastic, side * 1.05, 0.21, -0.72, 0, -side * 0.2, side * 0.12);
-    addBox(G.bikeCockpitGroup, 0.29, 0.15, 0.015, G.M.glass, side * 1.05, 0.21, -0.695, 0, -side * 0.2, side * 0.12);
+    addCyl(handlebars, 0.04, 0.048, 0.28, G.M.chrome, side * 0.32, -0.28, -0.94, 0, side * 0.12);
+    addBox(handlebars, 0.22, 0.09, 0.34, G.M.mattePlastic, side * 0.78, -0.18, -0.82, 0, 0, side * 0.08);
+    addBox(handlebars, 0.16, 0.12, 0.18, G.M.metalDark, side * 0.58, -0.19, -0.86);
+    addBox(handlebars, 0.18, 0.025, 0.04, G.M.chrome, side * 0.74, -0.18, -0.97, 0, -side * 0.18, 0);
+    addCyl(handlebars, 0.018, 0.024, 0.55, G.M.mattePlastic, side * 0.82, 0.02, -0.78, 0, -side * 0.48);
+    addBox(handlebars, 0.34, 0.19, 0.045, G.M.mattePlastic, side * 1.05, 0.21, -0.72, 0, -side * 0.2, side * 0.12);
+    addBox(handlebars, 0.29, 0.15, 0.015, G.M.glass, side * 1.05, 0.21, -0.695, 0, -side * 0.2, side * 0.12);
     addBox(G.bikeCockpitGroup, 0.22, 0.24, 0.68, sleeveMat, side * 0.68, -0.34, -0.24, 0.15, 0, -side * 0.14);
     addBox(G.bikeCockpitGroup, 0.18, 0.14, 0.22, G.M.mattePlastic, side * 0.77, -0.19, -0.64, 0, 0, -side * 0.08);
+  }
+
+  // Avenger: руль выше и ближе к камере, длинная вилка и зеркала на высоких ножках.
+  G.avengerCockpitGroup = new THREE.Group();
+  {
+    addBox(G.avengerCockpitGroup, 1.3, 0.06, 0.07, G.M.chrome, 0, -0.08, -0.7, -0.08, 0, 0);
+    for (const side of [-1, 1]) {
+      addBox(G.avengerCockpitGroup, 0.26, 0.1, 0.36, G.M.mattePlastic, side * 0.86, -0.02, -0.6, 0, 0, side * 0.1);
+      addCyl(G.avengerCockpitGroup, 0.016, 0.022, 0.66, G.M.chrome, side * 0.9, 0.28, -0.56, 0, -side * 0.44);
+      addBox(G.avengerCockpitGroup, 0.36, 0.2, 0.05, G.M.mattePlastic, side * 1.02, 0.6, -0.42, 0, -side * 0.22, side * 0.14);
+      addBox(G.avengerCockpitGroup, 0.31, 0.16, 0.015, G.M.glass, side * 1.02, 0.6, -0.39, 0, -side * 0.22, side * 0.14);
+      addCyl(G.avengerCockpitGroup, 0.036, 0.03, 1.05, G.M.chrome, side * 0.3, -0.62, -1.24, 0.46, 0);
+    }
+  }
+  G.bikeCockpitGroup.add(G.avengerCockpitGroup);
+
+  // Хром-ободки круглых приборов (видны только при hudStyle === 'round').
+  G.roundDashBezelGroup = new THREE.Group();
+  {
+    const bezelSpeed = new THREE.Mesh(new THREE.TorusGeometry(0.119, 0.009, 6, 22), G.M.chrome);
+    bezelSpeed.position.set(-0.145, -0.375, -0.807);
+    bezelSpeed.rotation.x = -0.22;
+    const bezelOdo = new THREE.Mesh(new THREE.TorusGeometry(0.102, 0.009, 6, 22), G.M.chrome);
+    bezelOdo.position.set(0.119, -0.375, -0.807);
+    bezelOdo.rotation.x = -0.22;
+    G.roundDashBezelGroup.add(bezelSpeed, bezelOdo);
+    G.bikeCockpitGroup.add(G.roundDashBezelGroup);
   }
 
   G.quteSteeringWheelPivot = new THREE.Group();
