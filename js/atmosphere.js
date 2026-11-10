@@ -150,6 +150,7 @@ export function initAtmosphere() {
     G.sunLight.intensity = inTunnel ? baseSunInt * 0.25 : baseSunInt * (1 - 0.50 * wc);
     G.hemiLight.intensity = inTunnel ? 0.35 : lerp(pA.hemiInt, pB.hemiInt, t) * (1 + 0.18 * wc);
 
+    G.inTunnel = inTunnel;
     const isNightish = (G.todCycleTime >= 0.36 && G.todCycleTime <= 0.88) || inTunnel;
     const baseHeadInt = inTunnel ? 5.2 : lerp(pA.headInt, pB.headInt, t);
     const beamBoost = G.highBeamTimer > 0 ? 3.8 : 1.0;

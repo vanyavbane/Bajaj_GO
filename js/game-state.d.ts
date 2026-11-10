@@ -109,6 +109,16 @@ export interface WeatherState {
   flashes: Array<{ at: number; fired: boolean }>;
 }
 
+export interface VisualSettings {
+  motionBlur: boolean;
+  motionBlurIntensity: number;
+  motionBlurComfort: boolean;
+  godRays: boolean;
+  godRaysIntensity: number;
+  godRaysLength: number;
+  weakDevice: boolean;
+}
+
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
 export interface GameState {
   $: <T extends HTMLElement = HTMLElement>(id: string) => T;
@@ -163,6 +173,12 @@ export interface GameState {
   resetWeather: () => void;
   setRainSound: (level: number) => void;
   playThunder: () => void;
+  visual: VisualSettings;
+  renderFrame: (dt: number) => void;
+  saveVisualSettings: () => void;
+  applyPostFxSize: () => void;
+  inTunnel: boolean;
+  smoothstep: (edge0: number, edge1: number, x: number) => number;
   M: Record<string, THREE.Material>;
 
   [key: string]: any;

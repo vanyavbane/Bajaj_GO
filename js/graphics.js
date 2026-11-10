@@ -90,6 +90,9 @@ export function initGraphics() {
     G.M.road.userData.baseEnvIntensity = roadEnv;
     G.M.chrome.envMapIntensity = current.reflections ? (crisp ? 1.65 : 1.1) : 0.8;
     G.M.glass.envMapIntensity = current.reflections ? (crisp ? 1.75 : 1.2) : 0.85;
+
+    // Composer и буферы пост-эффектов должны совпадать с новым размером/DPR.
+    if (G.applyPostFxSize) G.applyPostFxSize();
   }
 
   function chooseGraphics(key, raw) {

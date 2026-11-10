@@ -1111,6 +1111,7 @@ export function initEconomy() {
 
   /* ---------- Пауза ---------- */
   function renderPauseMenu(showSettings = false) {
+    if (G.started && !G.ended) G.currentScreen = 'playing';
     const overlay = $('overlay');
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
@@ -1118,6 +1119,8 @@ export function initEconomy() {
     const orderValue = activeOrder
       ? `${activeOrder.restaurant} · ${formatClock(activeOrder.timeLeft)}`
       : 'нет';
+    const visual = G.visual;
+    const onOff = (on) => (on ? 'Вкл' : 'Выкл');
 
     overlay.innerHTML = panel(`
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
@@ -1129,7 +1132,9 @@ export function initEconomy() {
           { label: 'Заказ', value: orderValue }
         ])}
         ${showSettings ? `
-          ${inline('Графика', button({ id: 'pause-graphics', variant: 'compact', label: G.graphicsLabel }))}
+          ${inline('Качество освещения', button({ id: 'pause-settings-open', variant: 'compact', label: G.graphicsLabel }))}
+          ${inline('💨 Motion Blur', button({ id: 'pause-mb', variant: 'compact', label: onOff(visual.motionBlur) }))}
+          ${inline('☀️ Лучи от солнца', button({ id: 'pause-gr', variant: 'compact', label: onOff(visual.godRays) }))}
           ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
           ${inline('Кокпит: FOV / высота', button({ id: 'pause-cam-settings', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
           ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
@@ -1142,7 +1147,13 @@ export function initEconomy() {
     $('pause-menu').addEventListener('click', exitToMenuFromPause);
     if (showSettings) {
       $('pause-settings-back').addEventListener('click', () => renderPauseMenu(false));
-      $('pause-graphics').addEventListener('click', () => G.renderGraphics('pause'));
+      $('pause-settings-open').addEventListener('click', () => G.renderSettings('lighting', 'pause'));
+      $('pause-mb').addEventListener('click', () => {
+        G.renderMotionBlurSettings(() => renderPauseMenu(true), true);
+      });
+      $('pause-gr').addEventListener('click', () => {
+        G.renderGodRaysSettings(() => renderPauseMenu(true), true);
+      });
       $('pause-cam').addEventListener('click', () => {
         G.toggleCameraMode();
         renderPauseMenu(true);
@@ -1170,6 +1181,7 @@ export function initEconomy() {
 
   function resumeGame() {
     G.paused = false;
+    G.currentScreen = (G.started && !G.ended) ? 'playing' : 'main';
     const overlay = $('overlay');
     overlay.style.display = 'none';
     overlay.innerHTML = '';
@@ -1177,6 +1189,7 @@ export function initEconomy() {
     $('controls').hidden = false;
     G.lastTime = performance.now();
   }
+  G.resumeGame = resumeGame;
 
   function exitToMenuFromPause() {
     G.paused = false;

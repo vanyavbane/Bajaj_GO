@@ -18,7 +18,7 @@
 
 | № | Файл | Что внутри |
 |---|---|---|
-|   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics` |
+|   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics`; экран — вкладка «Графика» в настройках |
 | 1 | `js/catalog.js` | `bikeCatalog`, `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
@@ -40,10 +40,11 @@
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
 |   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`. Тюнинг только на съезде |
+| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, экран «Настройки» с вкладками (`renderSettings`), модалки Motion Blur и God Rays. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
-| 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
-| 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, трафик, коллизии, HUD, рендер |
+| 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` |
+| 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, трафик, коллизии, HUD, вызов `G.renderFrame` |
+| 18 | `js/postfx.js` | `EffectComposer`: `RenderPass` → `GodRaysPass` → `MotionBlurPass` → `OutputPass`; слой 1 (байк) поверх composer; настройки `G.visual`, авто-качество по FPS, `G.renderFrame` |
 |   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
 
 ## Ключевые переменные
@@ -60,6 +61,12 @@
 | `graphics` | `bajajGO_lighting` | JSON: режим, тени, масштаб, фонари, отражения. Старые строки `dlss` и `normal` ещё читаются. |
 | `cameraMode` | `bajajGO_camera` | `'cockpit'` \| `'third'` |
 | `camProfiles` | `bajajGO_camprofiles` | JSON `{ bikeId: { fov, height } }` — профиль кокпита для каждого байка: FOV 60–110°, высота −1.5…+1.5 м |
+| `visual.motionBlur` | `bajajGO_motionBlur` | `'on'` \| `'off'` — включён ли Motion Blur |
+| `visual.motionBlurIntensity` | `bajajGO_motionBlurIntensity` | 0–100 %, по умолчанию 60 (36 на слабом устройстве) |
+| `visual.motionBlurComfort` | `bajajGO_motionBlurComfort` | `'on'` \| `'off'` — уменьшить укачивание |
+| `visual.godRays` | `bajajGO_godRays` | `'on'` \| `'off'` — включены ли лучи от солнца |
+| `visual.godRaysIntensity` | `bajajGO_godRaysIntensity` | 0–100 %, по умолчанию 55 |
+| `visual.godRaysLength` | `bajajGO_godRaysLength` | 0–100 %, по умолчанию 50 |
 | `fuelM` | `bajajGO_fuel` | Остаток топлива в метрах (0…`FUEL_RANGE_M` = 25 000) |
 | `wearM` | `bajajGO_wear` | JSON `{pads, oil, plugs}` — пройденные метры с момента замены |
 | `limpMode` | `bajajGO_limp` | `'1'` — езда «своим ходом» после пустого бака (5 км/ч) |
@@ -117,7 +124,7 @@ animate(now)
   ├─ updatePedestrians
   ├─ updateTraffic: движение, перелёты, столкновения → handleAccident()
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
-  └─ renderer.render(scene, camera)
+  └─ G.renderFrame(realDt): composer (слой 0) → слой 1 поверх
 ```
 
 Slow-mo меняет только `dt` игрового мира. `updateSlowMo` продолжает плавно
@@ -148,7 +155,7 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 - ДТП с активным заказом: скорая 250 ₽ (заказ сохраняется) или конец заезда.
   Без заказа — прежний `crashGame()`.
 - Пауза (Esc / P / кнопка ⏸): замораживает `animate`, включая таймер заказа.
-  Меню: продолжить, настройки (свет/камера), в главное меню.
+  Меню: продолжить, настройки (свет/камера, Motion Blur и God Rays), в главное меню.
 
 ### Маркерные зоны съездов
 
@@ -258,6 +265,40 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 - **Совместимость.** Работает в обеих камерах, не перекрывает HUD, не трогает
   физику кроме торможения, экономику, сохранения, трамплины и съезды.
 
+## Пост-эффекты: Motion Blur и God Rays
+
+Оба эффекта живут в `js/postfx.js` и включаются в экране «Настройки» на вкладке
+«Освещение» (в главном меню — кнопка «⚙ Настройки»; в паузе — блок «Настройки»).
+Старый экран «Графика» стал вкладкой этого экрана, отражения перенесены во
+вкладку «Освещение». Состояние — `G.visual`, ключи localStorage перечислены выше.
+
+- **Порядок рендера.** `EffectComposer`: `RenderPass` (слой 0 — мир) →
+  `GodRaysPass` → `MotionBlurPass` → `OutputPass`. После композера мотоцикл,
+  кокпит и приборка (слой 1) рисуются напрямую в canvas через `clearDepth()`:
+  их не размывает и не засвечивает лучами. HUD — отдельный HTML, эффектов не
+  касается. Функция кадра — `G.renderFrame(dt)`, ею пользуется `js/loop.js`
+  и пауза; resize и смена качества графики вызывают `G.applyPostFxSize()`.
+- **Слои.** Все не-световые объекты `G.bikeRoot` рекурсивно переводятся на
+  слой 1, источники света — на слои 0+1. Камера для композера стоит на слое 0;
+  `sunLight.shadow.camera.layers.enable(1)` сохраняет тень байка. Живой
+  предпросмотр кокпита временно включает слой 1 и возвращает его обратно.
+- **Motion Blur.** Лёгкий горизонтальный 7-tap blur: сила растёт от 35 %
+  максимальной скорости (≈80 км/ч), усиливается к краям, в центре ослаблена,
+  верхняя и нижняя полосы не размываются. Максимум около 8 px на 1920 px.
+  Настройки: включение, интенсивность 0–100 %, чекбокс «Уменьшить укачивание».
+  На паузе и в модальных окнах размытие выключается.
+- **God Rays.** Радиальный screen-space blur ярких пикселей: 16 сэмплов в
+  буфер половинного (или четвертного) разрешения, затем аддитивное наложение.
+  Цвет берётся из `sunLight.color` (день — тёплый бело-жёлтый, закат —
+  оранжево-красный), низ кадра приглушён. Лучи видны, только когда солнце в
+  кадре; плавно гаснут в дождь/плотные тучи, ночью и в тоннеле (fade 3–5 с,
+  тоннель 0.3–0.5 с) и так же плавно возвращаются. Настройки: включение,
+  интенсивность 0–100 %, длина лучей 0–100 %.
+- **Авто-качество.** Скользящее среднее FPS за 60 кадров: ниже 34 —
+  эффекты выключаются, ниже 42 — включаются в полсилы (лучи в четвертном
+  разрешении), выше 50 — полная сила. На слабых устройствах старт сразу
+  с пониженного уровня и меньшей интенсивности Motion Blur.
+
 ## Где что менять
 
 | Задача | Где |
@@ -281,6 +322,8 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 | Slow-Mo при перелётах | `SLOWMO_TARGET`, `SLOWMO_MAX_SECONDS`, `triggerSlowMo`, `updateSlowMo`, `endSlowMo` в `js/effects.js`; вызов в `overfly` (`js/traffic.js`); `dt` в `js/loop.js` |
 | Погода, дождь и мокрый асфальт | `RAIN_MIN/RAIN_MAX`, `GAP_MIN`, `initWeather` / `updateWeather` в `js/weather.js`; `storm` в `todPalettes` и `updateAtmosphereAndTimeOfDay`; `G.stormClouds` в `js/sky.js` |
 | Профиль камеры кокпита | `CAM_FOV_*`, `CAM_HEIGHT_*`, `getCamProfile`, `saveCamProfiles`, `renderCameraSettings` в `js/camera.js` |
+| Motion Blur и God Rays | `MOTION_BLUR_FRAGMENT`, `GOD_RAYS_FRAGMENT`, `MotionBlurPass`, `GodRaysPass`, `initPostFx`, `G.renderFrame` в `js/postfx.js` |
+| Экран настроек с вкладками | `renderSettings`, `renderMotionBlurSettings`, `renderGodRaysSettings` в `js/ui.js`; стили `.ds-tab*`, `.fx-check` в `css/game.css` |
 
 ## Технические ограничения
 

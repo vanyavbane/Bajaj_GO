@@ -10,6 +10,7 @@ import { initHighbeam } from './highbeam.js';
 import { initInput } from './input.js';
 import { initLoop } from './loop.js';
 import { initPedestrians } from './pedestrians.js';
+import { initPostFx } from './postfx.js';
 import { initRoad } from './road.js';
 import { initRoadside } from './roadside.js';
 import { initRoadSurface } from './roadSurface.js';
@@ -36,6 +37,7 @@ initPedestrians();
 initTraffic();
 initBike();
 initCamera();
+initPostFx();
 initAtmosphere();
 initHighbeam();
 

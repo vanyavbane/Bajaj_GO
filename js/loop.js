@@ -246,7 +246,8 @@ export function initLoop() {
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {
       if (G.setRainSound) G.setRainSound(0);
-      G.renderer.render(G.scene, G.camera);
+      if (G.renderFrame) G.renderFrame(realDt);
+      else G.renderer.render(G.scene, G.camera);
       return;
     }
 
@@ -278,13 +279,15 @@ export function initLoop() {
     G.updatePedestrians(dt, now);
     G.updateTraffic(dt, now, isQute);
     updateHud(now);
-    G.renderer.render(G.scene, G.camera);
+    if (G.renderFrame) G.renderFrame(realDt);
+    else G.renderer.render(G.scene, G.camera);
   }
 
   addEventListener('resize', () => {
     G.camera.aspect = innerWidth / innerHeight;
     G.camera.updateProjectionMatrix();
     G.renderer.setSize(innerWidth, innerHeight);
+    if (G.applyPostFxSize) G.applyPostFxSize();
   });
 
   requestAnimationFrame(animate);

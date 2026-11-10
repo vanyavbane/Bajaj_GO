@@ -15,6 +15,14 @@ export function initInput() {
         if (k === 't' || k === 'c' || k === 'v' || k === 'е' || k === 'с' || k === 'м') { e.preventDefault(); return; }
       }
 
+      if (G.currentScreen === 'settings') {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (G.leaveSettings) G.leaveSettings();
+          return;
+        }
+      }
+
       if (e.key === 'Escape' || e.code === 'KeyP' || k === 'p' || k === 'з') {
         if (G.uiModal) {
           if (G.modalKind === 'exit') { e.preventDefault(); G.closeOverlayToGame(); }
@@ -40,7 +48,7 @@ export function initInput() {
         e.preventDefault();
         return;
       }
-      const cameraOpen = !G.paused && !G.uiModal && !G.ended && G.currentScreen !== 'shop' && G.currentScreen !== 'camsettings';
+      const cameraOpen = !G.paused && !G.uiModal && !G.ended && G.currentScreen !== 'shop' && G.currentScreen !== 'camsettings' && G.currentScreen !== 'settings';
       if (cameraOpen && (k === 't' || k === 'c' || k === 'v' || k === 'е' || k === 'с' || k === 'м' || e.code === 'KeyT' || e.code === 'KeyC' || e.code === 'KeyV')) {
         G.toggleCameraMode();
         e.preventDefault();

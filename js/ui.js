@@ -1,4 +1,4 @@
-import { balance, button, card, currency, field, heading, iconButton, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
+import { balance, button, callout, card, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
 import { creditRun, grouped, rubles, runDistance } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
@@ -17,11 +17,54 @@ export function initUi() {
   G.lastTime = performance.now();
   resetRun(G, G.START_LANE);
 
-  function renderGraphics(from) {
+  /* ---------- Настройки: общий экран с вкладками ---------- */
+  let settingsReturn = null;
+
+  function saveVisual() {
+    if (G.saveVisualSettings) G.saveVisualSettings();
+  }
+
+  function fxState(on) {
+    return on ? 'Вкл' : 'Выкл';
+  }
+
+  function fxOpenModal(render) {
+    G.currentScreen = 'settings';
+    render();
+  }
+
+  function continueFromSettings() {
+    if (!G.paused) return;
+    G.currentScreen = (G.started && !G.ended) ? 'playing' : 'main';
+    if (G.resumeGame) G.resumeGame();
+    else {
+      G.paused = false;
+      const overlay = $('overlay');
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+    }
+  }
+
+  G.leaveSettings = () => {
+    const fn = settingsReturn;
+    if (!fn) return;
+    settingsReturn = null;
+    fn();
+  };
+
+  function renderSettings(tab = 'graphics', from = 'menu') {
+    G.currentScreen = 'settings';
+    settingsReturn = () => {
+      if (from === 'pause') G.renderPauseMenu(true);
+      else renderMainMenu();
+    };
+
     const overlay = $('overlay');
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
+
     const g = G.graphics;
+    const v = G.visual;
     const option = (key, value, label) => button({
       variant: 'choice',
       label,
@@ -29,30 +72,226 @@ export function initUi() {
       data: { gfx: key, value }
     });
 
-    overlay.innerHTML = panel(`
-        ${heading('ГРАФИКА', 'ОДНИ НАСТРОЙКИ НА ВЕСЬ ЭКРАН')}
+    const tabs = [
+      ['graphics', 'Графика'],
+      ['lighting', 'Освещение'],
+      ['camera', 'Вид камеры'],
+      ['sound', 'Звук']
+    ];
+    const tabsHtml = `<div class="ds-tabs">${tabs.map(([key, label]) => (
+      `<button type="button" class="ds-tab${tab === key ? ' ds-tab-on' : ''}" data-tab="${key}">${label}</button>`
+    )).join('')}</div>`;
+
+    let body = '';
+    if (tab === 'graphics') {
+      body = `
         ${g.preset === 'custom' ? note('Свой набор. Экспозиция 1.18 включается только режимом «Чётко».') : ''}
         ${field('Режим', option('preset', 'fast', 'Быстро') + option('preset', 'balanced', 'Ровно') + option('preset', 'sharp', 'Чётко'))}
         ${field('Тени', option('shadows', 'off', 'Нет') + option('shadows', 'low', 'Рядом') + option('shadows', 'high', 'Чётче'))}
         ${field('Масштаб кадра', option('scale', 0.75, '0.75') + option('scale', 1, '1') + option('scale', 1.25, '1.25'))}
         ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4'))}
+        ${note('Отражения перенесены во вкладку «Освещение».')}
+      `;
+    } else if (tab === 'lighting') {
+      body = `
         ${field('Отражения', option('reflections', false, 'Тише') + option('reflections', true, 'Есть'))}
-        ${button({ id: 'gfx-back', label: '← НАЗАД' })}
+        ${inline('💨 Motion Blur', button({ id: 'fx-open-mb', variant: 'compact', label: fxState(v.motionBlur) }))}
+        ${inline('☀️ Лучи от солнца', button({ id: 'fx-open-gr', variant: 'compact', label: fxState(v.godRays) }))}
+        ${note('Оба эффекта применяются мгновенно и сохраняются в браузере.')}
+      `;
+    } else if (tab === 'camera') {
+      body = `
+        ${inline('Вид камеры', button({ id: 'settings-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
+        ${inline('Кокпит: FOV / высота', button({ id: 'settings-cam-fov', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
+        ${note('Вид от третьего лица фиксированный. Профиль камеры хранится отдельно для каждого мотоцикла.')}
+      `;
+    } else {
+      body = `
+        ${note('Раздел «Звук» пока пуст и появится позже.')}
+        ${note('Сейчас доступны графика, качество освещения и вид камеры.')}
+      `;
+    }
+
+    overlay.innerHTML = panel(`
+        ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · ЗВУК')}
+        ${tabsHtml}
+        <div class="ds-tab-body">${body}</div>
+        ${button({ id: 'settings-back', label: '← НАЗАД' })}
     `, { size: 'narrow' });
 
+    overlay.querySelectorAll('[data-tab]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
+      btn.addEventListener('click', () => renderSettings(btn.dataset.tab, from));
+    });
     overlay.querySelectorAll('[data-gfx]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         G.chooseGraphics(btn.dataset.gfx, btn.dataset.value);
-        renderGraphics(from);
+        renderSettings(tab, from);
       });
     });
-    $('gfx-back').addEventListener('click', () => {
-      if (from === 'pause') G.renderPauseMenu(false);
-      else renderMainMenu();
-    });
+    $('settings-back').addEventListener('click', () => G.leaveSettings());
+
+    const openMb = document.getElementById('fx-open-mb');
+    if (openMb) {
+      openMb.addEventListener('click', () => {
+        fxOpenModal(() => renderMotionBlurSettings(() => renderSettings('lighting', from), from === 'pause'));
+      });
+    }
+    const openGr = document.getElementById('fx-open-gr');
+    if (openGr) {
+      openGr.addEventListener('click', () => {
+        fxOpenModal(() => renderGodRaysSettings(() => renderSettings('lighting', from), from === 'pause'));
+      });
+    }
+    const cam = document.getElementById('settings-cam');
+    if (cam) {
+      cam.addEventListener('click', () => {
+        G.toggleCameraMode();
+        renderSettings('camera', from);
+      });
+    }
+    const camFov = document.getElementById('settings-cam-fov');
+    if (camFov) {
+      camFov.addEventListener('click', () => {
+        G.renderCameraSettings(() => renderSettings('camera', from));
+      });
+    }
   }
-  G.renderGraphics = renderGraphics;
+  G.renderSettings = renderSettings;
+
+  function renderMotionBlurSettings(backFn, fromPause) {
+    G.currentScreen = 'settings';
+    settingsReturn = backFn || (() => renderSettings('lighting', 'menu'));
+    const v = G.visual;
+
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+    overlay.innerHTML = panel(`
+        ${heading('💨 MOTION BLUR', 'КИНЕМАТОГРАФИЧНОЕ РАЗМЫТИЕ НА СКОРОСТИ')}
+        ${inline('Включить эффект', button({ id: 'mb-toggle', variant: 'compact', label: fxState(v.motionBlur), pressed: v.motionBlur }))}
+        <div class="cam-slider-block">
+          <div class="cam-slider-head">
+            <span>ИНТЕНСИВНОСТЬ</span>
+            <b><span id="mb-val">${Math.round(v.motionBlurIntensity)}</span>%</b>
+          </div>
+          <input type="range" id="mb-range" min="0" max="100" step="1" value="${Math.round(v.motionBlurIntensity)}">
+          <div class="cam-slider-hint">Проявляется от ~35% максимальной скорости (≈80 км/ч) и плавно усиливается.</div>
+        </div>
+        <label class="fx-check">
+          <input type="checkbox" id="mb-comfort"${v.motionBlurComfort ? ' checked' : ''}>
+          <span>Уменьшить укачивание</span>
+        </label>
+        ${note('Размытие сильнее по краям, центр и полосы сверху/снизу остаются чёткими. HUD и мотоцикл игрока не размываются.')}
+        ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
+        ${button({ id: 'mb-reset', icon: '↺', label: 'СБРОСИТЬ' })}
+        ${button({ id: 'mb-back', label: '← НАЗАД' })}
+        ${fromPause ? button({ id: 'mb-continue', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' }) : ''}
+    `, { size: 'narrow' });
+
+    const range = /** @type {HTMLInputElement} */ ($('mb-range'));
+    const valueEl = $('mb-val');
+    range.addEventListener('input', () => {
+      v.motionBlurIntensity = G.clamp(Number(range.value), 0, 100);
+      valueEl.textContent = String(Math.round(v.motionBlurIntensity));
+      saveVisual();
+    });
+
+    $('mb-toggle').addEventListener('click', () => {
+      v.motionBlur = !v.motionBlur;
+      saveVisual();
+      renderMotionBlurSettings(backFn, fromPause);
+    });
+
+    const comfort = /** @type {HTMLInputElement} */ ($('mb-comfort'));
+    comfort.addEventListener('change', () => {
+      v.motionBlurComfort = comfort.checked;
+      saveVisual();
+    });
+
+    $('mb-reset').addEventListener('click', () => {
+      v.motionBlur = true;
+      v.motionBlurIntensity = v.weakDevice ? 36 : 60;
+      v.motionBlurComfort = false;
+      saveVisual();
+      renderMotionBlurSettings(backFn, fromPause);
+    });
+    $('mb-back').addEventListener('click', () => G.leaveSettings());
+    const cont = document.getElementById('mb-continue');
+    if (cont) cont.addEventListener('click', continueFromSettings);
+  }
+  G.renderMotionBlurSettings = renderMotionBlurSettings;
+
+  function renderGodRaysSettings(backFn, fromPause) {
+    G.currentScreen = 'settings';
+    settingsReturn = backFn || (() => renderSettings('lighting', 'menu'));
+    const v = G.visual;
+
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+    overlay.innerHTML = panel(`
+        ${heading('☀️ ЛУЧИ ОТ СОЛНЦА', 'GOD RAYS · СВЕТОВЫЕ ЛУЧИ СКВОЗЬ ОБЛАКА')}
+        ${inline('Включить эффект', button({ id: 'gr-toggle', variant: 'compact', label: fxState(v.godRays), pressed: v.godRays }))}
+        <div class="cam-slider-block">
+          <div class="cam-slider-head">
+            <span>ИНТЕНСИВНОСТЬ</span>
+            <b><span id="gr-val">${Math.round(v.godRaysIntensity)}</span>%</b>
+          </div>
+          <input type="range" id="gr-range" min="0" max="100" step="1" value="${Math.round(v.godRaysIntensity)}">
+        </div>
+        <div class="cam-slider-block">
+          <div class="cam-slider-head">
+            <span>ДЛИНА ЛУЧЕЙ</span>
+            <b><span id="gr-len-val">${Math.round(v.godRaysLength)}</span>%</b>
+          </div>
+          <input type="range" id="gr-len" min="0" max="100" step="1" value="${Math.round(v.godRaysLength)}">
+        </div>
+        ${note('Лучи видны только днём и на закате, когда солнце не закрыто тучами. Во время дождя, ночью и в тоннеле лучи автоматически скрываются.')}
+        ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
+        ${button({ id: 'gr-reset', icon: '↺', label: 'СБРОСИТЬ' })}
+        ${button({ id: 'gr-back', label: '← НАЗАД' })}
+        ${fromPause ? button({ id: 'gr-continue', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' }) : ''}
+    `, { size: 'narrow' });
+
+    const range = /** @type {HTMLInputElement} */ ($('gr-range'));
+    const valueEl = $('gr-val');
+    range.addEventListener('input', () => {
+      v.godRaysIntensity = G.clamp(Number(range.value), 0, 100);
+      valueEl.textContent = String(Math.round(v.godRaysIntensity));
+      saveVisual();
+    });
+
+    const lenRange = /** @type {HTMLInputElement} */ ($('gr-len'));
+    const lenValueEl = $('gr-len-val');
+    lenRange.addEventListener('input', () => {
+      v.godRaysLength = G.clamp(Number(lenRange.value), 0, 100);
+      lenValueEl.textContent = String(Math.round(v.godRaysLength));
+      saveVisual();
+    });
+
+    $('gr-toggle').addEventListener('click', () => {
+      v.godRays = !v.godRays;
+      saveVisual();
+      renderGodRaysSettings(backFn, fromPause);
+    });
+
+    $('gr-reset').addEventListener('click', () => {
+      v.godRays = true;
+      v.godRaysIntensity = 55;
+      v.godRaysLength = 50;
+      saveVisual();
+      renderGodRaysSettings(backFn, fromPause);
+    });
+    $('gr-back').addEventListener('click', () => G.leaveSettings());
+    const cont = document.getElementById('gr-continue');
+    if (cont) cont.addEventListener('click', continueFromSettings);
+  }
+  G.renderGodRaysSettings = renderGodRaysSettings;
+
+  /* Совместимость: старый вызов экрана «Графика» открывает вкладку графики. */
+  G.renderGraphics = (from) => renderSettings('graphics', from === 'pause' ? 'pause' : 'menu');
 
   function renderMainMenu() {
     G.currentScreen = 'main';
@@ -83,9 +322,9 @@ export function initUi() {
         button({ id: 'mm-start', variant: 'primary', icon: '▶', label: 'Начать заезд' }),
         button({ id: 'mm-shop', icon: '🛒', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
         button({
-          id: 'mm-graphics',
-          icon: '☀',
-          label: 'Графика',
+          id: 'mm-settings',
+          icon: '⚙',
+          label: 'Настройки',
           trail: G.graphicsLabel,
           trailOn: G.graphics.preset === 'sharp'
         })
@@ -103,7 +342,7 @@ export function initUi() {
 
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
-    $('mm-graphics').addEventListener('click', () => renderGraphics('menu'));
+    $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
     $('mm-cam-btn').addEventListener('click', () => {
       G.toggleCameraMode();
       renderMainMenu();

@@ -356,6 +356,9 @@ export function initCamera() {
     const prevFov = G.camera.fov;
     const prevAspect = G.camera.aspect;
     const prevPivot = G.riderPivot.position.clone();
+    const previewHadLayer1 = G.camera.layers.isEnabled(1);
+    // Кокпит живёт на слое 1 — для предпросмотра включаем его вручную.
+    G.camera.layers.enable(1);
 
     if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
     G.riderPivot.position.set(0, (isQute ? 1.33 : 1.56) + draftCamHeight, isQute ? -0.14 : 0.35);
@@ -388,6 +391,7 @@ export function initCamera() {
     G.camera.rotation.copy(prevRot);
     G.camera.fov = prevFov;
     G.camera.aspect = prevAspect;
+    if (!previewHadLayer1) G.camera.layers.disable(1);
     G.camera.updateProjectionMatrix();
     G.camera.updateMatrixWorld(true);
   }
