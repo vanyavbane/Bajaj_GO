@@ -416,11 +416,12 @@ export function initCamera() {
     if (!useThirdPersonCam) {
       if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
       // Профиль кокпита: отдельный FOV и высота для каждого мотоцикла.
+      // Высота применяется только к камере — мотоцикл и кокпит стоят на месте.
       const profile = getCamProfile(G.selectedBikeId);
-      const cockpitY = (isQute ? 1.33 : 1.56) + profile.height;
+      const cockpitY = isQute ? 1.33 : 1.56;
       const cockpitZ = isQute ? -0.14 : 0.35;
       G.riderPivot.position.set(0, cockpitY, cockpitZ);
-      G.camera.position.set(0, G.accelPitchOffset * 0.35, 0);
+      G.camera.position.set(0, profile.height + G.accelPitchOffset * 0.35, 0);
       G.camera.rotation.set(G.accelPitchOffset * 0.4, 0, -G.steerVisual * (isQute ? 0.025 : 0.04));
       if (Math.abs(G.camera.fov - profile.fov) > 0.01) {
         G.camera.fov = profile.fov;
@@ -492,11 +493,9 @@ export function initCamera() {
     if (!G.started || G.ended || G.cameraMode !== 'cockpit') return;
     const profile = getCamProfile(bike.id);
     const isQute = isQuteBody(bike.vType);
-    G.riderPivot.position.set(
-      0,
-      (isQute ? 1.33 : 1.56) + profile.height,
-      isQute ? -0.14 : 0.35
-    );
+    // Пивот мотоцикла неподвижен, высота профиля уходит в локальную позицию камеры.
+    G.riderPivot.position.set(0, isQute ? 1.33 : 1.56, isQute ? -0.14 : 0.35);
+    G.camera.position.set(0, profile.height + G.accelPitchOffset * 0.35, 0);
     G.camera.fov = profile.fov;
     G.camera.aspect = innerWidth / innerHeight;
     G.camera.updateProjectionMatrix();
@@ -561,8 +560,8 @@ export function initCamera() {
     G.camera.layers.enable(1);
 
     if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
-    G.riderPivot.position.set(0, (isQute ? 1.33 : 1.56) + draftCamHeight, isQute ? -0.14 : 0.35);
-    G.camera.position.set(0, 0, 0);
+    G.riderPivot.position.set(0, isQute ? 1.33 : 1.56, isQute ? -0.14 : 0.35);
+    G.camera.position.set(0, draftCamHeight, 0);
     G.camera.rotation.set(0, 0, 0);
     G.camera.fov = draftCamFov;
     G.camera.aspect = w / h;

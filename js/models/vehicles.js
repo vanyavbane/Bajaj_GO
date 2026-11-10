@@ -10,6 +10,23 @@ const bedMat = new THREE.MeshStandardMaterial({ color: 0x5d646e, roughness: 0.7 
 const crateMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.85 });
 const paints = new Map();
 
+// Блик фары встречной машины. Это отдельный additive-спрайт, а не God Rays:
+// лучи постобработки теперь остаются только у солнца, а фары светят сами.
+let headGlowMat = null;
+function getHeadGlowMat() {
+  if (!headGlowMat) {
+    headGlowMat = new THREE.SpriteMaterial({
+      map: G.glowTex,
+      color: 0xffe6b0,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+  }
+  return headGlowMat;
+}
+
 function paint(color) {
   let mat = paints.get(color);
   if (!mat) {
@@ -50,6 +67,12 @@ function addLights(hiDetail, xs, head, tail) {
   for (const x of xs) {
     add(hiDetail, box(head.w, head.h, head.d), headMat, x, head.y, head.z);
     add(hiDetail, box(tail.w, tail.h, tail.d), tailMat, x, tail.y, tail.z);
+
+    // Мягкий ореол вокруг фары: виден у встречных машин, сзади его закрывает кузов.
+    const glare = new THREE.Sprite(getHeadGlowMat());
+    glare.position.set(x, head.y, head.z - 0.08);
+    glare.scale.set(1.05, 1.05, 1);
+    hiDetail.add(glare);
   }
 }
 

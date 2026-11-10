@@ -131,7 +131,10 @@ const GOD_RAYS_FRAGMENT = /* glsl */`
       vec2 suv = vUv - delta * (float(i) / 16.0);
       vec3 col = texture2D(tDiffuse, clamp(suv, vec2(0.001), vec2(0.999))).rgb;
       float bright = max(col.r, max(col.g, col.b));
-      float mask = smoothstep(0.48, 1.0, bright);
+      // Только солнце: яркие окна и фонари по всему кадру больше не дают лучей.
+      // Берём пиксели в небольшом радиусе вокруг диска солнца.
+      float nearSun = 1.0 - smoothstep(0.06, 0.30, distance(suv, uSunScreenUV));
+      float mask = smoothstep(0.48, 1.0, bright) * nearSun;
       accum += col * mask * weight;
       totalWeight += weight;
       weight *= 0.94;

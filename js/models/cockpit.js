@@ -27,8 +27,9 @@ export function buildCockpits() {
 
   G.bikeCockpitGroup = new THREE.Group();
   G.quteCockpitGroup = new THREE.Group();
-  G.camera.add(G.bikeCockpitGroup);
-  G.camera.add(G.quteCockpitGroup);
+  // Кокпит крепится к мотоциклу, а не к камере: настройка высоты камеры
+  // двигает только камеру, а бак, руль и приборка остаются на месте.
+  G.riderPivot.add(G.bikeCockpitGroup, G.quteCockpitGroup);
 
   const bikeDashMat = new THREE.MeshBasicMaterial({
     map: G.dashTex,
