@@ -16,6 +16,7 @@ export function initLoop() {
   G.renderMainMenu();
 
   function finishJumpLanding() {
+    G.endSlowMo();
     const jumpDist = Math.max(0, G.playerS - G.jumpState.startS);
     const hardPitch = Math.abs(G.jumpState.pitch) > HARD_LANDING_PITCH;
 
@@ -153,6 +154,7 @@ export function initLoop() {
           G.jumpState.startS = G.playerS;
           G.jumpState.carsJumped = 0;
           G.jumpState.liveBonus = 0;
+          G.resetSlowMoJump();
           for (const c of G.trafficPool) c.jumpedInCurrentJump = false;
           $('jump-live').hidden = false;
           jumpLineShown = 'Машин: 0 · Бонус: +0 ₽';
@@ -225,8 +227,19 @@ export function initLoop() {
 
   function animate(now) {
     requestAnimationFrame(animate);
-    const dt = Math.min(0.04, (now - G.lastTime) / 1000);
+    const realDt = Math.min(0.04, (now - G.lastTime) / 1000);
     G.lastTime = now;
+
+    // Slow-Mo замедляет весь игровой мир (трафик, частицы, анимации),
+    // но не влияет на паузу. Модальные окна не останавливают плавный
+    // возврат времени, чтобы эффект завершился до продолжения заезда.
+    if (!G.paused) {
+      G.updateSlowMo(realDt);
+    }
+    const dt = realDt * G.slowMoFactor;
+
+    // Живой предпросмотр камеры в настройках (лёгкий рендер ~30 fps)
+    if (G.camPreviewActive) G.renderCameraPreview(now);
 
     if (G.tickFeed) G.tickFeed(dt);
 

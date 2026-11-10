@@ -34,6 +34,8 @@ export function initEffects() {
   G.spawnOverflyParticles = spawnOverflyParticles;
 
   let audioCtx = null;
+  // Тон звуков понижается вместе с замедлением мира (0.45…1.0).
+  let slowMoPitch = 1;
   function playJumpSound(type = 'overfly', combo = 1) {
     try {
       const ctx = ensureAudio();
@@ -44,7 +46,7 @@ export function initEffects() {
       const now = ctx.currentTime;
       if (type === 'overfly') {
         osc.type = 'triangle';
-        const baseFreq = 520 + Math.min(combo, 5) * 110;
+        const baseFreq = (520 + Math.min(combo, 5) * 110) * slowMoPitch;
         osc.frequency.setValueAtTime(baseFreq, now);
         osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.45, now + 0.16);
         gain.gain.setValueAtTime(0.12, now);
@@ -53,8 +55,8 @@ export function initEffects() {
         osc.stop(now + 0.18);
       } else if (type === 'launch') {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(240, now);
-        osc.frequency.exponentialRampToValueAtTime(480, now + 0.22);
+        osc.frequency.setValueAtTime(240 * slowMoPitch, now);
+        osc.frequency.exponentialRampToValueAtTime(480 * slowMoPitch, now + 0.22);
         gain.gain.setValueAtTime(0.1, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
         osc.start(now);
@@ -71,7 +73,7 @@ export function initEffects() {
     try {
       const ctx = ensureAudio();
       const now = ctx.currentTime;
-      const base = isFood ? 660 : 520;
+      const base = (isFood ? 660 : 520) * slowMoPitch;
       const steps = [1, 1.5];
       for (let i = 0; i < steps.length; i++) {
         const off = i * 0.075;
@@ -204,4 +206,116 @@ export function initEffects() {
     }
   }
   G.tickJumpParticles = tickJumpParticles;
+
+  /* ---------- Slow-Mo при перелётах через 3+ машины ---------- */
+  const SLOWMO_TARGET = 0.4;      // время мира замедляется до 40%
+  const SLOWMO_MAX_SECONDS = 6;   // страховка, чтобы эффект не завис
+  let slowMoActive = false;
+  let slowMoEnding = false;
+  let slowMoUsedThisJump = false;
+  let slowMoFactor = 1;
+  let slowMoElapsed = 0;
+  G.slowMoFactor = 1;
+
+  function updateSlowMoVisuals() {
+    const vig = document.getElementById('slowmo-vignette');
+    if (vig) vig.classList.toggle('on', slowMoActive);
+    const badge = document.getElementById('slowmo-badge');
+    if (badge) badge.hidden = !slowMoActive;
+  }
+
+  function resetSlowMo() {
+    slowMoActive = false;
+    slowMoEnding = false;
+    slowMoUsedThisJump = false;
+    slowMoFactor = 1;
+    slowMoElapsed = 0;
+    slowMoPitch = 1;
+    G.slowMoFactor = 1;
+    updateSlowMoVisuals();
+  }
+  G.resetSlowMo = resetSlowMo;
+
+  // Новый прыжок: эффект можно запустить снова, но активный не обрываем.
+  function resetSlowMoJump() {
+    slowMoUsedThisJump = false;
+  }
+  G.resetSlowMoJump = resetSlowMoJump;
+
+  function triggerSlowMo() {
+    if (slowMoActive || slowMoUsedThisJump) return;
+    slowMoUsedThisJump = true;
+    slowMoActive = true;
+    slowMoEnding = false;
+    slowMoElapsed = 0;
+    updateSlowMoVisuals();
+    playSlowMoEnter();
+  }
+  G.triggerSlowMo = triggerSlowMo;
+
+  function endSlowMo() {
+    if (!slowMoActive || slowMoEnding) return;
+    slowMoEnding = true;
+    updateSlowMoVisuals();
+  }
+  G.endSlowMo = endSlowMo;
+
+  function updateSlowMo(realDt) {
+    if (slowMoActive) {
+      slowMoElapsed += realDt;
+      if (!slowMoEnding) {
+        slowMoFactor = G.lerp(slowMoFactor, SLOWMO_TARGET, Math.min(1, realDt * 9));
+        if (slowMoElapsed > SLOWMO_MAX_SECONDS) slowMoEnding = true;
+      } else {
+        slowMoFactor = G.lerp(slowMoFactor, 1, Math.min(1, realDt * 2.4));
+        if (slowMoFactor > 0.985) {
+          slowMoFactor = 1;
+          slowMoActive = false;
+          slowMoEnding = false;
+          updateSlowMoVisuals();
+        }
+      }
+    } else {
+      slowMoFactor = 1;
+    }
+    // Понижение тона звуков во время замедления (0.45…1.0)
+    slowMoPitch = 0.45 + 0.55 * G.clamp(slowMoFactor, 0, 1);
+    G.slowMoFactor = slowMoFactor;
+    return slowMoFactor;
+  }
+  G.updateSlowMo = updateSlowMo;
+
+  // Низкий «вдох» при входе в замедление.
+  function playSlowMoEnter() {
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const sub = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1400, now);
+      filter.frequency.exponentialRampToValueAtTime(260, now + 0.9);
+      osc.type = 'sawtooth';
+      sub.type = 'sine';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(92, now + 0.9);
+      sub.frequency.setValueAtTime(160, now);
+      sub.frequency.exponentialRampToValueAtTime(46, now + 0.9);
+      osc.connect(filter);
+      sub.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.09, now + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.0);
+      osc.start(now);
+      sub.start(now);
+      osc.stop(now + 1.0);
+      sub.stop(now + 1.0);
+    } catch {
+      // Аудио может быть заблокировано браузером — молча пропускаем
+    }
+  }
 }

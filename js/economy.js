@@ -1051,6 +1051,7 @@ export function initEconomy() {
   /* ---------- ДТП ---------- */
   function handleAccident(car) {
     if (G.ended || G.uiModal) return;
+    G.endSlowMo();
     if (!activeOrder) {
       G.crashGame();
       return;
@@ -1130,6 +1131,7 @@ export function initEconomy() {
         ${showSettings ? `
           ${inline('Графика', button({ id: 'pause-graphics', variant: 'compact', label: G.graphicsLabel }))}
           ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
+          ${inline('Кокпит: FOV / высота', button({ id: 'pause-cam-settings', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
           ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
         ` : button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
         ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
@@ -1144,6 +1146,9 @@ export function initEconomy() {
       $('pause-cam').addEventListener('click', () => {
         G.toggleCameraMode();
         renderPauseMenu(true);
+      });
+      $('pause-cam-settings').addEventListener('click', () => {
+        G.renderCameraSettings(() => renderPauseMenu(true));
       });
     } else {
       $('pause-settings').addEventListener('click', () => renderPauseMenu(true));

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { button, heading, panel } from '@bajajgo/design';
 import { bikePaint, isQuteBody, isYuraType } from './engine/vehicle.js';
 import { grouped, rubles, runDistance } from './engine/money.js';
 import { G } from './state.js';
@@ -13,6 +14,42 @@ export function initCamera() {
    * ========================================================================= */
   G.camPosSmooth = new THREE.Vector3(0, 3.1, 6.4);
   G.camLookSmooth = new THREE.Vector3(0, 1.2, -32);
+
+  // Профили камеры от первого лица: отдельно для каждого мотоцикла.
+  // { ns125: { fov: 75, height: 0 }, ... }
+  const CAM_PROFILE_KEY = 'bajajGO_camprofiles';
+  const CAM_FOV_DEFAULT = 75;
+  const CAM_FOV_MIN = 60;
+  const CAM_FOV_MAX = 110;
+  const CAM_HEIGHT_DEFAULT = 0;
+  const CAM_HEIGHT_MIN = -1.5;
+  const CAM_HEIGHT_MAX = 1.5;
+  let camProfiles = {};
+  try {
+    camProfiles = JSON.parse(localStorage.getItem(CAM_PROFILE_KEY) || '{}') || {};
+  } catch {
+    camProfiles = {};
+  }
+
+  function getCamProfile(bikeId = G.selectedBikeId) {
+    const p = camProfiles[bikeId] || {};
+    const fov = Number(p.fov);
+    const height = Number(p.height);
+    return {
+      fov: clamp(Number.isFinite(fov) ? fov : CAM_FOV_DEFAULT, CAM_FOV_MIN, CAM_FOV_MAX),
+      height: clamp(Number.isFinite(height) ? height : CAM_HEIGHT_DEFAULT, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
+    };
+  }
+  G.getCamProfile = getCamProfile;
+
+  function saveCamProfiles() {
+    try {
+      localStorage.setItem(CAM_PROFILE_KEY, JSON.stringify(camProfiles));
+    } catch {
+      // Хранилище может быть недоступно (приватный режим) — профиль живёт до перезагрузки
+    }
+  }
+  G.saveCamProfiles = saveCamProfiles;
 
   function syncVehicleAndCameraVisibility(forceMenuThirdPerson = false) {
     const b = G.selectedBike();
@@ -178,13 +215,26 @@ export function initCamera() {
     const useThirdPersonCam = (!G.started || G.ended) || (G.cameraMode === 'third');
     if (!useThirdPersonCam) {
       if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
-      const cockpitY = isQute ? 1.33 : 1.56;
+      // Профиль кокпита: отдельный FOV и высота для каждого мотоцикла.
+      const profile = getCamProfile(G.selectedBikeId);
+      const cockpitY = (isQute ? 1.33 : 1.56) + profile.height;
       const cockpitZ = isQute ? -0.14 : 0.35;
       G.riderPivot.position.set(0, cockpitY, cockpitZ);
       G.camera.position.set(0, G.accelPitchOffset * 0.35, 0);
       G.camera.rotation.set(G.accelPitchOffset * 0.4, 0, -G.steerVisual * (isQute ? 0.025 : 0.04));
+      if (Math.abs(G.camera.fov - profile.fov) > 0.01) {
+        G.camera.fov = profile.fov;
+        G.camera.aspect = innerWidth / innerHeight;
+        G.camera.updateProjectionMatrix();
+      }
     } else {
       if (G.camera.parent !== G.scene) G.scene.add(G.camera);
+      // Вид от третьего лица фиксированный — профиль кокпита не применяется.
+      if (Math.abs(G.camera.fov - 75) > 0.01) {
+        G.camera.fov = 75;
+        G.camera.aspect = innerWidth / innerHeight;
+        G.camera.updateProjectionMatrix();
+      }
 
       const roadYaw = -Math.atan(G.roadDX(G.playerS));
       const cosY = Math.cos(-roadYaw), sinY = Math.sin(-roadYaw);
@@ -236,4 +286,224 @@ export function initCamera() {
     G.sunLight.target.position.set(G.bikeRoot.position.x, G.bikeRoot.position.y, G.bikeRoot.position.z - 28);
   }
   G.aimSunAtPlayer = aimSunAtPlayer;
+
+  // Немедленно применяем профиль к активной камере (работает и на паузе).
+  function applyCamProfileToCamera(bike) {
+    if (!G.started || G.ended || G.cameraMode !== 'cockpit') return;
+    const profile = getCamProfile(bike.id);
+    const isQute = isQuteBody(bike.vType);
+    G.riderPivot.position.set(
+      0,
+      (isQute ? 1.33 : 1.56) + profile.height,
+      isQute ? -0.14 : 0.35
+    );
+    G.camera.fov = profile.fov;
+    G.camera.aspect = innerWidth / innerHeight;
+    G.camera.updateProjectionMatrix();
+  }
+  G.applyCamProfileToCamera = applyCamProfileToCamera;
+
+  /* ---------- Экран настроек камеры от первого лица + живой предпросмотр ---------- */
+  let camPreviewRenderer = null;
+  let camPreviewReturn = null;
+  let camPreviewLastFrame = 0;
+  let camPreviewW = 0;
+  let camPreviewH = 0;
+  let draftCamFov = CAM_FOV_DEFAULT;
+  let draftCamHeight = CAM_HEIGHT_DEFAULT;
+  G.camPreviewActive = false;
+
+  function ensureCamPreviewRenderer() {
+    if (camPreviewRenderer) return camPreviewRenderer;
+    try {
+      camPreviewRenderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
+      camPreviewRenderer.setPixelRatio(1);
+      camPreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      camPreviewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      camPreviewRenderer.shadowMap.enabled = false;
+    } catch {
+      camPreviewRenderer = null;
+    }
+    return camPreviewRenderer;
+  }
+
+  // Лёгкий предпросмотр: та же сцена и модели, но рендер в маленький canvas
+  // с ограничением ~30 fps. Камера временно ставится в кокпит выбранной техники.
+  function renderCameraPreview(now) {
+    if (now - camPreviewLastFrame < 33) return;
+    const container = document.getElementById('cam-preview');
+    if (!container) return;
+    const w = Math.floor(container.clientWidth);
+    const h = Math.floor(container.clientHeight);
+    if (w < 8 || h < 8) return;
+    const pr = ensureCamPreviewRenderer();
+    if (!pr) return;
+
+    camPreviewLastFrame = now;
+    if (pr.domElement.parentElement !== container) container.appendChild(pr.domElement);
+    if (camPreviewW !== w || camPreviewH !== h) {
+      camPreviewW = w;
+      camPreviewH = h;
+      pr.setSize(w, h, false);
+    }
+
+    const bike = G.selectedBike();
+    const isQute = isQuteBody(bike.vType);
+
+    const prevParent = G.camera.parent;
+    const prevPos = G.camera.position.clone();
+    const prevRot = G.camera.rotation.clone();
+    const prevFov = G.camera.fov;
+    const prevAspect = G.camera.aspect;
+    const prevPivot = G.riderPivot.position.clone();
+
+    if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
+    G.riderPivot.position.set(0, (isQute ? 1.33 : 1.56) + draftCamHeight, isQute ? -0.14 : 0.35);
+    G.camera.position.set(0, 0, 0);
+    G.camera.rotation.set(0, 0, 0);
+    G.camera.fov = draftCamFov;
+    G.camera.aspect = w / h;
+    G.camera.updateProjectionMatrix();
+
+    // Показываем кокпит нужной техники и убираем кузов игрока из кадра.
+    const visBikeCockpit = G.bikeCockpitGroup.visible;
+    const visQuteCockpit = G.quteCockpitGroup.visible;
+    const visThirdBody = G.bikeThirdPersonBody.visible;
+    const visQuteExterior = G.quteExteriorGroup.visible;
+    G.bikeCockpitGroup.visible = !isQute;
+    G.quteCockpitGroup.visible = isQute;
+    G.bikeThirdPersonBody.visible = false;
+    G.quteExteriorGroup.visible = false;
+
+    pr.render(G.scene, G.camera);
+
+    G.bikeCockpitGroup.visible = visBikeCockpit;
+    G.quteCockpitGroup.visible = visQuteCockpit;
+    G.bikeThirdPersonBody.visible = visThirdBody;
+    G.quteExteriorGroup.visible = visQuteExterior;
+
+    G.riderPivot.position.copy(prevPivot);
+    if (prevParent) prevParent.add(G.camera);
+    G.camera.position.copy(prevPos);
+    G.camera.rotation.copy(prevRot);
+    G.camera.fov = prevFov;
+    G.camera.aspect = prevAspect;
+    G.camera.updateProjectionMatrix();
+    G.camera.updateMatrixWorld(true);
+  }
+  G.renderCameraPreview = renderCameraPreview;
+
+  function leaveCameraSettings() {
+    G.camPreviewActive = false;
+    if (camPreviewRenderer && camPreviewRenderer.domElement.parentElement) {
+      camPreviewRenderer.domElement.parentElement.removeChild(camPreviewRenderer.domElement);
+    }
+    // Возвращаем экран в корректное состояние, чтобы Esc снова работал
+    // как пауза/возврат, а не как повторный выход из настроек.
+    G.currentScreen = (G.started && !G.ended) ? 'playing' : 'main';
+    const fn = camPreviewReturn;
+    camPreviewReturn = null;
+    if (fn) fn();
+  }
+  G.leaveCameraSettings = leaveCameraSettings;
+
+  function renderCameraSettings(returnFn) {
+    G.currentScreen = 'camsettings';
+    camPreviewReturn = returnFn || G.renderMainMenu;
+    G.camPreviewActive = true;
+    camPreviewLastFrame = 0;
+
+    const b = G.selectedBike();
+    const profile = getCamProfile(b.id);
+    draftCamFov = profile.fov;
+    draftCamHeight = profile.height;
+
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-shop';
+
+    overlay.innerHTML = panel(`
+        ${heading('КАМЕРА · ПЕРВОЕ ЛИЦО', `ПРОФИЛЬ: ${b.name} · НАСТРОЙКИ ТОЛЬКО ДЛЯ КОКПИТА`)}
+        <div class="cam-settings-body">
+          <div class="cam-settings-col">
+            <div class="cam-profile-line">
+              Профиль камеры хранится отдельно для каждого мотоцикла и восстанавливается при его выборе.
+              Вид от третьего лица фиксированный.
+            </div>
+            <div class="cam-slider-block">
+              <div class="cam-slider-head">
+                <span>УГОЛ ОБЗОРА (FOV)</span>
+                <b><span id="cam-fov-val">${Math.round(draftCamFov)}</span>°</b>
+              </div>
+              <input type="range" id="cam-fov" min="${CAM_FOV_MIN}" max="${CAM_FOV_MAX}" step="1" value="${Math.round(draftCamFov)}">
+              <div class="cam-slider-hint">${CAM_FOV_MIN}° — узкий кадр · ${CAM_FOV_MAX}° — широкий обзор</div>
+            </div>
+            <div class="cam-slider-block">
+              <div class="cam-slider-head">
+                <span>ВЫСОТА КАМЕРЫ</span>
+                <b><span id="cam-height-val">${draftCamHeight.toFixed(2)}</span> м</b>
+              </div>
+              <input type="range" id="cam-height" min="${CAM_HEIGHT_MIN}" max="${CAM_HEIGHT_MAX}" step="0.05" value="${draftCamHeight}">
+              <div class="cam-slider-hint">${CAM_HEIGHT_MIN.toFixed(2)} м — ниже · +${CAM_HEIGHT_MAX.toFixed(2)} м — выше</div>
+            </div>
+            <div class="cam-status" id="cam-status"></div>
+            ${button({ id: 'cam-apply', variant: 'primary', icon: '✓', label: 'ПРИМЕНИТЬ' })}
+            ${button({ id: 'cam-reset', icon: '↺', label: 'СБРОСИТЬ ПО УМОЛЧАНИЮ' })}
+            ${button({ id: 'cam-back', label: '← НАЗАД' })}
+          </div>
+          <div class="cam-settings-col">
+            <div class="cam-preview-wrap">
+              <div class="cam-preview-tag">LIVE · КОКПИТ</div>
+              <div id="cam-preview"></div>
+              <div class="cam-preview-note">Предпросмотр обновляется сразу при движении ползунков</div>
+            </div>
+          </div>
+        </div>
+    `);
+    const card = overlay.querySelector('.ds-panel');
+    if (card) card.classList.add('cam-settings-card');
+
+    const fovEl = /** @type {HTMLInputElement} */ ($('cam-fov'));
+    const heightEl = /** @type {HTMLInputElement} */ ($('cam-height'));
+    const statusEl = $('cam-status');
+
+    fovEl.addEventListener('input', () => {
+      draftCamFov = clamp(Number(fovEl.value), CAM_FOV_MIN, CAM_FOV_MAX);
+      $('cam-fov-val').textContent = String(Math.round(draftCamFov));
+      statusEl.textContent = '';
+      statusEl.className = 'cam-status';
+    });
+
+    heightEl.addEventListener('input', () => {
+      draftCamHeight = clamp(Number(heightEl.value), CAM_HEIGHT_MIN, CAM_HEIGHT_MAX);
+      $('cam-height-val').textContent = draftCamHeight.toFixed(2);
+      statusEl.textContent = '';
+      statusEl.className = 'cam-status';
+    });
+
+    $('cam-apply').addEventListener('click', () => {
+      camProfiles[b.id] = { fov: draftCamFov, height: draftCamHeight };
+      saveCamProfiles();
+      applyCamProfileToCamera(b);
+      statusEl.textContent = 'Сохранено для ' + b.name;
+      statusEl.className = 'cam-status';
+    });
+
+    $('cam-reset').addEventListener('click', () => {
+      draftCamFov = CAM_FOV_DEFAULT;
+      draftCamHeight = CAM_HEIGHT_DEFAULT;
+      fovEl.value = String(CAM_FOV_DEFAULT);
+      heightEl.value = String(CAM_HEIGHT_DEFAULT);
+      $('cam-fov-val').textContent = String(CAM_FOV_DEFAULT);
+      $('cam-height-val').textContent = CAM_HEIGHT_DEFAULT.toFixed(2);
+      delete camProfiles[b.id];
+      saveCamProfiles();
+      applyCamProfileToCamera(b);
+      statusEl.textContent = 'Сброшено по умолчанию';
+      statusEl.className = 'cam-status';
+    });
+
+    $('cam-back').addEventListener('click', leaveCameraSettings);
+  }
+  G.renderCameraSettings = renderCameraSettings;
 }

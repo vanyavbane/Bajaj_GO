@@ -112,6 +112,7 @@ export function initTraffic() {
         const cCount = G.jumpState.carsJumped;
         G.spawnOverflyParticles(car.model.root.position);
         G.pushFeed(`ПЕРЕЛЁТ ×${cCount}`, 'overfly', cCount);
+        if (cCount >= 3) G.triggerSlowMo();
       } else if (kind === 'crash') {
         G.handleAccident(car);
       } else if (kind === 'near') {

@@ -27,22 +27,22 @@
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
-|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений по центру, звуки прыжка, фида и маркерной зоны |
+|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений по центру, звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах |
-| 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic` |
+| 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике |
 |   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
 | 10 | `js/bike.js` | сборка байка: материалы, фары, `applyVisualTuningToModel` |
 |   | `js/models/motorcycle.js` | меш мотоцикла, райдер, детали тюнинга |
 |   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
 |   | `js/models/cockpit.js` | кокпит мотоцикла и Qute от первого лица |
-| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` |
+| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard`, профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота), экран `renderCameraSettings` с живым предпросмотром |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
 | 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause` |
-| 17 | `js/loop.js` | `animate(now)`: физика, трафик, коллизии, HUD, рендер |
+| 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, трафик, коллизии, HUD, рендер |
 |   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
 
 ## Ключевые переменные
@@ -58,6 +58,7 @@
 | `bikeTuningData` | `bajajGO_tuning` | Установленные улучшения |
 | `graphics` | `bajajGO_lighting` | JSON: режим, тени, масштаб, фонари, отражения. Старые строки `dlss` и `normal` ещё читаются. |
 | `cameraMode` | `bajajGO_camera` | `'cockpit'` \| `'third'` |
+| `camProfiles` | `bajajGO_camprofiles` | JSON `{ bikeId: { fov, height } }` — профиль кокпита для каждого байка: FOV 60–110°, высота −1.5…+1.5 м |
 | `fuelM` | `bajajGO_fuel` | Остаток топлива в метрах (0…`FUEL_RANGE_M` = 25 000) |
 | `wearM` | `bajajGO_wear` | JSON `{pads, oil, plugs}` — пройденные метры с момента замены |
 | `limpMode` | `bajajGO_limp` | `'1'` — езда «своим ходом» после пустого бака (5 км/ч) |
@@ -96,7 +97,9 @@ z = -s
 
 ```
 animate(now)
-  ├─ dt
+  ├─ realDt; updateSlowMo(realDt) → G.slowMoFactor
+  ├─ dt = realDt × slowMoFactor
+  ├─ предпросмотр камеры, если открыт экран настроек
   ├─ пауза / открытое модальное окно → только renderer.render, симуляция стоит
   ├─ таймеры дальнего света и плашки прыжка
   ├─ меню: демо-проезд
@@ -111,6 +114,9 @@ animate(now)
   ├─ HUD → приборная панель, бейджи, updateEcoHud()
   └─ renderer.render(scene, camera)
 ```
+
+Slow-mo меняет только `dt` игрового мира. `updateSlowMo` продолжает плавно
+возвращать время к 1.0 даже при открытом модальном окне, чтобы эффект не завис.
 
 Обочина, рампы, мосты, указатели съездов и штрихи разметки стоят в мире,
 пока не уедут за спину. Пока `s` тот же, `placeOnRoad` для них не вызывается.
@@ -172,6 +178,45 @@ animate(now)
 - Позиционирование — через `placeOnRoad`, поэтому зона следует поворотам,
   подъёмам и спускам; работает в обеих камерах и не перекрывает HUD.
 
+## Slow-Mo при перелётах
+
+- Триггер — третий перелетённый автомобиль за один прыжок (`cCount >= 3`
+  в ветке `overfly` из `js/traffic.js`). Один раз за прыжок: флаг
+  `slowMoUsedThisJump` сбрасывается на старте прыжка `G.resetSlowMoJump()`
+  и при общем сбросе `G.resetSlowMo()`.
+- Время мира плавно замедляется до `SLOWMO_TARGET` = 0.4: `dt` умножается на
+  `G.slowMoFactor`, поэтому замедляются трафик, частицы и анимации, а не
+  отдельные системы. Управление и физика продолжают работать.
+- Завершение — при приземлении (`finishJumpLanding`) или ДТП (`handleAccident`):
+  `G.endSlowMo()` плавно возвращает множитель к 1.0. Страховка
+  `SLOWMO_MAX_SECONDS` = 6 с не даёт эффекту зависнуть.
+- Бонусы и комбо не отменяются: slow-mo не трогает `jumpState`, счёт и фид.
+- Визуал — виньетка `#slowmo-vignette` и бейдж `#slowmo-badge` в `#jump-live`.
+  На входе играет низкий звук `playSlowMoEnter()`, тон остальных звуков
+  понижается через `slowMoPitch`.
+
+## Камера от первого лица
+
+- Профиль кокпита хранится отдельно для каждого байка: `camProfiles` в
+  `localStorage` под ключом `bajajGO_camprofiles`, вид `{ bikeId: { fov, height } }`.
+  `getCamProfile(id)` подставляет значения по умолчанию, если записи нет или
+  она битая.
+- Диапазоны: FOV 60–110° (по умолчанию 75°), высота −1.5…+1.5 м
+  (по умолчанию 0). Высота прибавляется к базе кокпита: 1.56 м у мотоцикла,
+  1.33 м у Qute/Юры.
+- Профиль применяется только в кокпите (`updateFollowCamera` и
+  `applyCamProfileToCamera`). Третье лицо фиксированное: FOV 75°, профиль
+  на него не влияет.
+- Экран «КАМЕРА · ПЕРВОЕ ЛИЦО» (`renderCameraSettings`) открывается из главного
+  меню кнопкой ⚙ и из паузы: «Настройки» → «Кокпит: FOV / высота» → «Настроить».
+  Слева ползунки FOV и высоты, справа живой предпросмотр.
+- Предпросмотр — второй маленький `WebGLRenderer` с ограничением ~30 fps,
+  без теней. Он рендерит основную сцену: камера временно переносится в кокпит
+  выбранного байка, кузов скрывается, после кадра состояние восстанавливается.
+- «Применить» сохраняет профиль и сразу обновляет активную камеру,
+  «Сбросить по умолчанию» удаляет запись байка (75° / 0 м). Esc и «Назад»
+  возвращают на предыдущий экран: в главное меню или в настройки паузы.
+
 ## Где что менять
 
 | Задача | Где |
@@ -192,6 +237,8 @@ animate(now)
 | Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` в `js/economy.js` |
 | Критические ситуации | `openFuelEmpty`, `handleAccident` в `js/economy.js` |
 | Пауза | `togglePause`, `renderPauseMenu`, `resumeGame` в `js/economy.js` |
+| Slow-Mo при перелётах | `SLOWMO_TARGET`, `SLOWMO_MAX_SECONDS`, `triggerSlowMo`, `updateSlowMo`, `endSlowMo` в `js/effects.js`; вызов в `overfly` (`js/traffic.js`); `dt` в `js/loop.js` |
+| Профиль камеры кокпита | `CAM_FOV_*`, `CAM_HEIGHT_*`, `getCamProfile`, `saveCamProfiles`, `renderCameraSettings` в `js/camera.js` |
 
 ## Технические ограничения
 

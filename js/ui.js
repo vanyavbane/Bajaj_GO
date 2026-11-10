@@ -65,6 +65,7 @@ export function initUi() {
     $('badge-beam').hidden = true;
     $('badge-oncoming').hidden = true;
     if (G.clearFeed) G.clearFeed();
+    G.resetSlowMo();
 
     const overlay = $('overlay');
     overlay.style.display = 'block';
@@ -91,6 +92,7 @@ export function initUi() {
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
       footer: 'bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan',
       tools: [
+        iconButton({ id: 'mm-cam-settings', icon: '⚙', title: 'Настройки камеры от первого лица (FOV, высота)' }),
         iconButton({ id: 'mm-cam-btn', icon: '🎥', title: `Камера: ${G.cameraMode === 'cockpit' ? 'кокпит' : '3-е лицо'}` }),
         iconButton({ id: 'mm-fs-btn', icon: '⛶', title: 'Полный экран' })
       ].join('')
@@ -104,6 +106,9 @@ export function initUi() {
     $('mm-cam-btn').addEventListener('click', () => {
       G.toggleCameraMode();
       renderMainMenu();
+    });
+    $('mm-cam-settings').addEventListener('click', () => {
+      G.renderCameraSettings(renderMainMenu);
     });
     $('mm-fs-btn').addEventListener('click', () => {
       if (!document.fullscreenElement) {
@@ -217,6 +222,7 @@ export function initUi() {
     G.currentScreen = 'playing';
     G.started = true;
     G.ended = false;
+    G.resetSlowMo();
     resetRun(G, G.START_LANE);
     $('jump-live').hidden = true;
     $('badge-beam').hidden = true;
@@ -267,6 +273,7 @@ export function initUi() {
     G.ended = true;
     G.started = false;
     G.currentScreen = 'crash';
+    G.resetSlowMo();
     if (navigator.vibrate) navigator.vibrate(40);
 
     const earned = creditRun(G.score, G.bankedOrderRun);
