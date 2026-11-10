@@ -37,7 +37,8 @@
 |   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
 |   | `js/models/cockpit.js` | кокпит мотоцикла и Qute от первого лица |
 | 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard`, профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота), экран `renderCameraSettings` с живым предпросмотром |
-| 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime` |
+| 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
+|   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
@@ -67,6 +68,10 @@
 **Состояние заезда (в памяти):** `speed`, `distance`, `score`, `playerS`,
 `laneOffset`, `lateralVelocity`, `jumpState`, `comboCount`, `todCycleTime`,
 `paused`, `uiModal`, `bankedOrderRun`.
+
+**Погода (в памяти):** `G.weather` = `{ rain, cloud, wet, raining, elapsed,
+nextRainAt, rainEndsAt, flashes }`. `rain`/`cloud`/`wet` — плавные 0…1;
+`wet` сохнет медленнее, чем рассеивается дождь.
 
 `bankedOrderRun` — сколько рублей за заказы уже зачислено на баланс во время
 заезда. В конце заезда `score - bankedOrderRun` добавляется к `bankPoints`,
@@ -104,7 +109,7 @@ animate(now)
   ├─ таймеры дальнего света и плашки прыжка
   ├─ меню: демо-проезд
   ├─ заезд: скорость, руль, tickEconomy / tickOrder, прыжок, очки
-  ├─ placeOnRoad байка, updateFollowCamera, aimSunAtPlayer
+  ├─ placeOnRoad байка, updateWeather(dt), updateFollowCamera, aimSunAtPlayer
   ├─ updateRoadSurface + updateAtmosphereAndTimeOfDay
   ├─ recycleRamps и tickJumpParticles
   ├─ updateRoadside, updateMegaStructures
@@ -217,6 +222,42 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
   «Сбросить по умолчанию» удаляет запись байка (75° / 0 м). Esc и «Назад»
   возвращают на предыдущий экран: в главное меню или в настройки паузы.
 
+## Динамическая погода
+
+- **Расписание.** Первый дождь — через 30–60 с активного заезда, каждый
+  следующий — не раньше чем через 90 с после окончания предыдущего.
+  Длительность эпизода случайная: 25–65 с. В меню, гараже, магазине, паузе и
+  модальных окнах `elapsed` не растёт. `G.resetWeather()` вызывается на старте
+  заезда, аварии и возврате в меню и обнуляет таймеры.
+- **Переходы.** `rain` идёт к цели за ~3.6 с, `cloud` — за ~4.2 с, `wet`
+  набирается вместе с дождём, а сохнет ~9.5 с. Всё семейство параметров
+  (`rain`, `cloud`, `wet`) живёт в `G.weather`.
+- **Капли.** Один `InstancedMesh` на 1000 тонких боксов; позиции лежат в
+  типизированных массивах, матрицы обновляются через один переиспользуемый
+  `Object3D`. Капли живут в мире вокруг байка, при вылете из зоны
+  переиспользуются. Число активных инстансов = `MAX_DROPS × rain`. Материал
+  общий, `depthWrite: false`, наклон геометрии задан один раз.
+- **Тучи.** `G.stormClouds` — предсозданный слой из 26 voxel-групп в `sky.js`
+  с общим `G.stormCloudMat` (transparent). Плотность проявляется через
+  `opacity`, обычные `G.clouds` темнеют и опускаются на `12 × cloud`.
+  Цвет берётся из `todPalettes[*].storm`: день — серо-синий, закат — тёмный
+  багровый, ночь — почти чёрный. Новых объектов в кадре не создаётся.
+- **Атмосфера.** `updateAtmosphereAndTimeOfDay` затемняет купол неба и туман,
+  поднимает `FogExp2.density` до +85 %, ослабляет солнце до −50 % и слегка
+  поднимает полусферический свет — тени становятся мягче. Ночью на мокрой
+  дороге фары и фонари светят ярче (`wetBoost` и `wetGlow`).
+- **Мокрая дорога.** У `M.road` меняются `roughness` (0.86 → 0.42),
+  `metalness` (0.04 → 0.36) и `envMapIntensity` (×2.55 от базы). База
+  отражений хранится в `road.userData.baseEnvIntensity`, её выставляет
+  `applyGraphics`, поэтому переключение качества не сбрасывает погоду.
+  На мокрой дороге торможение слабее на 15 % (`brakeDecel` в `js/loop.js`).
+- **Молнии и звук.** За эпизод 1–2 вспышки: `#lightning-flash` (CSS-оверлей,
+  максимум 0.20) и раскат `G.playThunder()` с задержкой. Дождь звучит через
+  общий `AudioContext` в `js/effects.js` (`G.setRainSound`), плавно
+  нарастает/затихает, на паузе гасится. Уровень низкий, игровые звуки важнее.
+- **Совместимость.** Работает в обеих камерах, не перекрывает HUD, не трогает
+  физику кроме торможения, экономику, сохранения, трамплины и съезды.
+
 ## Где что менять
 
 | Задача | Где |
@@ -238,6 +279,7 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 | Критические ситуации | `openFuelEmpty`, `handleAccident` в `js/economy.js` |
 | Пауза | `togglePause`, `renderPauseMenu`, `resumeGame` в `js/economy.js` |
 | Slow-Mo при перелётах | `SLOWMO_TARGET`, `SLOWMO_MAX_SECONDS`, `triggerSlowMo`, `updateSlowMo`, `endSlowMo` в `js/effects.js`; вызов в `overfly` (`js/traffic.js`); `dt` в `js/loop.js` |
+| Погода, дождь и мокрый асфальт | `RAIN_MIN/RAIN_MAX`, `GAP_MIN`, `initWeather` / `updateWeather` в `js/weather.js`; `storm` в `todPalettes` и `updateAtmosphereAndTimeOfDay`; `G.stormClouds` в `js/sky.js` |
 | Профиль камеры кокпита | `CAM_FOV_*`, `CAM_HEIGHT_*`, `getCamProfile`, `saveCamProfiles`, `renderCameraSettings` в `js/camera.js` |
 
 ## Технические ограничения

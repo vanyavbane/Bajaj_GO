@@ -98,6 +98,17 @@ export interface TrafficCar {
   jumpedInCurrentJump: boolean;
 }
 
+export interface WeatherState {
+  rain: number;
+  cloud: number;
+  wet: number;
+  raining: boolean;
+  elapsed: number;
+  nextRainAt: number;
+  rainEndsAt: number;
+  flashes: Array<{ at: number; fired: boolean }>;
+}
+
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
 export interface GameState {
   $: <T extends HTMLElement = HTMLElement>(id: string) => T;
@@ -147,6 +158,11 @@ export interface GameState {
   keys: { left: boolean; right: boolean; gas: boolean; brake: boolean };
   jumpState: JumpState;
   trafficPool: TrafficCar[];
+  weather: WeatherState;
+  updateWeather: (dt: number) => void;
+  resetWeather: () => void;
+  setRainSound: (level: number) => void;
+  playThunder: () => void;
   M: Record<string, THREE.Material>;
 
   [key: string]: any;

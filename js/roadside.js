@@ -286,12 +286,13 @@ export function initRoadside() {
     }
 
     const lampBudget = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    const wetGlow = 1 + 0.55 * (G.weather ? G.weather.wet : 0);
     for (let i = 0; i < G.lampLights.length; i++) {
       const pl = G.lampLights[i];
       if (isNightish && i < lampBudget && i < nearestLampPositions.length) {
         const lp = nearestLampPositions[i];
         pl.position.set(lp.x, lp.y + 5.8, lp.z);
-        pl.intensity = 14;
+        pl.intensity = 14 * wetGlow;
       } else {
         pl.intensity = 0;
       }

@@ -177,6 +177,14 @@ canvas{display:block;width:100%;height:100%}
 }
 #slowmo-badge[hidden]{display:none!important}
 @keyframes slowmoPulse{0%,100%{opacity:.72}50%{opacity:1}}
+/* МОЛНИЯ: мягкая засветка неба, без пересвета сцены */
+#lightning-flash{
+  position:fixed;inset:0;pointer-events:none;z-index:6;
+  background:radial-gradient(ellipse at 50% 12%, #e8f2ff 0%, #b9d4ff 38%, rgba(160,195,255,0) 78%);
+  opacity:0;
+  mix-blend-mode:screen;
+  transition:opacity .05s linear;
+}
 /* ФИД КОМБО И УЛУЧШЕНИЙ ПО ЦЕНТРУ */
 #event-feed{
   position:fixed;

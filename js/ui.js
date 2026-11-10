@@ -66,6 +66,7 @@ export function initUi() {
     $('badge-oncoming').hidden = true;
     if (G.clearFeed) G.clearFeed();
     G.resetSlowMo();
+    if (G.resetWeather) G.resetWeather();
 
     const overlay = $('overlay');
     overlay.style.display = 'block';
@@ -223,6 +224,7 @@ export function initUi() {
     G.started = true;
     G.ended = false;
     G.resetSlowMo();
+    if (G.resetWeather) G.resetWeather();
     resetRun(G, G.START_LANE);
     $('jump-live').hidden = true;
     $('badge-beam').hidden = true;
@@ -274,6 +276,7 @@ export function initUi() {
     G.started = false;
     G.currentScreen = 'crash';
     G.resetSlowMo();
+    if (G.resetWeather) G.resetWeather();
     if (navigator.vibrate) navigator.vibrate(40);
 
     const earned = creditRun(G.score, G.bankedOrderRun);

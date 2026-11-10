@@ -18,6 +18,7 @@ import { initSky } from './sky.js';
 import { initStructures } from './structures.js';
 import { initTraffic } from './traffic.js';
 import { initUi } from './ui.js';
+import { initWeather } from './weather.js';
 
 initGraphics();
 initCatalog();
@@ -25,6 +26,7 @@ initCatalog();
 initScene();
 initRoad();
 initSky();
+initWeather();
 initRoadSurface();
 initRoadside();
 initStructures();

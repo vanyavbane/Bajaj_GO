@@ -25,6 +25,7 @@ export function initAtmosphere() {
       bot: new THREE.Color(0xc9dae8),
       fog: new THREE.Color(0x9ab8ce),
       cloud: new THREE.Color(0xe8eef5),
+      storm: new THREE.Color(0x3f4b5e),
       sunCol: new THREE.Color(0xfff0d6),
       hemiSky: new THREE.Color(0xd6e6f2),
       hemiGround: new THREE.Color(0x2b3640),
@@ -38,6 +39,7 @@ export function initAtmosphere() {
       bot: new THREE.Color(0xd98455),
       fog: new THREE.Color(0x8f5a68),
       cloud: new THREE.Color(0xc98a74),
+      storm: new THREE.Color(0x3b2438),
       sunCol: new THREE.Color(0xe08a5a),
       hemiSky: new THREE.Color(0xb48c86),
       hemiGround: new THREE.Color(0x2a2320),
@@ -51,6 +53,7 @@ export function initAtmosphere() {
       bot: new THREE.Color(0x2c3a58),
       fog: new THREE.Color(0x1b2740),
       cloud: new THREE.Color(0x36445e),
+      storm: new THREE.Color(0x10151f),
       sunCol: new THREE.Color(0x9aabc4),
       hemiSky: new THREE.Color(0x5a6a86),
       hemiGround: new THREE.Color(0x141a26),
@@ -63,6 +66,14 @@ export function initAtmosphere() {
   G.todCycleTime = 0.38;
   G.highBeamTimer = 0;
   G.highBeamCooldown = 0;
+
+  const FOG_BASE = 0.0024;
+  const _skyTop = new THREE.Color();
+  const _skyMid = new THREE.Color();
+  const _skyBot = new THREE.Color();
+  const _fogCol = new THREE.Color();
+  const _cloudBase = new THREE.Color();
+  const _stormCol = new THREE.Color();
 
   function smoothstep(edge0, edge1, x) {
     const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
@@ -100,25 +111,53 @@ export function initAtmosphere() {
       }
     }
 
-    G.skyDomeMat.uniforms.topColor.value.copy(pA.top).lerp(pB.top, t);
-    G.skyDomeMat.uniforms.midColor.value.copy(pA.mid).lerp(pB.mid, t);
-    G.skyDomeMat.uniforms.botColor.value.copy(pA.bot).lerp(pB.bot, t);
-    G.scene.fog.color.copy(pA.fog).lerp(pB.fog, t);
-    G.cloudMat.color.copy(pA.cloud).lerp(pB.cloud, t);
+    const weather = G.weather;
+    const wc = weather ? clamp(weather.cloud || 0, 0, 1) : 0;
+    const wet = weather ? clamp(weather.wet || 0, 0, 1) : 0;
+
+    _skyTop.copy(pA.top).lerp(pB.top, t);
+    _skyMid.copy(pA.mid).lerp(pB.mid, t);
+    _skyBot.copy(pA.bot).lerp(pB.bot, t);
+    _fogCol.copy(pA.fog).lerp(pB.fog, t);
+
+    // Дождь приглушает небо и сгущает дымку, но оставляет дорогу читаемой.
+    if (wc > 0.001) {
+      _skyTop.multiplyScalar(1 - 0.55 * wc);
+      _skyMid.multiplyScalar(1 - 0.45 * wc);
+      _skyBot.multiplyScalar(1 - 0.32 * wc);
+      _fogCol.multiplyScalar(1 - 0.30 * wc);
+    }
+
+    G.skyDomeMat.uniforms.topColor.value.copy(_skyTop);
+    G.skyDomeMat.uniforms.midColor.value.copy(_skyMid);
+    G.skyDomeMat.uniforms.botColor.value.copy(_skyBot);
+    G.scene.fog.color.copy(_fogCol);
+    G.scene.fog.density = FOG_BASE * (1 + 0.85 * wc);
+
+    _cloudBase.copy(pA.cloud).lerp(pB.cloud, t);
+    _stormCol.copy(pA.storm).lerp(pB.storm, t);
+    G.cloudMat.color.copy(_cloudBase).lerp(_stormCol, wc);
+    if (G.stormCloudMat) {
+      G.stormCloudMat.color.copy(_stormCol);
+      G.stormCloudMat.opacity = wc * 0.92;
+    }
+
     G.sunLight.color.copy(pA.sunCol).lerp(pB.sunCol, t);
     G.hemiLight.color.copy(pA.hemiSky).lerp(pB.hemiSky, t);
     G.hemiLight.groundColor.copy(pA.hemiGround).lerp(pB.hemiGround, t);
 
     const baseSunInt = lerp(pA.sunInt, pB.sunInt, t);
-    G.sunLight.intensity = inTunnel ? baseSunInt * 0.25 : baseSunInt;
-    G.hemiLight.intensity = inTunnel ? 0.35 : lerp(pA.hemiInt, pB.hemiInt, t);
+    G.sunLight.intensity = inTunnel ? baseSunInt * 0.25 : baseSunInt * (1 - 0.50 * wc);
+    G.hemiLight.intensity = inTunnel ? 0.35 : lerp(pA.hemiInt, pB.hemiInt, t) * (1 + 0.18 * wc);
 
     const isNightish = (G.todCycleTime >= 0.36 && G.todCycleTime <= 0.88) || inTunnel;
     const baseHeadInt = inTunnel ? 5.2 : lerp(pA.headInt, pB.headInt, t);
     const beamBoost = G.highBeamTimer > 0 ? 3.8 : 1.0;
+    // На мокрой дороге ночью фары светят чуть ярче и «дороже».
+    const wetBoost = isNightish ? 1 + 0.45 * wet : 1;
 
     for (const sp of G.bikeSpotLights) {
-      sp.intensity = baseHeadInt * beamBoost;
+      sp.intensity = baseHeadInt * beamBoost * wetBoost;
       sp.distance = G.highBeamTimer > 0 ? 135 : 92;
     }
 
@@ -140,7 +179,21 @@ export function initAtmosphere() {
     for (const c of G.clouds) {
       c.userData.ox += c.userData.driftSpeed * dt;
       if (c.userData.ox > 230) c.userData.ox = -230;
-      c.position.set(px + c.userData.ox, c.userData.oy, pz + c.userData.oz);
+      c.position.set(px + c.userData.ox, c.userData.oy - 12 * wc, pz + c.userData.oz);
+      c.scale.setScalar(1 + 0.16 * wc);
+    }
+
+    // Грозовой слой плавно проявляется/рассеивается вместе с влажностью.
+    if (G.stormClouds) {
+      const stormVisible = wc > 0.015;
+      G.stormCloudGroup.visible = stormVisible;
+      if (stormVisible) {
+        for (const c of G.stormClouds) {
+          c.userData.ox += c.userData.driftSpeed * dt;
+          if (c.userData.ox > 260) c.userData.ox = -260;
+          c.position.set(px + c.userData.ox, c.userData.oy - 15 * wc, pz + c.userData.oz);
+        }
+      }
     }
 
     const badgeTod = $('badge-tod');

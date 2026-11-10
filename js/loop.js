@@ -89,7 +89,7 @@ export function initLoop() {
       brake: G.keys.brake,
       maxSpeed: effectiveMaxSpeed,
       accel: effStats.accel,
-      brakeDecel: effStats.brakeDecel,
+      brakeDecel: effStats.brakeDecel * (1 - 0.15 * (G.weather ? G.weather.wet : 0)),
       isQute: effStats.isQute
     });
     G.speed = stepped.speed;
@@ -245,6 +245,7 @@ export function initLoop() {
 
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {
+      if (G.setRainSound) G.setRainSound(0);
       G.renderer.render(G.scene, G.camera);
       return;
     }
@@ -263,6 +264,7 @@ export function initLoop() {
     }
 
     placePlayer(isQute);
+    if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
     G.aimSunAtPlayer();
     G.updateRoadSurface(G.playerS);

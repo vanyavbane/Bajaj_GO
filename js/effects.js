@@ -105,6 +105,74 @@ export function initEffects() {
     return audioCtx;
   }
 
+  /* ---------- Дождь и гром: фоновый шум, не перекрывающий игровые звуки ---------- */
+  let rainSource = null;
+  let rainGain = null;
+
+  function ensureRainAudio() {
+    const ctx = ensureAudio();
+    if (rainSource) return ctx;
+    const seconds = 2;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    rainSource = ctx.createBufferSource();
+    rainSource.buffer = buf;
+    rainSource.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2600;
+    rainGain = ctx.createGain();
+    rainGain.gain.value = 0;
+    rainSource.connect(filter);
+    filter.connect(rainGain);
+    rainGain.connect(ctx.destination);
+    rainSource.start();
+    return ctx;
+  }
+
+  function setRainSound(level) {
+    const lvl = Math.max(0, Math.min(0.2, level));
+    // Не создаём AudioContext до первого реального дождя.
+    if (!rainSource && lvl < 0.001) return;
+    try {
+      const ctx = ensureRainAudio();
+      rainGain.gain.setTargetAtTime(lvl, ctx.currentTime, 0.45);
+    } catch {
+      // Аудио может быть заблокировано — пропускаем
+    }
+  }
+  G.setRainSound = setRainSound;
+
+  function playThunder() {
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const dur = 2.2;
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(340, now);
+      filter.frequency.exponentialRampToValueAtTime(90, now + dur);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.28);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(now);
+      src.stop(now + dur + 0.02);
+    } catch {
+      // Аудио может быть заблокировано — молча пропускаем
+    }
+  }
+  G.playThunder = playThunder;
+
   function feedTone(freq, dur, type, level, delay) {
     const ctx = ensureAudio();
     const osc = ctx.createOscillator();

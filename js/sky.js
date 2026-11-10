@@ -104,6 +104,41 @@ export function initSky() {
     G.clouds.push(cg);
   }
 
+  // Грозовой слой: предсозданные voxel-тучи, проявляются только в дождь.
+  G.stormCloudMat = new THREE.MeshLambertMaterial({
+    color: 0x2a3140,
+    flatShading: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  G.stormCloudGroup = new THREE.Group();
+  G.stormCloudGroup.visible = false;
+  G.scene.add(G.stormCloudGroup);
+  G.stormClouds = [];
+  for (let i = 0; i < 26; i++) {
+    const cg = new THREE.Group();
+    const layer = i % 3;
+    const scale = 1.15 + layer * 0.42 + Math.random() * 0.55;
+    const blocks = 4 + (i % 4);
+    for (let b = 0; b < blocks; b++) {
+      const bw = (12 + Math.random() * 14) * scale;
+      const bh = (3.2 + Math.random() * 3.0) * scale;
+      const bd = (9 + Math.random() * 11) * scale;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), G.stormCloudMat);
+      m.position.set((b - blocks / 2) * 7.2 * scale, (b % 2) * 1.8 * scale, (Math.random() - 0.5) * 5 * scale);
+      cg.add(m);
+    }
+    cg.userData = {
+      ox: (Math.random() - 0.5) * 460,
+      oy: 50 + layer * 18 + Math.random() * 14,
+      oz: -30 - Math.random() * 390,
+      driftSpeed: 2.0 + layer * 1.0 + Math.random() * 1.0
+    };
+    G.stormCloudGroup.add(cg);
+    G.stormClouds.push(cg);
+  }
+
   G.MAX_ACTIVE_LAMPS = 4;
   G.lampLights = [];
   for (let i = 0; i < G.MAX_ACTIVE_LAMPS; i++) {

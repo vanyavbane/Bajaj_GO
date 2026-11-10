@@ -85,7 +85,9 @@ export function initGraphics() {
       }
     }
     const crisp = current.exposure === 1.18;
-    G.M.road.envMapIntensity = current.reflections ? (crisp ? 1.15 : 0.7) : 0.45;
+    const roadEnv = current.reflections ? (crisp ? 1.15 : 0.7) : 0.45;
+    G.M.road.envMapIntensity = roadEnv;
+    G.M.road.userData.baseEnvIntensity = roadEnv;
     G.M.chrome.envMapIntensity = current.reflections ? (crisp ? 1.65 : 1.1) : 0.8;
     G.M.glass.envMapIntensity = current.reflections ? (crisp ? 1.75 : 1.2) : 0.85;
   }
