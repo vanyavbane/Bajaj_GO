@@ -27,7 +27,7 @@
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
-|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений по центру, звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
+|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах |
 | 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике; `addLights` добавляет фарам additive-спрайты бликов |
@@ -42,7 +42,7 @@
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, экран «Настройки» с вкладками (`renderSettings`), модалки Motion Blur и God Rays. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
-| 16 | `js/economy.js` | `exitPool`, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` |
+| 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` |
 | 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, трафик, коллизии, HUD, вызов `G.renderFrame` |
 | 18 | `js/postfx.js` | `EffectComposer`: `RenderPass` → `GodRaysPass` → `MotionBlurPass` → `OutputPass`; слой 1 (байк) поверх composer; настройки `G.visual`, авто-качество по FPS, `G.renderFrame` |
 |   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
@@ -139,6 +139,16 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 
 - `exitPool` — 5 объектов-съездов, которые переиспользуются (пулинг): когда съезд
   уходит за игрока, он переносится вперёд на `EXIT_MIN_GAP…EXIT_MAX_GAP` (300–800 м).
+- Типы съездов: `fuel`, `sto`, `tuning` и семь отдельных ресторанов
+  `rest_0…rest_6`. Общего типа `restaurant` больше нет: каждый ресторан из
+  `RESTAURANTS` — своя остановка со своим щитом, иконкой, подписью и меню.
+  При старте заезда ставится три сервиса и два разных ресторана; дальше
+  `chooseExitType` сохраняет приоритет «АЗС → ресторан (если нет заказа) →
+  СТО → тюнинг» и подбирает ресторан, которого ещё нет впереди.
+- Меню `rest_N` (`renderRestaurantMenu`) показывает карточку только этого
+  ресторана. Кнопка «Взять заказ на доставку» вызывает `createOrder(name)`;
+  если заказ уже активен, кнопка заблокирована, а для того же ресторана
+  выводится «Заказ этого ресторана уже активен».
 - Съезд без кнопки. Меню открывается в коробке, только если скорость ниже
   `EXIT_ENTER_SPEED` (50 км/ч). Быстрее — коробку можно проехать. Пока коробка
   впереди, карточка зелёная ниже 50 и красная от 50, чтобы скорость было видно
@@ -172,11 +182,14 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
   `depthWrite: false`. Яркость имитирует emissive + мягкий Bloom без
   постобработки и без дополнительных источников света.
 - Текстуры (`exitMarkerTextures`) процедурные: белая рамка/шевроны зоны,
-  круглые иконки типов и подписи. Цвет зоны задаётся `material.color`,
-  поэтому одна текстура работает для обоих цветов.
+  круглые иконки типов и подписи. Для каждого `rest_N` — свой щит
+  (`EXIT_META`), своя иконка-эмодзи и подпись с названием ресторана;
+  цвет щита и рамки берётся из фирменного `RESTAURANTS[i].color`.
+  Цвет зоны задаётся `material.color`, поэтому одна текстура работает
+  для обоих цветов.
 - Пульсация и свечение: `exitPulseT` + `getExitGlowLevel()` — днём ~0.45,
-  ночью 1.0; у каждой зоны свой `pulsePhase`. Подпись («РЕСТОРАН», «АЗС»,
-  «СТО», «ТЮНИНГ») появляется на дистанции ближе 105 м.
+  ночью 1.0; у каждой зоны свой `pulsePhase`. Подпись (название ресторана,
+  «АЗС», «СТО», «ТЮНИНГ») появляется на дистанции ближе 105 м.
 - Иконка типа — `Sprite` (`iconSprite`) над зоной, подпись — второй `Sprite`
   (`labelSprite`). Оба `fog: false`, чтобы не тонуть в тумане.
 - Въезд в коробку медленнее 50 км/ч вспыхивает (`zoneFlash`), играет
@@ -189,6 +202,23 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
   и `pulsePhase`, а `updateExitSign` меняет цвет, иконку и подпись.
 - Позиционирование — через `placeOnRoad`, поэтому зона следует поворотам,
   подъёмам и спускам; работает в обеих камерах и не перекрывает HUD.
+
+### Уведомления (event-feed)
+
+- `G.pushFeed(text, tone, level, side)` принимает четвёртый аргумент
+  `'left' | 'right' | 'center'` (по умолчанию `'center'`). Класс
+  `.side-left/.side-right/.side-center` ставится на сам `.feed-item`,
+  поэтому один контейнер `#event-feed` обслуживает все три положения.
+- `js/traffic.js` передаёт сторону для «КОМБО» и «ПЕРЕЛЁТ»:
+  `car.lateralOffset < G.laneOffset ? 'left' : 'right'`. Посадка, тюнинг,
+  топливо, СТО и пауза остаются по центру.
+- `#event-feed` растянут на всю ширину (`width: 100vw`, `padding: 0 3vw`),
+  элементы прижимаются через `align-self`, `max-width` — `min(440px, 60vw)`.
+  Верх — `clamp(200px, 24vh, 240px)`, ниже `#eco-hud` и `#status-badges`,
+  чтобы уведомления не перекрывали HUD; стек ограничен `max-height: 42vh`.
+  На мобильных — `max-width: 70vw` и свой `clamp`.
+- `tickFeed`/`clearFeed`/`frozen` не изменились: массив `feedItems` хранит
+  элементы, удаление идёт через `el.remove()` из общего контейнера.
 
 ## Slow-Mo при перелётах
 
@@ -354,11 +384,12 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` в `js/atmosphere.js` |
 | Рекламные баннеры | `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js` |
-| Частицы, фид и звуки | `spawnOverflyParticles`, `pushFeed`, `playJumpSound`, `playExitChime` в `js/effects.js` |
+| Частицы, фид и звуки | `spawnOverflyParticles`, `pushFeed(text, tone, level, side)`, `playJumpSound`, `playExitChime` в `js/effects.js` |
+| Сторона уведомления комбо/перелёта | `side` в вызовах `G.pushFeed` из `js/traffic.js`; классы `.side-*` в `css/game.css` |
 | Физика разгона/торможения | `animate` в `js/loop.js` |
 | Прыжки и бонусы за перелёт | `jumpState` в `js/ui.js`, `finishJumpLanding` в `js/loop.js` |
 | Экономика (цены, награды) | `bikeCatalog`, `tuningCatalog` в `js/catalog.js`, `crashGame` в `js/ui.js`, доставка в `js/economy.js` |
-| Съезды и точки интереса | `EXIT_TYPES`, `EXIT_META`, `resetExits`, `openExitMenu` в `js/economy.js` |
+| Съезды и точки интереса | `EXIT_TYPES`, `EXIT_META`, `RESTAURANT_EXIT_TYPES`, `chooseExitType`, `resetExits`, `openExitMenu` в `js/economy.js` |
 | Маркерные зоны съездов | `crossedExitBox` в `js/engine/rules.js`; рисунок и `refreshExitHint` в `js/economy.js` |
 | Заказы и доставка | `RESTAURANTS`, `createOrder`, `tickOrder`, `deliverOrder` в `js/economy.js` |
 | Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` в `js/economy.js` |

@@ -223,13 +223,14 @@ export function initEffects() {
     }
   }
 
-  function pushFeed(text, tone, level) {
+  function pushFeed(text, tone, level, side = 'center') {
     const kind = tone || 'combo';
+    const place = side === 'left' || side === 'right' ? side : 'center';
     playFeedSound(kind, level || 1);
     const feed = $('event-feed');
     if (G.uiModal || G.paused) feed.classList.add('frozen');
     const el = document.createElement('div');
-    el.className = 'feed-item ' + kind;
+    el.className = 'feed-item ' + kind + ' side-' + place;
     el.textContent = text;
     feed.appendChild(el);
     feedItems.push({ el, life: FEED_LIFE });

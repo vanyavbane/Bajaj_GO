@@ -105,6 +105,8 @@ canvas{display:block;width:100%;height:100%}
   #exit-hint{
     top:118px;font-size:12px;padding:6px 10px;
   }
+  #event-feed{top:clamp(190px,26vh,230px);padding:0 2vw;max-height:46vh}
+  .feed-item{max-width:70vw;font-size:13px;padding:7px 11px}
 }
 
 /* HUD ТРЕТЬЕГО ЛИЦА (ПРАВЫЙ НИЖНИЙ УГОЛ) */
@@ -185,17 +187,21 @@ canvas{display:block;width:100%;height:100%}
   mix-blend-mode:screen;
   transition:opacity .05s linear;
 }
-/* ФИД КОМБО И УЛУЧШЕНИЙ ПО ЦЕНТРУ */
+/* ФИД КОМБО И УЛУЧШЕНИЙ: СЛЕВА, СПРАВА ИЛИ ПО ЦЕНТРУ */
 #event-feed{
   position:fixed;
-  top:34%;
-  left:50%;
-  transform:translateX(-50%);
-  width:min(440px,92vw);
+  /* Ниже #eco-hud (82…199 px) и #status-badges, чтобы не перекрывать HUD. */
+  top:clamp(200px,24vh,240px);
+  left:0;
+  right:0;
+  width:100vw;
   display:flex;
   flex-direction:column;
   align-items:center;
   gap:6px;
+  padding:0 3vw;
+  max-height:42vh;
+  overflow:hidden;
   z-index:12;
   pointer-events:none;
 }
@@ -210,8 +216,11 @@ canvas{display:block;width:100%;height:100%}
   color:var(--ds-warm-strong);
   box-shadow:0 10px 28px rgba(0,0,0,.55);
   animation:feedLife 2.6s ease forwards;
-  max-width:100%;
+  max-width:min(440px,60vw);
 }
+.feed-item.side-left{align-self:flex-start}
+.feed-item.side-right{align-self:flex-end}
+.feed-item.side-center{align-self:center}
 #event-feed.frozen .feed-item{animation-play-state:paused}
 .feed-item.overfly{border-color:var(--ds-gold);color:var(--ds-gold)}
 .feed-item.upgrade{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}

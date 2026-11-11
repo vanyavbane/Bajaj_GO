@@ -34,22 +34,43 @@ export function initEconomy() {
   const SERVICE_BASE_PRICE = { pads: 400, oil: 600, plugs: 500 };
 
   const RESTAURANTS = [
-    { name: "McDonald's", badge: 'MCD' },
-    { name: 'Вкусно — и точка', badge: 'ВК' },
-    { name: 'KFC', badge: 'KFC' },
-    { name: 'Burger King', badge: 'BK' },
-    { name: 'Суши Wok', badge: 'WOK' },
-    { name: 'Додо Пицца', badge: 'ДОДО' },
-    { name: 'Пицца Хат', badge: 'PH' }
+    { name: "McDonald's", badge: 'MCD', emoji: '🍔', color: '#ffcc00' },
+    { name: 'Вкусно — и точка', badge: 'ВК', emoji: '🍔', color: '#ffcc00' },
+    { name: 'KFC', badge: 'KFC', emoji: '🍗', color: '#e4002b' },
+    { name: 'Burger King', badge: 'BK', emoji: '🍔', color: '#d62300' },
+    { name: 'Суши Wok', badge: 'WOK', emoji: '🍣', color: '#ff6b00' },
+    { name: 'Додо Пицца', badge: 'ДОДО', emoji: '🍕', color: '#ff5a00' },
+    { name: 'Пицца Хат', badge: 'PH', emoji: '🍕', color: '#e4002b' }
   ];
 
-  const EXIT_TYPES = ['restaurant', 'fuel', 'sto', 'tuning'];
+  // Каждый ресторан — отдельная остановка со своим типом rest_0…rest_6.
+  const RESTAURANT_EXIT_TYPES = RESTAURANTS.map((_, i) => 'rest_' + i);
+  const SERVICE_EXIT_TYPES = ['fuel', 'sto', 'tuning'];
+  const EXIT_TYPES = [...SERVICE_EXIT_TYPES, ...RESTAURANT_EXIT_TYPES];
   const EXIT_META = {
-    restaurant: { title: 'РЕСТОРАНЫ', sub: 'ДО 50 КМ/Ч', badge: 'FOOD' },
-    fuel:       { title: 'АЗС',       sub: 'ДО 50 КМ/Ч', badge: 'FUEL' },
-    sto:        { title: 'СТО',       sub: 'ДО 50 КМ/Ч', badge: 'STO' },
-    tuning:     { title: 'ТЮНИНГ',    sub: 'ДО 50 КМ/Ч', badge: 'TUNE' }
+    fuel:   { title: 'АЗС',    sub: 'ДО 50 КМ/Ч',    badge: 'FUEL' },
+    sto:    { title: 'СТО',    sub: 'ДО 50 КМ/Ч',    badge: 'STO' },
+    tuning: { title: 'ТЮНИНГ', sub: 'ДО 50 КМ/Ч',    badge: 'TUNE' }
   };
+  for (let i = 0; i < RESTAURANTS.length; i++) {
+    const r = RESTAURANTS[i];
+    EXIT_META['rest_' + i] = {
+      title: r.name.toUpperCase(),
+      sub: 'ДОСТАВКА ЕДЫ',
+      badge: r.badge,
+      color: r.color
+    };
+  }
+
+  function isRestaurantExit(type) {
+    return typeof type === 'string' && type.startsWith('rest_');
+  }
+
+  function restaurantIndex(type) {
+    if (!isRestaurantExit(type)) return -1;
+    const i = Number(type.slice(5));
+    return Number.isInteger(i) && i >= 0 && i < RESTAURANTS.length ? i : -1;
+  }
 
   /* ---------- Персистентное состояние экономики ---------- */
   function fuelPercent() {
@@ -170,6 +191,17 @@ export function initEconomy() {
   }
 
   /* ---------- 3D-указатели съездов ---------- */
+  // Уменьшает кегль, пока строка не влезет в отведённую ширину.
+  function fitFontSize(ctx, text, maxWidth, start, min, weight) {
+    let size = start;
+    while (size > min) {
+      ctx.font = `${weight} ${size}px system-ui,Segoe UI,Arial`;
+      if (ctx.measureText(text).width <= maxWidth) break;
+      size -= 2;
+    }
+    return size;
+  }
+
   function buildExitSignTexture(type, side) {
     const meta = EXIT_META[type];
     return G.createCanvasTexture(512, 160, (ctx, w, h) => {
@@ -179,10 +211,11 @@ export function initEconomy() {
       ctx.lineWidth = 8;
       ctx.strokeRect(4, 4, w - 8, h - 8);
 
-      ctx.fillStyle = '#c8a05a';
+      ctx.fillStyle = meta.color || '#c8a05a';
       ctx.fillRect(20, 20, 96, 120);
       ctx.fillStyle = '#101620';
-      ctx.font = '900 26px system-ui,Segoe UI,Arial';
+      const badgeSize = fitFontSize(ctx, meta.badge, 82, 26, 16, '900');
+      ctx.font = `900 ${badgeSize}px system-ui,Segoe UI,Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(meta.badge, 68, 82);
@@ -190,9 +223,10 @@ export function initEconomy() {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#e8eef5';
-      ctx.font = '900 42px system-ui,Segoe UI,Arial';
+      const titleSize = fitFontSize(ctx, meta.title, 346, 42, 22, '900');
+      ctx.font = `900 ${titleSize}px system-ui,Segoe UI,Arial`;
       ctx.fillText(meta.title, 136, 68);
-      ctx.fillStyle = '#9cb8d8';
+      ctx.fillStyle = meta.color || '#9cb8d8';
       ctx.font = '800 23px system-ui,Segoe UI,Arial';
       ctx.fillText(meta.sub, 136, 108);
 
@@ -214,8 +248,12 @@ export function initEconomy() {
   /* ---------- Маркерные зоны съездов (GTA-стиль) ---------- */
   // Зелёный — еда/заказы, жёлтый — сервис (АЗС, СТО, тюнинг)
   const EXIT_MARKER_COLORS = { food: 0x3ce07d, service: 0xffd24a };
-  const EXIT_HINT_ICONS = { restaurant: '🍔', fuel: '⛽', sto: '🔧', tuning: '⚙️' };
-  const EXIT_HINT_LABELS = { restaurant: 'РЕСТОРАН', fuel: 'АЗС', sto: 'СТО', tuning: 'ТЮНИНГ' };
+  const EXIT_HINT_ICONS = { fuel: '⛽', sto: '🔧', tuning: '⚙️' };
+  const EXIT_HINT_LABELS = { fuel: 'АЗС', sto: 'СТО', tuning: 'ТЮНИНГ' };
+  for (let i = 0; i < RESTAURANTS.length; i++) {
+    EXIT_HINT_ICONS['rest_' + i] = RESTAURANTS[i].emoji;
+    EXIT_HINT_LABELS['rest_' + i] = RESTAURANTS[i].name;
+  }
   const EXIT_HINT_RANGE = 160;
   let exitPulseT = 0;
   let exitHintKey = '';
@@ -280,8 +318,9 @@ export function initEconomy() {
   }
 
   function buildExitIconTexture(type) {
-    const isFood = type === 'restaurant';
-    const color = isFood ? '#3ce07d' : '#ffd24a';
+    const isFood = isRestaurantExit(type);
+    const meta = EXIT_META[type];
+    const color = isFood ? (meta.color || '#3ce07d') : '#ffd24a';
     const glyph = EXIT_HINT_ICONS[type];
     return G.createCanvasTexture(256, 256, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
@@ -305,8 +344,10 @@ export function initEconomy() {
   }
 
   function buildExitLabelTexture(type) {
-    const isFood = type === 'restaurant';
-    const color = isFood ? '#3ce07d' : '#ffd24a';
+    const isFood = isRestaurantExit(type);
+    const meta = EXIT_META[type];
+    const color = isFood ? (meta.color || '#3ce07d') : '#ffd24a';
+    const title = EXIT_HINT_LABELS[type];
     return G.createCanvasTexture(512, 128, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = 'rgba(8,14,23,0.82)';
@@ -317,10 +358,11 @@ export function initEconomy() {
       roundRectPath(ctx, 6, 12, w - 12, h - 24, 20);
       ctx.stroke();
       ctx.fillStyle = '#eef7f2';
-      ctx.font = '900 46px system-ui,"Segoe UI",Arial';
+      const titleSize = fitFontSize(ctx, title, w - 44, 46, 20, '900');
+      ctx.font = `900 ${titleSize}px system-ui,"Segoe UI",Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(EXIT_HINT_LABELS[type], w / 2, h / 2 - 16);
+      ctx.fillText(title, w / 2, h / 2 - 16);
       ctx.fillStyle = color;
       ctx.font = '800 26px system-ui,"Segoe UI",Arial';
       ctx.fillText('ДО 50 КМ/Ч', w / 2, h / 2 + 28);
@@ -356,7 +398,7 @@ export function initEconomy() {
     marker.add(zone);
 
     const iconMat = new THREE.SpriteMaterial({
-      map: exitMarkerTextures.icons.restaurant,
+      map: exitMarkerTextures.icons.fuel,
       transparent: true,
       depthWrite: false,
       toneMapped: false,
@@ -368,7 +410,7 @@ export function initEconomy() {
     marker.add(icon);
 
     const labelMat = new THREE.SpriteMaterial({
-      map: exitMarkerTextures.labels.restaurant,
+      map: exitMarkerTextures.labels.fuel,
       transparent: true,
       depthWrite: false,
       toneMapped: false,
@@ -438,14 +480,14 @@ export function initEconomy() {
     $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
-    $('exit-hint').className = 'show' + (exit.type === 'restaurant' ? '' : ' service') + (slow ? ' slow' : ' fast');
+    $('exit-hint').className = 'show' + (isRestaurantExit(exit.type) ? '' : ' service') + (slow ? ' slow' : ' fast');
   }
 
   function openExitFromBox(exit) {
     exit.used = true;
     exit.zoneFlash = 1;
     hideExitHint();
-    G.playExitChime(exit.type === 'restaurant');
+    G.playExitChime(isRestaurantExit(exit.type));
     openExitMenu(exit);
   }
 
@@ -487,7 +529,7 @@ export function initEconomy() {
     back.position.set(0, 4.0, 5.44);
     group.add(back);
 
-    const signMat = new THREE.MeshBasicMaterial({ map: exitSignTextures.restaurant.right });
+    const signMat = new THREE.MeshBasicMaterial({ map: exitSignTextures.fuel.right });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 1.95), signMat);
     sign.position.set(0, 4.0, 5.52);
     group.add(sign);
@@ -509,7 +551,7 @@ export function initEconomy() {
     exit.signMat.needsUpdate = true;
 
     // Маркерная зона: цвет по типу точки интереса + своя иконка и подпись
-    const isFood = exit.type === 'restaurant';
+    const isFood = isRestaurantExit(exit.type);
     exit.zoneMat.color.setHex(isFood ? EXIT_MARKER_COLORS.food : EXIT_MARKER_COLORS.service);
     exit.iconSprite.material.map = exitMarkerTextures.icons[exit.type];
     exit.iconSprite.material.needsUpdate = true;
@@ -517,20 +559,35 @@ export function initEconomy() {
     exit.labelSprite.material.needsUpdate = true;
   }
 
+  function randomRestaurantType() {
+    const ahead = exitPool
+      .filter(o => o.s > G.playerS - 10)
+      .map(o => o.type);
+    const free = RESTAURANT_EXIT_TYPES.filter(t => !ahead.includes(t));
+    const pool = free.length ? free : RESTAURANT_EXIT_TYPES;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
   function chooseExitType() {
     const ahead = exitPool.filter(o => o.s > G.playerS - 10).map(o => o.type);
     if (!ahead.includes('fuel')) return 'fuel';
-    if (!activeOrder && !ahead.includes('restaurant')) return 'restaurant';
+    if (!activeOrder && !ahead.some(isRestaurantExit)) return randomRestaurantType();
     if (!ahead.includes('sto')) return 'sto';
     if (!ahead.includes('tuning')) return 'tuning';
-    return EXIT_TYPES[Math.floor(Math.random() * EXIT_TYPES.length)];
+    // Когда все типы уже впереди, держим перевес в сторону сервиса,
+    // но иногда подкидываем ещё один ресторан.
+    if (!activeOrder && Math.random() < 0.45) return randomRestaurantType();
+    return SERVICE_EXIT_TYPES[Math.floor(Math.random() * SERVICE_EXIT_TYPES.length)];
   }
 
   function resetExits() {
     let s = G.playerS + 360;
+    // Первые пять остановок: три сервиса и два разных ресторана.
+    const restOrder = RESTAURANT_EXIT_TYPES.slice().sort(() => Math.random() - 0.5);
+    const rotation = ['fuel', restOrder[0], 'sto', restOrder[1], 'tuning'];
     for (let i = 0; i < exitPool.length; i++) {
       const e = exitPool[i];
-      e.type = EXIT_TYPES[i % EXIT_TYPES.length];
+      e.type = rotation[i % rotation.length];
       e.side = (i % 2 === 0) ? 1 : -1;
       e.s = s;
       e.used = false;
@@ -723,45 +780,51 @@ export function initEconomy() {
   }
 
   function openExitMenu(exit) {
-    if (exit.type === 'restaurant') renderRestaurantMenu();
+    const restIndex = restaurantIndex(exit.type);
+    if (restIndex >= 0) renderRestaurantMenu(restIndex);
     else if (exit.type === 'fuel') renderFuelMenu();
     else if (exit.type === 'sto') renderServiceMenu();
     else renderExitTuning();
   }
 
   /* ---------- Рестораны и заказы ---------- */
-  function renderRestaurantMenu(message = '') {
-    const list = RESTAURANTS.map((r, i) => {
-      const busy = !!activeOrder;
-      return listItem({
-        icon: r.badge,
-        title: r.name,
-        detail: busy ? 'Сначала доставьте текущий заказ' : 'Взять заказ на доставку',
-        price: busy ? '—' : 'ЗАКАЗ',
-        disabled: busy,
-        data: { rest: i }
-      });
-    }).join('');
+  // Каждая остановка rest_N открывает карточку только своего ресторана.
+  function renderRestaurantMenu(index) {
+    const r = RESTAURANTS[index];
+    if (!r) return;
+    const busy = !!activeOrder;
+    const same = busy && activeOrder.restaurant === r.name;
+
+    let note;
+    if (busy) {
+      note = same
+        ? `Заказ этого ресторана уже активен: <b>${r.name}</b>.<br>Осталось ${formatClock(activeOrder.timeLeft)} · ${meters(Math.max(0, activeOrder.remainingM))} до заказчика.`
+        : `Активный заказ: <b>${activeOrder.restaurant}</b>.<br>Сначала доставьте его — второй заказ взять нельзя.`;
+    } else {
+      note = `Заказ на доставку из <b>${r.name}</b>.<br>После подтверждения на дороге появится маркер заказчика.`;
+    }
 
     openModal(panel(`
-        ${heading('🍔 РЕСТОРАНЫ', 'СЪЕЗД · ДОСТАВКА ЕДЫ')}
-        ${activeOrder ? callout(`Активный заказ: <b>${activeOrder.restaurant}</b><br>Осталось ${formatClock(activeOrder.timeLeft)} · ${meters(Math.max(0, activeOrder.remainingM))} до заказчика.`) : ''}
-        ${message ? callout(message) : ''}
-        ${rows(list)}
+        ${heading(`${r.emoji} ${r.name.toUpperCase()}`, 'СЪЕЗД · ДОСТАВКА ЕДЫ')}
+        ${callout(`<b>${r.badge}</b> · ${note}`)}
+        ${button({
+          id: 'rest-order',
+          variant: 'primary',
+          label: busy ? 'ЗАКАЗ УЖЕ АКТИВЕН' : 'ВЗЯТЬ ЗАКАЗ НА ДОСТАВКУ',
+          disabled: busy
+        })}
         ${exitMenuBackButton()}
     `, { size: 'narrow' }), 'exit');
 
-    $('overlay').querySelectorAll('[data-rest]').forEach(btn => {
-      if (!(btn instanceof HTMLElement)) return;
-      btn.addEventListener('click', () => {
+    const orderBtn = $('rest-order');
+    if (orderBtn && !busy) {
+      orderBtn.addEventListener('click', () => {
         if (activeOrder) return;
-        const r = RESTAURANTS[Number(btn.dataset.rest)];
-        if (!r) return;
         createOrder(r.name);
         closeOverlayToGame();
         showEcoToast(`🍔 Заказ принят: ${r.name} · ${meters(activeOrder.remainingM)} · ${formatClock(activeOrder.timeLimit)}`);
       });
-    });
+    }
     bindExitClose();
   }
 
@@ -1230,7 +1293,7 @@ export function initEconomy() {
           labelSprite: obj.labelSprite,
           s: 0,
           side: 1,
-          type: 'restaurant',
+          type: 'fuel',
           used: false,
           zoneFlash: 0,
           pulsePhase: Math.random() * Math.PI * 2

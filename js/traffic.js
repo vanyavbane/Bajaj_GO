@@ -110,8 +110,9 @@ export function initTraffic() {
         car.jumpedInCurrentJump = true;
         G.jumpState.carsJumped++;
         const cCount = G.jumpState.carsJumped;
+        const side = car.lateralOffset < G.laneOffset ? 'left' : 'right';
         G.spawnOverflyParticles(car.model.root.position);
-        G.pushFeed(`ПЕРЕЛЁТ ×${cCount}`, 'overfly', cCount);
+        G.pushFeed(`ПЕРЕЛЁТ ×${cCount}`, 'overfly', cCount, side);
         if (cCount >= 3) G.triggerSlowMo();
       } else if (kind === 'crash') {
         G.handleAccident(car);
@@ -121,7 +122,8 @@ export function initTraffic() {
         G.comboTimer = COMBO_WINDOW;
         const pts = nearMissPoints(G.comboCount, G.laneOffset);
         G.score += pts;
-        G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount);
+        const side = car.lateralOffset < G.laneOffset ? 'left' : 'right';
+        G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);
       }
     }
   }
