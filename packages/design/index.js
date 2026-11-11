@@ -142,7 +142,7 @@ export function listItem(options) {
 }
 
 /**
- * @param {{ badge: string, actions: string, balance: string, footer: string, tools: string }} parts
+ * @param {{ badge: string, actions: string, balance: string, footer: string, tools: string, biome?: string }} parts
  */
 export function menuScreen(parts) {
   return `<div class="ds-menu">
@@ -150,6 +150,7 @@ export function menuScreen(parts) {
       <div class="ds-menu-col">
         ${logo()}
         <p class="ds-badge">${parts.badge}</p>
+        ${parts.biome ? `<div class="ds-biome">${parts.biome}</div>` : ''}
         <div class="ds-stack">${parts.actions}</div>
       </div>
       ${parts.balance}

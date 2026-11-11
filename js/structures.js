@@ -211,6 +211,23 @@ export function initStructures() {
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, 0, 0);
       });
+      // В городе мосты/тоннели стоят как раньше (каждые 320 м). Вне города
+      // оставляем один объект на участок ~1.6 км — редкая инфраструктура трассы.
+      // Масштаб плавно гаснет на стыке биомов, чтобы мост не исчезал рывком.
+      const roadMeters = G.biomeOffsetM + ms.userData.s;
+      const local = ((roadMeters % 1600) + 1600) % 1600;
+      const cw = G.cityWeightAtS(ms.userData.s);
+      let ct = Math.max(0, Math.min(1, (cw - 0.05) / 0.45));
+      ct = ct * ct * (3 - 2 * ct);
+      let winFade = 0;
+      if (local < 320) {
+        const w = Math.min(1, local / 45, (320 - local) / 45);
+        winFade = w * w * (3 - 2 * w);
+      }
+      const fade = Math.max(ct, winFade);
+      ms.visible = fade > 0.02;
+      if (!ms.visible) continue;
+      ms.scale.setScalar(0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {
           dc.mesh.position.x += dc.dir * 14 * dt;

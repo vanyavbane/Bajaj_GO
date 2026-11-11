@@ -1,5 +1,6 @@
 import { initAtmosphere } from './atmosphere.js';
 import { initBike } from './bike.js';
+import { initBiome, initBiomeWorld } from './biome.js';
 import { initCamera } from './camera.js';
 import { initCatalog } from './catalog.js';
 import { initDebug } from './debug.js';
@@ -24,8 +25,11 @@ import { initWeather } from './weather.js';
 initGraphics();
 initCatalog();
 
+// Биом задаёт профиль дороги до того, как его прочитают road/roadSurface.
+initBiome();
 initScene();
 initRoad();
+initBiomeWorld();
 initSky();
 initWeather();
 initRoadSurface();

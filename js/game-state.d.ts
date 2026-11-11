@@ -104,6 +104,8 @@ export interface TrafficCar {
   steerAngle: number;
   nearMissAwarded: boolean;
   jumpedInCurrentJump: boolean;
+  active: boolean;
+  retiring: boolean;
 }
 
 export interface WeatherState {
@@ -125,6 +127,19 @@ export interface VisualSettings {
   godRaysIntensity: number;
   godRaysLength: number;
   weakDevice: boolean;
+}
+
+/** Состояние биомной системы: где игрок и какие локации смешиваются. */
+export interface BiomeState {
+  meters: number;
+  zone: number;
+  current: number;
+  next: number;
+  t: number;
+  dominant: number;
+  weights: number[];
+  cityWeight: number;
+  id: string;
 }
 
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
@@ -156,6 +171,21 @@ export interface GameState {
   roadDX: (s: number) => number;
   roadDY: (s: number) => number;
   roadDDX: (s: number) => number;
+
+  biomeState: BiomeState | null;
+  biomeDominant: number;
+  biomeCityWeight: number;
+  biomeStoredMeters: number;
+  biomeOffsetM: number;
+  biomeWeightsAtS: (s: number) => number[];
+  cityWeightAtS: (s: number) => number;
+  updateBiome: (dt: number) => void;
+  resetBiomeRun: () => void;
+  persistBiome: () => void;
+  biomeMenuMarkup: () => string;
+  biomePauseValue: () => string;
+  showBiomeBanner: (biomeIndex: number) => void;
+  hideBiomeBanner: () => void;
 
   selectedBikeId: string;
   selectedBike: () => BikeStats;

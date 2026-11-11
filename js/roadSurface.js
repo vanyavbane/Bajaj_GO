@@ -13,6 +13,7 @@ export function initRoadSurface() {
   const sampleX = new Float32Array(ROW);
   const sampleY = new Float32Array(ROW);
   const sampleZ = new Float32Array(ROW);
+  const sampleCity = new Float32Array(ROW);
   const rightX = new Float32Array(ROW);
   const rightZ = new Float32Array(ROW);
 
@@ -25,6 +26,7 @@ export function initRoadSurface() {
       sampleX[r] = G.roadX(s);
       sampleY[r] = G.roadY(s);
       sampleZ[r] = -s;
+      sampleCity[r] = G.cityWeightAtS(s);
       rightX[r] = 1 / lh;
       rightZ[r] = dx / lh;
     }
@@ -117,6 +119,34 @@ export function initRoadSurface() {
     pos.needsUpdate = true;
   }
 
+  /**
+   * Полоса городской инфраструктуры (тротуар/бордюр), которая сжимается
+   * к кромке дороги вместе с весом города. edgeLat — внутренняя кромка полосы.
+   */
+  function updateCityStrip(mesh, edgeLat, width, yOffset) {
+    const pos = mesh.geometry.attributes.position;
+    const sign = edgeLat < 0 ? -1 : 1;
+    let maxWeight = 0;
+    for (let r = 0; r < ROW; r++) {
+      const cw = sampleCity[r];
+      if (cw > maxWeight) maxWeight = cw;
+      const halfW = width * 0.5 * cw;
+      const center = edgeLat + sign * halfW;
+      const oL = center - halfW;
+      const oR = center + halfW;
+      const cx = sampleX[r];
+      const cy = sampleY[r] + yOffset;
+      const cz = sampleZ[r];
+      const rx = rightX[r];
+      const rz = rightZ[r];
+      const idx = r * 2;
+      pos.setXYZ(idx, cx + rx * oL, cy, cz + rz * oL);
+      pos.setXYZ(idx + 1, cx + rx * oR, cy, cz + rz * oR);
+    }
+    pos.needsUpdate = true;
+    mesh.visible = maxWeight > 0.02;
+  }
+
   function shadeSlope(geo, y0, y1, y2, x0, x1, x2) {
     const norm = geo.attributes.normal.array;
     for (let r = 0; r < ROW; r++) {
@@ -155,12 +185,15 @@ export function initRoadSurface() {
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 3;
 
-      const l0 = -95, l1 = -22, l2 = -12.7;
+      // Кромка откоса примыкает к тротуару в городе и к самой дороге вне его,
+      // чтобы при сжатии тротуара не оставалось дыры у обочины.
+      const l0 = -95, l1 = -22;
+      const l2 = -(9.5 + 3.2 * sampleCity[r]);
       posL.setXYZ(idx,     cx + rx * l0, cy - 4.5, cz + rz * l0);
       posL.setXYZ(idx + 1, cx + rx * l1, cy + 1.8, cz + rz * l1);
       posL.setXYZ(idx + 2, cx + rx * l2, cy + 0.08, cz + rz * l2);
 
-      const r0 = 12.7, r1 = 22, r2 = 95;
+      const r0 = 9.5 + 3.2 * sampleCity[r], r1 = 22, r2 = 95;
       posR.setXYZ(idx,     cx + rx * r0, cy + 0.08, cz + rz * r0);
       posR.setXYZ(idx + 1, cx + rx * r1, cy + 1.8, cz + rz * r1);
       posR.setXYZ(idx + 2, cx + rx * r2, cy - 4.5, cz + rz * r2);
@@ -188,10 +221,10 @@ export function initRoadSurface() {
   function updateRoadSurface(playerS) {
     sampleCenterline(playerS);
     updateStripRibbon(roadMesh, 0, G.ROAD_WIDTH, 0);
-    updateStripRibbon(curbLeftMesh, -9.68, 0.35, 0.12);
-    updateStripRibbon(curbRightMesh, 9.68, 0.35, 0.12);
-    updateStripRibbon(sidewalkLeftMesh, -11.3, 3.2, 0.11);
-    updateStripRibbon(sidewalkRightMesh, 11.3, 3.2, 0.11);
+    updateCityStrip(curbLeftMesh, -9.505, 0.35, 0.12);
+    updateCityStrip(curbRightMesh, 9.505, 0.35, 0.12);
+    updateCityStrip(sidewalkLeftMesh, -9.7, 3.2, 0.11);
+    updateCityStrip(sidewalkRightMesh, 9.7, 3.2, 0.11);
     updateStripRibbon(centerDoubleLine1, -0.22, 0.13, 0.025);
     updateStripRibbon(centerDoubleLine2, 0.22, 0.13, 0.025);
     updateStripRibbon(edgeLineLeft, -9.25, 0.15, 0.025);

@@ -16,6 +16,21 @@ canvas{display:block;width:100%;height:100%}
 #hint small{display:block;font-size:11px;letter-spacing:1px;color:var(--ds-text-dim);margin-top:5px}
 #bottom{position:absolute;left:18px;bottom:16px;background:var(--ds-panel);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:9px 13px;font-size:11px;color:var(--ds-text-soft);line-height:1.45;transition:opacity .35s}
 
+/* БАННЕР ЛОКАЦИИ: появляется на ~2 секунды при смене биома */
+#biome-banner{
+  position:absolute;top:76px;left:50%;transform:translate(-50%,-10px);
+  display:flex;align-items:center;gap:11px;
+  background:rgba(9,17,29,.92);border:1px solid rgba(255,205,130,.5);
+  border-radius:12px;padding:8px 16px;white-space:nowrap;
+  opacity:0;transition:opacity .3s ease,transform .3s ease;
+  pointer-events:none;z-index:4;
+}
+#biome-banner.show{opacity:1;transform:translate(-50%,0)}
+#biome-banner .biome-ico{font-size:24px;line-height:1}
+#biome-banner .biome-copy{display:flex;flex-direction:column;gap:1px;min-width:0}
+#biome-banner .biome-name{display:block;font-size:15px;font-weight:900;letter-spacing:1.6px;color:var(--ds-warm-strong)}
+#biome-banner .biome-sub{display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:var(--ds-text-dim)}
+
 /* ЭКОНОМИКА В HUD: ТОПЛИВО, ИЗНОС, ЗАКАЗ, ПАУЗА */
 #eco-hud{
   position:absolute;top:82px;left:20px;width:218px;
@@ -96,6 +111,10 @@ canvas{display:block;width:100%;height:100%}
   #eco-hud{width:172px;top:72px;padding:8px 9px;font-size:10px}
   #status-badges{top:64px}
   #hint{white-space:normal;top:200px}
+  #biome-banner{top:64px;max-width:94vw;padding:6px 11px;gap:8px}
+  #biome-banner .biome-ico{font-size:20px}
+  #biome-banner .biome-name{font-size:13px;letter-spacing:1.2px}
+  #biome-banner .biome-sub{font-size:9px;letter-spacing:.6px;white-space:normal}
   #order-hud{
     top:8px;left:128px;right:58px;transform:none;
     width:auto;max-width:none;min-width:0;padding:5px 8px;
@@ -262,6 +281,21 @@ canvas{display:block;width:100%;height:100%}
   justify-content:center;
   padding:16px;
 }
+
+/* ПОЛОСКА БИОМА В МЕНЮ И ПАУЗЕ */
+.ds-biome{margin-top:10px;max-width:360px}
+.biome-strip{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(9,17,29,.6);border:1px solid rgba(255,255,255,.16);
+  border-radius:12px;padding:8px 12px;
+}
+.biome-strip-icon{font-size:20px;line-height:1}
+.biome-strip-main{flex:1;min-width:0}
+.biome-strip-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:.5px;color:var(--ds-text-dim);font-weight:800}
+.biome-strip-row b{color:var(--ds-text);font-size:12px;letter-spacing:1px;white-space:nowrap}
+.biome-strip-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.biome-strip-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
+.biome-strip-bar i{display:block;height:100%;background:var(--ds-gold);border-radius:3px}
 
 /* НАСТРОЙКИ КАМЕРЫ: двухколоночный экран с живым предпросмотром */
 .cam-settings-card{width:min(940px,100%);text-align:left}

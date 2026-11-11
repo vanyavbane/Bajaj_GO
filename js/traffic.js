@@ -12,13 +12,31 @@ export function initTraffic() {
   G.trafficPool = [];
   const vehicleColors = [0xd8dee9, 0xb71c1c, 0x1565c0, 0x2e7d32, 0x455a64, 0x6d4c41, 0x37474f, 0xf5f5f5];
   const vehicleTypes = ['sedan', 'taxi', 'gazelle_flatbed', 'qute_traffic', 'gazelle_van', 'bus', 'sedan'];
+  const POOL_SIZE = 20;
 
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < POOL_SIZE; i++) {
     const vType = vehicleTypes[i % vehicleTypes.length];
     const model = createVehicleModel(vType, vehicleColors[i % vehicleColors.length]);
     G.scene.add(model.root);
 
     G.trafficPool.push(parkedTraffic(model, trafficLane(vType, i % 4), 35 + i * 26));
+  }
+
+  /* Какие машины пула работают в каждом биоме. Сначала идут предпочтительные
+   * типы (грузовики в полях, легковые в лесу), затем остальные — до лимита. */
+  const activeMask = [];
+  for (let b = 0; b < 4; b++) {
+    const traffic = G.BIOMES[b].traffic;
+    const order = [];
+    for (let i = 0; i < POOL_SIZE; i++) order.push(i);
+    const rank = (i) => {
+      const r = traffic.pref.indexOf(G.trafficPool[i].model.type);
+      return r < 0 ? 99 : r;
+    };
+    order.sort((a, c) => (rank(a) - rank(c)) || (a - c));
+    const mask = new Uint8Array(POOL_SIZE);
+    for (let k = 0; k < Math.min(traffic.count, POOL_SIZE); k++) mask[order[k]] = 1;
+    activeMask.push(mask);
   }
 
   function trafficLane(type, fallbackLane) {
@@ -37,7 +55,9 @@ export function initTraffic() {
       flashReactTimer: 0,
       steerAngle: 0,
       nearMissAwarded: false,
-      jumpedInCurrentJump: false
+      jumpedInCurrentJump: false,
+      active: true,
+      retiring: false
     };
   }
 
@@ -48,13 +68,34 @@ export function initTraffic() {
     );
     Object.assign(car, parkedTraffic(car.model, laneIdx, newS));
     car.model.alertSprite.visible = false;
+    car.model.root.visible = true;
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
 
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
     const menuDemo = !G.started && !G.ended;
-    for (const car of G.trafficPool) {
+    const mask = activeMask[G.biomeDominant || 0] || activeMask[0];
+    for (let i = 0; i < G.trafficPool.length; i++) {
+      const car = G.trafficPool[i];
+      const wantActive = mask[i] === 1;
+
+      if (!car.active) {
+        if (!wantActive) continue;
+        // Машина возвращается в биом далеко впереди, вне видимости игрока.
+        car.active = true;
+        car.retiring = false;
+        resetTrafficVehicle(car, G.playerS + 230 + Math.random() * 130);
+      } else if (!wantActive) {
+        car.retiring = true;
+      }
+
+      // Плавно подтягиваем скорость к лимиту текущего биома.
+      const targetSpeed = car.model.type === 'qute_traffic'
+        ? QUTE_TRAFFIC_SPEED
+        : G.LANE_SPEEDS[car.laneIdx];
+      car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
+
       const wasFlashing = car.flashReactTimer > 0;
       const step = stepTrafficCar(car, dt, G.LANE_OFFSETS);
       car.s = step.s;
@@ -78,6 +119,14 @@ export function initTraffic() {
       const oncoming = isOncomingLane(car.laneIdx);
       const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
       G.placeOnRoad(car.model.root, car.s, car.lateralOffset, 0, vehicleYaw);
+
+      // Машины, выбывшие из биома, доезжают и скрываются вдали.
+      if (car.retiring && Math.abs(car.s - G.playerS) > 150) {
+        car.active = false;
+        car.retiring = false;
+        car.model.root.visible = false;
+        continue;
+      }
 
       const distToPlayer = Math.abs(car.s - G.playerS);
       const useLod = distToPlayer > 145;

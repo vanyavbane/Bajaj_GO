@@ -18,18 +18,19 @@
 
 | № | Файл | Что внутри |
 |---|---|---|
+|   | `js/biome.js` | биомы: детерминированный календарь зон по 1500 м, кросс-фейд 150 м, аналитические профили дороги, пул декораций поля/леса/гор, баннер локации, сохранение `bajajGO_biomeKm` |
 |   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics`; экран — вкладка «Графика» в настройках |
 | 1 | `js/catalog.js` | `bikeCatalog` (14 моделей, поля `variant` и `hudStyle`), `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
-| 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, функции `roadX/roadY/roadDX/roadDY`, `placeOnRoad` |
+| 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, `roadX/roadY/roadDX/roadDY/roadDDX` (делегируют биомному профилю), `placeOnRoad` |
 |   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money` |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
-| 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары, откосы |
-| 6 | `js/roadside.js` | процедурные текстуры билбордов, `createBillboardMesh`, `createBuildingGroup`, эстакады |
-| 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS` |
+| 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары и бордюры по весу города, откосы |
+| 6 | `js/roadside.js` | процедурные текстуры билбордов и биомных указателей, `createBillboardMesh`, `createBuildingGroup`, эстакады; плотность и тексты зависят от биома |
+| 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS`; мосты/тоннели реже вне города |
 |   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
-| 8 | `js/pedestrians.js` | пешеходы на тротуарах |
-| 9 | `js/traffic.js` | пул машин, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
+| 8 | `js/pedestrians.js` | пешеходы на тротуарах; вне города скрываются и сжимаются по `cityWeightAtS` |
+| 9 | `js/traffic.js` | пул из 20 машин, маски активности по биомам (лимит и предпочтения), плавная скорость по `LANE_SPEEDS`, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
 |   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике; `addLights` добавляет фарам additive-спрайты бликов |
 |   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
 | 10 | `js/bike.js` | сборка байка: материалы, фары, `applyBikeVariant` (Pulsar / Boxer / Avenger), `applyVisualTuningToModel` |
@@ -37,13 +38,13 @@
 |   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
 |   | `js/models/cockpit.js` | кокпит мотоцикла (Pulsar / Boxer / Avenger) и Qute от первого лица; кокпит — дочерний к `G.riderPivot`, а не к камере |
 | 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` (цифровая и круглая `drawRoundDashboard`), профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота камеры), экран `renderCameraSettings` с живым предпросмотром |
-| 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
+| 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `biomeAtmos` (тинты и плотность по биомам), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
 |   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu`, `renderShop`, экран «Настройки» с вкладками (`renderSettings`), модалки Motion Blur и God Rays. Тюнинг только на съезде |
+| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), модалки Motion Blur и God Rays. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки |
-| 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` |
-| 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, трафик, коллизии, HUD, вызов `G.renderFrame` |
+| 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` (строка «Локация») |
+| 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, `updateBiome`, трафик, коллизии, HUD, вызов `G.renderFrame` |
 | 18 | `js/postfx.js` | `EffectComposer`: `RenderPass` → `GodRaysPass` → `MotionBlurPass` → `OutputPass`; слой 1 (байк) поверх composer; настройки `G.visual`, авто-качество по FPS, `G.renderFrame` |
 |   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
 
@@ -71,10 +72,17 @@
 | `wearM` | `bajajGO_wear` | JSON `{pads, oil, plugs}` — пройденные метры с момента замены |
 | `limpMode` | `bajajGO_limp` | `'1'` — езда «своим ходом» после пустого бака (5 км/ч) |
 | `activeOrder` | `bajajGO_order` | JSON активного заказа: ресторан, остаток пути/времени, награда |
+| `biomeStoredMeters` | `bajajGO_biomeKm` | Пройденный по трассе путь в километрах (в памяти — метры). Задаёт зону биома; между заездами не сбрасывается. |
 
 **Состояние заезда (в памяти):** `speed`, `distance`, `score`, `playerS`,
 `laneOffset`, `lateralVelocity`, `jumpState`, `comboCount`, `todCycleTime`,
 `paused`, `uiModal`, `bankedOrderRun`.
+
+**Биомы (в памяти):** `biomeOffsetM` — сохранённый пробег на старте заезда,
+`biomeState` = `{ meters, zone, current, next, t, dominant, weights, cityWeight, id }`,
+`biomeDominant`, `biomeTransition`, `biomeScenery` (пул декораций).
+Абсолютные метры маршрута = `biomeOffsetM + playerS`; все системы читают одну
+и ту же точку, поэтому переход бесшовный.
 
 **Погода (в памяти):** `G.weather` = `{ rain, cloud, wet, raining, elapsed,
 nextRainAt, rainEndsAt, flashes }`. `rain`/`cloud`/`wet` — плавные 0…1;
@@ -84,9 +92,10 @@ nextRainAt, rainEndsAt, flashes }`. `rain`/`cloud`/`wet` — плавные 0…
 заезда. В конце заезда `score - bankedOrderRun` добавляется к `bankPoints`,
 чтобы награда не зачислилась дважды.
 
-**Мир:** `trafficPool` (18 машин), `roadsideSlots`, `megaStructures`,
+**Мир:** `trafficPool` (20 машин, активных по лимиту биома), `roadsideSlots`,
+`megaStructures`,
 `rampsPool`, `pedestrians`, `lampLights` (8 активных фонарей), `exitPool`
-(5 съездов с маркерными зонами), `deliveryMarker`.
+(5 съездов с маркерными зонами), `deliveryMarker`, `biomeScenery`.
 
 ## Система координат
 
@@ -105,6 +114,68 @@ z = -s
 уже поставленного объекта (руль, прыжок, наклон байка). Любой новый объект на
 трассе ставить только через неё, иначе он «повиснет» в воздухе или уедет с полотна.
 
+## Биомы и локации
+
+Биом — функция пройденного пути, а не кадра. Все системы читают одну точку
+`biomeMetersAt(s) = G.biomeOffsetM + s`, поэтому дорога, небо, трафик и
+декорации меняются согласованно и без стыков.
+
+- **Календарь.** Четыре локации `city`, `field`, `forest`, `mountain`
+  (`G.BIOMES`) идут зонами по `ZONE_M` = 1500 м. Зоны собраны в группы по
+  четыре: каждая группа — перемешанная перестановка всех локаций, поэтому
+  внутри группы нет повторов; первая группа фиксирована
+  `[city, field, forest, mountain]`. Перестановка детерминированная
+  (`mulberry32` + `groupCache` в `js/biome.js`). Проверено: в группе ровно
+  4 разных биома, повторов подряд не больше двух.
+- **Кросс-фейд.** Последние `FADE_M` = 150 м зоны — плавный переход по
+  `smoothstep`. `biomeState` хранит `current`/`next` и `t` 0…1,
+  `weights` — доли четырёх биомов, `dominant` — тот, чья доля больше 0.5.
+  Новый пейзаж виден заранее: декорации следующего биома проявляются ещё до
+  формальной границы.
+- **Профиль дороги.** У каждого биома своя пара синусоид (`PROFILES`):
+  город — широкие изгибы, поле — почти прямая с длинными волнами, лес —
+  плавные «змейки», горы — серпантин с дугами ~90–180 м и подъёмами до
+  3.5 м. `G.biomeRoadX/DX/DDX/Y/DY` смешивают позиции и аналитические
+  производные в одной точке, поэтому `roadDDX` не даёт скачков и NaN.
+  `js/road.js` только делегирует эти функции.
+- **Декорации.** `initBiomeWorld` строит пул `SCENERY_SLOTS` = 20 слотов
+  через `SCENERY_STEP` = 28 м на обе стороны дороги и на три биома
+  (поле/лес/горы). Видимость и масштаб задаются весом биома: на переходе
+  старые объекты сжимаются и гаснут, новые растут. Дальше 165 м включается
+  LOD — остаются 1–2 блока. Горные хребты дополнительно увеличены ×2.15.
+  Городская инфраструктура остаётся в `js/roadside.js` и сжимается по
+  `cityWeightAtS`.
+- **Поле:** стога, ветряки с вращающимися лопастями, амбары, заборы,
+  силосные башни. **Лес:** густые ели, поваленные стволы, валуны, кустарник.
+  **Горы:** скалы со снежными шапками, осыпи, редкие сосны, дальние хребты.
+- **Инфраструктура.** Фонари, отбойники, тротуары и пешеходы есть только в
+  городе; вне города они скрываются по `cityWeightAtS`. Билборды, километровые
+  столбы и мосты/эстакады разрешены везде, но реже: в городе два щита на круг
+  (`idx 3` слева, `idx 17` справа), вне города один (`idx 7`); тексты
+  прокручиваются по абсолютному пробегу, поэтому встречаются все бренды.
+  Порталы: в городе прежние (`idx % 6 === 0`), вне города — биомные зелёные
+  указатели «ПОДМОСКОВНЫЕ ПОЛЯ», «ЛЕСНАЯ ДОРОГА», «ГОРНЫЙ СЕРПАНТИН»,
+  «ПЕРЕВАЛ», «СМОТРОВАЯ ПЛОЩАДКА». Мосты/тоннели вне города появляются окном
+  `roadMeters % 1600 < 320` и плавно масштабируются на краях.
+- **Трафик.** Пул — 20 машин. Для каждого биома строится маска активности по
+  лимиту и предпочтениям `BIOMES[i].traffic`: город 18 (легковые/такси/
+  автобусы), поле 12 (грузовики и фургоны), лес 9, горы 10. Машины плавно
+  вводятся и выводятся (`active`/`retiring`), скорость тянется к
+  `G.LANE_SPEEDS`; базовые скорости по биомам — `[40,60,70,55]`,
+  `[38,58,68,52]`, `[35,55,65,50]`, `[30,45,55,40]`.
+- **Небо и погода.** `biomeAtmos` в `js/atmosphere.js` задаёт цвета-множители
+  неба, тумана и облаков, плотность дымки, высоту и масштаб облаков; в горах
+  облака опускаются ниже хребтов. Цикл день → закат → ночь и погода работают
+  во всех биомах. Ночью вне города светят только луна, звёзды и фары.
+- **Камера.** В поворотах появляется крен от `roadDDX` с усилением в горах и
+  сглаживанием ~6/с; работает в кокпите и третьем лице без прыжков.
+- **UI и сохранение.** Баннер `#biome-banner` показывается ~2 с при входе в
+  новую зону и не перекрывает приборку и `#tp-hud`. Главное меню показывает
+  полоску «биом · прогресс», в паузе есть строка «Локация». Прогресс пишется
+  в `bajajGO_biomeKm` (километры) каждые 2.5 с, при аварии, выходе в меню и
+  выгрузке страницы; `resetBiomeRun` продолжает маршрут с сохранённого места, а не с
+  нуля. Старый HUD справа сверху не возвращается.
+
 ## Цикл игры
 
 ```
@@ -116,6 +187,7 @@ animate(now)
   ├─ таймеры дальнего света и плашки прыжка
   ├─ меню: демо-проезд
   ├─ заезд: скорость, руль, tickEconomy / tickOrder, прыжок, очки
+  ├─ updateBiome(dt): веса зон, баннер, тинт травы, скорости полос, декорации
   ├─ placeOnRoad байка, updateWeather(dt), updateFollowCamera, aimSunAtPlayer
   ├─ updateRoadSurface + updateAtmosphereAndTimeOfDay
   ├─ recycleRamps и tickJumpParticles
@@ -378,6 +450,12 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 
 | Задача | Где |
 |---|---|
+| Добавить биом / поменять порядок локаций | `BIOMES`, `PROFILES`, `biomeForZone` в `js/biome.js` |
+| Настроить длину зоны или кросс-фейд | `ZONE_M`, `FADE_M` в `js/biome.js` |
+| Декорации поля, леса и гор | `buildFieldVariant`, `buildForestVariant`, `buildMountainVariant`, `updateBiomeScenery` в `js/biome.js` |
+| Оттенки неба и облака по биомам | `biomeAtmos` + `blendBiomeAtmosphere` в `js/atmosphere.js` |
+| Трафик по биомам | `traffic` в `BIOMES`, `LANE_SPEEDS_BY_BIOME`, `activeMask` в `js/traffic.js` |
+| Баннер, меню и сохранение биома | `showBiomeBanner`, `biomeMenuMarkup`, `biomePauseValue`, `persistBiome` в `js/biome.js` |
 | Добавить машину в трафик | `createVehicleModel` в `js/models/vehicles.js` + `vehicleTypes` в `js/traffic.js` |
 | Общая геометрия кузовов | `box` / `cylinder` / `plane` в `js/geom.js`. Геометрию после выдачи не крутить |
 | Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` (поля `variant` и `hudStyle`); при новой геометрии — `js/models/motorcycle.js` + `applyBikeVariant` в `js/bike.js` |

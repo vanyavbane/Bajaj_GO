@@ -34,6 +34,7 @@ export function initPedestrians() {
       group: pg,
       legL,
       legR,
+      baseScaleY: scaleH,
       s: i * 16,
       side: i % 2 === 0 ? -1 : 1,
       lateralOffset: (i % 2 === 0 ? -1 : 1) * (10.7 + (i % 3) * 0.55),
@@ -46,8 +47,18 @@ export function initPedestrians() {
   function updatePedestrians(dt, now) {
     for (const ped of G.pedestrians) {
       ped.s = keepInWindow(ped.s + ped.walkSpeed * dt, G.playerS, 30, 390, pedSpan);
+      const cw = G.cityWeightAtS(ped.s);
+      const visible = cw > 0.05;
+      ped.group.visible = visible;
+      if (!visible) continue;
+
+      // Пешеходы существуют только в городе: вместе с тротуаром они
+      // подтягиваются к кромке дороги и уменьшаются при переходе.
+      const side = Math.sign(ped.lateralOffset);
+      const lat = side * (9.6 + (Math.abs(ped.lateralOffset) - 9.6) * cw);
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
-      G.placeOnRoad(ped.group, ped.s, ped.lateralOffset, 0.11, facingYaw);
+      G.placeOnRoad(ped.group, ped.s, lat, 0.11, facingYaw);
+      ped.group.scale.set(cw, ped.baseScaleY * cw, cw);
       if (ped.walkSpeed !== 0) {
         const swing = Math.sin(now * 0.008 + ped.phase) * 0.45;
         ped.legL.rotation.x = swing;

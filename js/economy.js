@@ -1189,6 +1189,7 @@ export function initEconomy() {
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
         ${stats([
           { label: 'Пробег', value: runDistance(G.distance) },
+          { label: 'Локация', value: G.biomePauseValue ? G.biomePauseValue() : '—' },
           { label: 'Заработано за заезд', value: rubles(creditRun(G.score, G.bankedOrderRun)) },
           { label: 'Баланс', value: rubles(G.bankPoints) },
           { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
@@ -1264,6 +1265,7 @@ export function initEconomy() {
     G.speed = 0;
     G.saveGarage();
     saveEco();
+    if (G.persistBiome) G.persistBiome();
     const overlay = $('overlay');
     overlay.style.display = 'none';
     overlay.innerHTML = '';

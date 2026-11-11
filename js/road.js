@@ -12,25 +12,18 @@ export function initRoad() {
   G.START_LANE = G.LANE_OFFSETS[3];
   G.LANE_SPEEDS = [40, 60, 70, 55];
 
-  function roadX(s) {
-    return Math.sin(s * 0.0042) * 34 + Math.cos(s * 0.0021) * 48;
-  }
+  // Профиль дороги принадлежит биому (js/biome.js): позиции и производные
+  // смешиваются в одной точке, поэтому при смене локации нет скачков.
+  const roadX = (s) => G.biomeRoadX(s);
   G.roadX = roadX;
-  function roadDX(s) {
-    return Math.cos(s * 0.0042) * 34 * 0.0042 - Math.sin(s * 0.0021) * 48 * 0.0021;
-  }
+  const roadDX = (s) => G.biomeRoadDX(s);
   G.roadDX = roadDX;
-  function roadDDX(s) {
-    return -Math.sin(s * 0.0042) * 34 * 0.0042 * 0.0042 - Math.cos(s * 0.0021) * 48 * 0.0021 * 0.0021;
-  }
+  const roadDDX = (s) => G.biomeRoadDDX(s);
   G.roadDDX = roadDDX;
-  function roadY(s) {
-    return Math.sin(s * 0.055) * 1.65 + Math.cos(s * 0.029) * 1.15;
-  }
+  const roadY = (s) => G.biomeRoadY(s);
   G.roadY = roadY;
-  function roadDY(s) {
-    return Math.cos(s * 0.055) * 1.65 * 0.055 - Math.sin(s * 0.029) * 1.15 * 0.029;
-  }
+  const roadDY = (s) => G.biomeRoadDY(s);
+  G.roadDY = roadDY;
 
   const _forward = new THREE.Vector3();
   const _right = new THREE.Vector3();

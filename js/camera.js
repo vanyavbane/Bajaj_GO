@@ -411,8 +411,24 @@ export function initCamera() {
   }
   G.updateCockpitDashboard = updateCockpitDashboard;
 
+  let camBiomeRoll = 0;
+
   function updateFollowCamera(dt, isQute) {
     const useThirdPersonCam = (!G.started || G.ended) || (G.cameraMode === 'third');
+
+    // Крен в поворотах: читаем кривизну профиля дороги, в горах усиливаем.
+    // Сглаживание ~6/с убирает дрожь и не даёт камере прыгать на стыках биомов.
+    const driving = G.started && !G.ended;
+    let targetRoll = 0;
+    if (driving) {
+      const wts = G.biomeWeightsAtS(G.playerS);
+      const mountainWeight = wts[3];
+      const speedFactor = clamp(G.speed / 55, 0.3, 1.25);
+      targetRoll = clamp(-G.roadDDX(G.playerS) * 5.5, -0.055, 0.055)
+        * speedFactor * (1 + 0.9 * mountainWeight);
+    }
+    camBiomeRoll += (targetRoll - camBiomeRoll) * Math.min(1, dt * 6);
+
     if (!useThirdPersonCam) {
       if (G.camera.parent !== G.riderPivot) G.riderPivot.add(G.camera);
       // Профиль кокпита: отдельный FOV и высота для каждого мотоцикла.
@@ -422,7 +438,7 @@ export function initCamera() {
       const cockpitZ = isQute ? -0.14 : 0.35;
       G.riderPivot.position.set(0, cockpitY, cockpitZ);
       G.camera.position.set(0, profile.height + G.accelPitchOffset * 0.35, 0);
-      G.camera.rotation.set(G.accelPitchOffset * 0.4, 0, -G.steerVisual * (isQute ? 0.025 : 0.04));
+      G.camera.rotation.set(G.accelPitchOffset * 0.4, 0, -G.steerVisual * (isQute ? 0.025 : 0.04) + camBiomeRoll);
       if (Math.abs(G.camera.fov - profile.fov) > 0.01) {
         G.camera.fov = profile.fov;
         G.camera.aspect = innerWidth / innerHeight;
@@ -477,7 +493,7 @@ export function initCamera() {
       G.camLookSmooth.z = lerp(G.camLookSmooth.z, targetLookZ, Math.min(1, dt * 13));
 
       G.camera.lookAt(G.camLookSmooth);
-      G.camera.rotation.z += -G.steerVisual * 0.025;
+      G.camera.rotation.z += -G.steerVisual * 0.025 + camBiomeRoll;
     }
   }
   G.updateFollowCamera = updateFollowCamera;

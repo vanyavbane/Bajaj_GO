@@ -303,6 +303,7 @@ export function initUi() {
     $('jump-live').hidden = true;
     $('badge-beam').hidden = true;
     $('badge-oncoming').hidden = true;
+    if (G.hideBiomeBanner) G.hideBiomeBanner();
     if (G.clearFeed) G.clearFeed();
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
@@ -318,6 +319,7 @@ export function initUi() {
     const badge = `Выбран: <b>${b.name}</b> · <b>${eff.maxSpeed} км/ч</b>${deltaSign ? ` (${deltaSign})` : ''} (${b.typeLabel})`;
     overlay.innerHTML = menuScreen({
       badge,
+      biome: G.biomeMenuMarkup ? G.biomeMenuMarkup() : '',
       actions: [
         button({ id: 'mm-start', variant: 'primary', icon: '▶', label: 'Начать заезд' }),
         button({ id: 'mm-shop', icon: '🛒', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
@@ -473,6 +475,11 @@ export function initUi() {
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
     resetRun(G, G.START_LANE);
+    // Биом продолжается с сохранённого пробега: мир и профиль дороги
+    // пересобираются до первого кадра заезда.
+    if (G.resetBiomeRun) G.resetBiomeRun();
+    if (G.updateBiome) G.updateBiome(0);
+    if (G.biomeState && G.showBiomeBanner) G.showBiomeBanner(G.biomeState.dominant);
     $('jump-live').hidden = true;
     $('badge-beam').hidden = true;
     $('badge-oncoming').hidden = true;
@@ -530,6 +537,7 @@ export function initUi() {
     G.bankPoints += earned;
     G.bankedOrderRun = 0;
     G.saveGarage();
+    if (G.persistBiome) G.persistBiome();
 
     $('hud').hidden = true;
     $('tp-hud').hidden = true;

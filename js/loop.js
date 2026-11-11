@@ -264,6 +264,9 @@ export function initLoop() {
       simulateRun(dt, now, bike, effStats);
     }
 
+    // Биом читает уже сдвинутый playerS: профиль, трафик, декорации и небо
+    // в одном кадре видят одну и ту же точку маршрута.
+    if (G.updateBiome) G.updateBiome(dt);
     placePlayer(isQute);
     if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
