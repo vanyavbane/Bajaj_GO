@@ -1,0 +1,345 @@
+# Промпт: блок «Управление» в настройках — кнопки / акселерометр (с сигналом, прозрачными зонами и чувствительностью)
+
+> Ты — опытный Three.js-разработчик (r160) и мобильный веб-разработчик (DeviceOrientation API, Pointer Events, touch-управление). Тебе дан рабочий файл **`bajaj-go.html`** (voxel-раннер в духе Traffic Rider: физика, HUD, экономика, сохранения, тюнинг, камеры, трафик, прыжки, погода, постобработка, меню, гараж, магазин, уже есть экранные кнопки `#controls` и обработчики клавиатуры/тача в `I0()`).
+> Задача — добавить в **Настройки** новую вкладку **«Управление»** с выбором одного из двух режимов и реализовать второй режим (акселерометр + прозрачные тач-зоны «газ/тормоз» + кнопка «Сигнал» справа + визуальный оверлей с подсказками + поле настройки чувствительности).
+> Верни **один полный HTML-файл целиком**. Не фрагмент, не заглушку. Не ломай существующие механики.
+
+---
+
+## Жёсткие рамки (не нарушать)
+
+- Сохранить существующее управление: `i.keys = { left, right, gas, brake }`, обработчики клавиатуры в `I0()` (`keydown`/`keyup`, `blur`), экранные кнопки `.ctrl[data-key]` в `#controls` (pointerdown/pointerup/pointercancel), свайп-управление на `#view` (`pointerdown`/`pointermove`/`pointerup`), кнопки `#btn-flash`, `#btn-camera`, `#btn-pause`.
+- Сохранить физику (`g0`, `_0`, `x0`, `S0`, `A0`, `R0`), HUD, экономику, сохранения, тюнинг, камеры, трафик, прыжки, погоду, постобработку, меню, гараж, магазин.
+- Сохранить localStorage-ключи, добавить новые: `bajajGO_controlMode` (`"buttons"` | `"tilt"`, по умолчанию `"buttons"`), `bajajGO_tiltCalibration` (JSON `{ beta, gamma, calibratedAt }`), `bajajGO_tiltSensitivity` (0.5…2.0, по умолчанию 1.0), `bajajGO_tiltInvert` (`"0"`/`"1"`, по умолчанию `"0"`).
+- **Режим «Кнопки» — дефолтный**, поведение **не меняется** ни на йоту. Все существующие обработчики (`I0()`) продолжают работать, `#controls` видны, свайп на `#view` работает, акселерометр **не** запрашивается.
+- **Режим «Акселерометр»** — новый, включается только по выбору пользователя. При переключении — запросить разрешение `DeviceOrientationEvent.requestPermission()` (iOS 13+), при отказе — показать `Xt`-сообщение в настройках и **остаться на кнопках**. Android/десктоп — без разрешения (просто подписка на `deviceorientation`).
+- Если устройство **не поддерживает** `DeviceOrientationEvent` (десктоп без датчиков) — в настройках показать предупреждение `Wn("Акселерометр недоступен на этом устройстве. Используйте кнопки.")`, кнопка выбора `tilt` **disabled**, режим принудительно `buttons`.
+- **Не ломать** существующие `keys.left/right` (руление) — в режиме `tilt` руление **остаётся свайпом** на `#view` + добавлена возможность **наклона устройства** для руления (опционально, см. ниже), но **газ/тормоз в tilt** — через тач-зоны, а не через `keys.gas/keys.brake` из кнопок.
+- `i.keys.gas` / `i.keys.brake` — **единая точка входа** для физики (`c()` читает `i.keys.gas`, `i.keys.brake`). В режиме `tilt` — управлять ими через тач-зоны (не через `.ctrl`). В режиме `buttons` — через `.ctrl`, как сейчас. Оба режима пишут в **одни и те же** `i.keys.*` — физика не меняется.
+- `i.keys.left` / `i.keys.right` — в обоих режимах через свайп на `#view` (как сейчас) + опционально через наклон в `tilt` (см. п. 5). Кнопки `.ctrl[data-key="left"/"right"]` в `#controls` — видны только в режиме `buttons`.
+- `i.keys.gas` / `i.keys.brake` — в режиме `buttons` через `.ctrl[data-key="gas"/"brake"]`, в режиме `tilt` — через тач-зоны (см. п. 4).
+- **Кнопка «Сигнал» (дальний свет, `triggerHighBeam()`)** в режиме `tilt` — **всегда видна в правой части экрана** (отдельная круглая кнопка, не перекрывает тач-зону газа, но находится над ней). В режиме `buttons` — остаётся в `#controls` как `#btn-flash` (не дублировать).
+- **Тач-зоны газа и тормоза — прозрачные** (без заливки, только едва заметная обводка/подсказка, которая плавно исчезает через 3–5 с после старта или при первом нажатии).
+
+---
+
+## 1. Новая вкладка «Управление» в настройках
+
+Сейчас в `l(m, v)` (функция `renderSettings`) есть вкладки `[["graphics","Графика"],["lighting","Освещение"],["camera","Вид камеры"],["sound","Звук"]]`. Добавить **пятую**: `["controls","Управление"]`.
+
+Содержимое вкладки `controls`:
+
+```
+sn("УПРАВЛЕНИЕ", "ВЫБЕРИТЕ СПОСОБ УПРАВЛЕНИЯ МОТОЦИКЛОМ")
+
+// Блок 1: выбор режима
+<div class="ctrl-mode-block">
+  <div class="ctrl-mode-title">СПОСОБ УПРАВЛЕНИЯ</div>
+  <div class="ctrl-mode-options">
+    <button class="ctrl-mode-card ${mode==='buttons'?'on':''}" data-ctrl-mode="buttons">
+      <div class="ctrl-mode-preview">
+        <!-- Отрисовать миниатюру кнопок: 4 квадратика (←, ▼, ▲, →) как на #controls -->
+      </div>
+      <div class="ctrl-mode-label">Кнопки</div>
+      <div class="ctrl-mode-desc">Экранные кнопки газа, тормоза и поворота. Работает на любом устройстве.</div>
+    </button>
+    <button class="ctrl-mode-card ${mode==='tilt'?'on':''}" data-ctrl-mode="tilt" ${!tiltAvailable?'disabled':''}>
+      <div class="ctrl-mode-preview">
+        <!-- Отрисовать миниатюру телефона: сверху справа стрелки, снизу слева стрелки -->
+      </div>
+      <div class="ctrl-mode-label">Акселерометр</div>
+      <div class="ctrl-mode-desc">Наклон устройства — руление. Правая часть экрана — газ, левая — тормоз. Кнопка «Сигнал» справа. Для мобильных.</div>
+    </button>
+  </div>
+</div>
+
+// Блок 2: предупреждение, если tilt недоступен
+${!tiltAvailable ? Wn("Акселерометр недоступен на этом устройстве. Используйте кнопки.") : ""}
+
+// Блок 3: настройки наклона (только если tilt выбран и доступен)
+${mode==='tilt' && tiltAvailable ? `
+  <div class="cam-slider-block">
+    <div class="cam-slider-head">
+      <span>ЧУВСТВИТЕЛЬНОСТЬ АКСЕЛЕРОМЕТРА</span>
+      <b><span id="tilt-sens-val">${Math.round(tiltSensitivity*100)}</span>%</b>
+    </div>
+    <input type="range" id="tilt-sens-range" min="50" max="200" step="5" value="${Math.round(tiltSensitivity*100)}">
+    <div class="cam-slider-hint">50% — плавное руление (нужен большой наклон) · 200% — резкое (маленький наклон)</div>
+  </div>
+  ${Mn("Инверсия наклона", Je({id:"tilt-invert", variant:"compact", label: tiltInvert ? "Вкл" : "Выкл", pressed: tiltInvert}))}
+  ${Je({id:"tilt-calibrate", variant:"primary", icon:"🎯", label:"КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)"})}
+  ${Wn("Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Не наклоняйте слишком сильно.")}
+` : ""}
+
+// Блок 4: кнопка "Назад"
+${Je({id:"controls-back", label:"← НАЗАД"})}
+```
+
+CSS для `ctrl-mode-card` — карточки в стиле `.ds-card`, с превью (`.ctrl-mode-preview` — 60×80 px, внутри — мини-схема), заголовком, описанием. Активная карточка — `.on` (рамка `var(--ds-warm)`, фон `#162033`).
+
+### Миниатюра «Кнопки» (`.ctrl-mode-preview` для `buttons`)
+
+Чистый HTML/CSS: 4 квадратика 18×18 в раскладке 2×2 (или как на `#controls` — в ряд: ←, ▼, ▲, →), с символами `←`, `▼`, `▲`, `→`, фон `#243656`, рамка `#9cb8d8`.
+
+### Миниатюра «Акселерометр» (`.ctrl-mode-preview` для `tilt`)
+
+Чистый HTML/CSS: **прямоугольник телефона** (40×70 px, скруглённые углы, рамка `#9cb8d8`, фон `#0a1321`), внутри:
+- **сверху справа** — 2 стрелки `←` `→` (горизонтально), обозначающие «руление наклоном»;
+- **снизу слева** — 2 стрелки `▲` `▼` (вертикально), обозначающие «газ/тормоз»;
+- **сверху справа, над стрелками руления** — маленький кружок с символом `💡` (сигнал), чтобы было видно, что кнопка сигнала тоже есть;
+- **по центру** — маленький круг/точка (нейтральное положение) или иконка мотоцикла.
+Реализовать через абсолютное позиционирование внутри `.ctrl-mode-preview` (relative).
+
+---
+
+## 2. Определение доступности акселерометра
+
+При старте игры (в `Eg()` или `d0()`) — вычислить `tiltAvailable`:
+
+```js
+const tiltAvailable = typeof DeviceOrientationEvent !== "undefined"
+  && (typeof DeviceOrientationEvent.requestPermission === "function" || "ondeviceorientation" in window);
+```
+
+На iOS 13+ `requestPermission` есть, но реальный доступ — только после жеста пользователя и разрешения. Поэтому `tiltAvailable` на iOS — `true` только **после** успешного `requestPermission()`. До этого — показывать карточку `tilt` **disabled** с подсказкой. Упрощённо: при клике на `tilt` — запросить разрешение; если OK — включить режим; если нет — показать `Xt` «Доступ к датчикам отклонён. Остаёмся на кнопках.» и оставить `buttons`.
+
+На Android/десктопе с датчиками — `requestPermission` нет, просто подписка на `deviceorientation`. На десктопе без датчиков — `deviceorientation` может не срабатывать (событие приходит с `null`/`undefined` alpha/beta/gamma) — в этом случае через 1–2 с после подписки проверить, что пришло хотя бы одно событие с ненулевыми `beta`/`gamma`; если нет — переключить обратно на `buttons` и показать `Xt` «Датчики не отвечают. Переключено на кнопки.»
+
+---
+
+## 3. Режим «Кнопки» (по умолчанию) — без изменений
+
+- `#controls` виден (`hidden = false`) при `i.started && !i.ended` (как сейчас).
+- Все `.ctrl[data-key]` — работают через существующие обработчики в `I0()`.
+- Свайп на `#view` — работает как сейчас.
+- `#btn-flash` (сигнал), `#btn-camera`, `#btn-pause` — видимы и работают **внутри `#controls`** (как сейчас).
+- Акселерометр **не подписан** (или подписан, но игнорируется — лучше не подписываться вовсе, чтобы не тратить батарею).
+
+---
+
+## 4. Режим «Акселерометр» (`tilt`) — реализация
+
+### 4.1. Подписка на `deviceorientation`
+
+```js
+let tiltHandler = null;
+let tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0 };
+let tiltRaw = { beta: 0, gamma: 0, alpha: 0 };
+let tiltSmoothed = { beta: 0, gamma: 0 };
+let tiltGotEvent = false;
+
+function startTilt() {
+  if (tiltHandler) return;
+  tiltHandler = (e) => {
+    if (e.beta == null && e.gamma == null) return;
+    tiltRaw.beta = e.beta || 0;    // -180..180 — наклон вперёд/назад
+    tiltRaw.gamma = e.gamma || 0;  // -90..90 — наклон влево/вправо
+    tiltRaw.alpha = e.alpha || 0;
+    tiltGotEvent = true;
+  };
+  window.addEventListener("deviceorientation", tiltHandler, { passive: true });
+}
+function stopTilt() {
+  if (tiltHandler) {
+    window.removeEventListener("deviceorientation", tiltHandler);
+    tiltHandler = null;
+  }
+}
+```
+
+### 4.2. Калибровка
+
+- При включении режима `tilt` — **автоматическая калибровка** по первым 10–15 событиям (усреднить `beta`/`gamma`, сохранить в `tiltCalibration`). Плюс кнопка **«Калибровать»** в настройках — сбрасывает калибровку и заново усредняет.
+- Формула руления: `steer = clamp((gamma - tiltCalibration.gamma) / 25 * tiltSensitivity, -1, 1)` — `±25°` от калибровки = полный ход руля при `tiltSensitivity = 1.0`. При `tiltInvert` — знак инвертируется.
+- Если `Math.abs(steer) < 0.08` — мёртвая зона, `steer = 0` (чтобы не дрожало на прямой).
+- Сглаживание: `tiltSmoothed.gamma = lerp(tiltSmoothed.gamma, steer, 0.18)` в `animate()` (не в обработчике события, чтобы не зависеть от частоты событий).
+- **Руление через наклон** — пишет в `i.keys.left` / `i.keys.right`:
+  ```js
+  if (tiltSmoothed.gamma < -0.15) { i.keys.left = true; i.keys.right = false; }
+  else if (tiltSmoothed.gamma > 0.15) { i.keys.right = true; i.keys.left = false; }
+  else { i.keys.left = false; i.keys.right = false; }
+  ```
+  — но **только** если в этом кадре свайп на `#view` не активен (иначе свайп перебивает наклон). Флаг `swipeActive` — выставлять в обработчиках `#view` (`pointerdown` → `true`, `pointerup`/`pointercancel` → `false`).
+- **Важно**: `i.keys.left/right` в `tilt` — это **те же поля**, что использует физика (`_0()` читает `s.left`, `s.right`). Ничего не меняем.
+
+### 4.3. Тач-зоны «газ / тормоз» — ПРОЗРАЧНЫЕ
+
+- **Правая половина экрана** (газ) — `pointerdown` → `i.keys.gas = true`, `pointerup`/`pointercancel`/`pointerleave` → `i.keys.gas = false`. **Только** если pointer начался **в правой половине** (`clientX > window.innerWidth / 2`) и `i.started && !i.ended && !i.paused && !i.uiModal` и pointer не попал в интерактивный элемент (`closest("#btn-flash-tilt, #btn-pause, #btn-camera, .ds-button, .ds-icon-button")` — кнопка сигнала, пауза, камера).
+- **Левая половина экрана** (тормоз) — аналогично, `clientX <= window.innerWidth / 2`, `i.keys.brake`.
+- **Одновременное нажатие** (газ + тормоз) — разрешено (физика `g0` обработает).
+- **Мультитач** — использовать `pointerId` (Map `activePointers: Map<pointerId, "gas"|"brake">`). При `pointerup`/`pointercancel` — по `pointerId` снять нужный ключ. Не сбрасывать оба ключа при отпускании одного пальца.
+- **Свайп руления** — на `#view` остаётся, но в tilt-режиме **отключить** свайп для газа/тормоза (только для руления). То есть в tilt-режиме `#view` не должен ставить `i.keys.gas/brake` — эти ключи управляются только тач-зонами.
+- **Визуальный оверлей** (см. п. 4.4) — не перехватывает pointer-события (`pointer-events: none`), чтобы не мешать.
+- **Прозрачность**: у тач-зон **нет фона**. Только:
+  - **едва заметная обводка** (`border: 1.5px solid rgba(255,255,255,0.12)`, `border-radius: 24px`), которая **плавно исчезает** (`opacity: 0`) через 3–5 с после старта или при первом нажатии;
+  - **иконка-подсказка** (`▲` / `▼` + подпись «ГАЗ» / «ТОРМОЗ», `opacity: 0.4`), которая тоже плавно исчезает;
+  - **при активации** (`pointerdown`) — кратковременная вспышка (`background: rgba(60,206,120,0.10)` для газа, `rgba(225,91,85,0.10)` для тормоза) на 120 мс, потом снова прозрачно.
+- **Кнопка «Сигнал» (дальний свет)** в tilt-режиме — **отдельная круглая кнопка** в правой части экрана, **над** тач-зоной газа:
+  - позиция: `position: fixed; right: 18px; bottom: 130px` (над правым нижним углом, выше пальца, который держит газ);
+  - размер: 56×56 px, `border-radius: 50%`, `background: rgba(10,19,33,0.72)`, `border: 2px solid rgba(156,184,216,0.55)`, иконка `💡`, `pointer-events: auto`;
+  - при нажатии — `i.triggerHighBeam()` + визуальный отклик (вспышка рамки, `transform: scale(0.94)`);
+  - в режиме `buttons` — **скрыта** (там есть `#btn-flash` в `#controls`).
+
+### 4.4. Визуальный оверлей в tilt-режиме
+
+При `i.started && !i.ended && !i.paused && !i.uiModal` и `mode === "tilt"` — показать **оверлей**:
+
+```
+<div id="tilt-overlay">
+  <!-- Правая зона: газ (прозрачная) -->
+  <div class="tilt-zone tilt-zone-gas" id="tilt-zone-gas">
+    <span class="tilt-zone-hint">▲ ГАЗ</span>
+  </div>
+  <!-- Левая зона: тормоз (прозрачная) -->
+  <div class="tilt-zone tilt-zone-brake" id="tilt-zone-brake">
+    <span class="tilt-zone-hint">▼ ТОРМОЗ</span>
+  </div>
+  <!-- Индикатор наклона (по центру сверху) -->
+  <div class="tilt-indicator">
+    <div class="tilt-indicator-track"><div class="tilt-indicator-dot" id="tilt-indicator-dot"></div></div>
+    <span class="tilt-indicator-label">НАКЛОН</span>
+  </div>
+  <!-- Кнопка «Сигнал» (дальний свет) справа -->
+  <button id="btn-flash-tilt" class="tilt-flash-btn" title="Дальний свет (сигнал)">
+    <span class="tilt-flash-icon">💡</span>
+  </button>
+</div>
+```
+
+CSS:
+
+```css
+#tilt-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 11;
+}
+.tilt-zone {
+  position: absolute; bottom: 0; height: 55vh; width: 50vw;
+  pointer-events: none;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 18px;
+  border-radius: 24px;
+  transition: background 0.12s ease, opacity 0.6s ease;
+  opacity: 1;
+}
+.tilt-zone-gas { right: 0; }
+.tilt-zone-brake { left: 0; }
+.tilt-zone-hint {
+  font-size: 13px; font-weight: 900; letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.45);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.tilt-zone.hint-hidden .tilt-zone-hint { opacity: 0; }
+.tilt-zone-gas.active { background: rgba(60,206,120,0.10); }
+.tilt-zone-brake.active { background: rgba(225,91,85,0.10); }
+.tilt-indicator {
+  position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none;
+}
+.tilt-indicator-track {
+  width: 120px; height: 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.18);
+  position: relative;
+}
+.tilt-indicator-dot {
+  position: absolute; top: -3px; left: 50%; width: 12px; height: 12px;
+  border-radius: 50%; background: #fff; transform: translateX(-50%);
+  box-shadow: 0 0 8px rgba(255,255,255,0.6);
+  transition: left 0.08s linear, background 0.2s;
+}
+.tilt-indicator-label {
+  font-size: 10px; font-weight: 900; letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.55);
+}
+.tilt-flash-btn {
+  position: fixed; right: 18px; bottom: 130px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(10,19,33,0.72);
+  border: 2px solid rgba(156,184,216,0.55);
+  color: #fff; font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  transition: transform 0.08s, border-color 0.15s;
+  z-index: 12;
+}
+.tilt-flash-btn:hover, .tilt-flash-btn:active {
+  border-color: var(--ds-warm); transform: scale(0.94);
+}
+.tilt-flash-btn:active .tilt-flash-icon { filter: brightness(1.6); }
+```
+
+- `.tilt-zone` — прозрачные, без фона по умолчанию, с едва заметной подсказкой (`▲ ГАЗ` / `▼ ТОРМОЗ`, `opacity: 0.45`). Через 4 с после старта (или при первом нажатии на зону) — `.hint-hidden` (подсказка исчезает).
+- `.tilt-zone-gas.active` / `.tilt-zone-brake.active` — кратковременная вспышка (120 мс), потом снимается через `setTimeout` в обработчике `pointerup`.
+- `.tilt-indicator` — под `#status-badges` (`top: 84px`), не перекрывает `#order-hud` (`top: 12px`).
+- `#btn-flash-tilt` — `pointer-events: auto` (это единственный интерактивный элемент внутри `#tilt-overlay`), `z-index: 12`.
+- На десктопе (tilt недоступен) оверлей не показывается.
+
+### 4.5. Анимация газа/тормоза
+
+В `animate()` (в `U0()` или `d0()`, там где читаются `i.keys.gas/brake`):
+- Если `mode === "tilt"` и `i.keys.gas` — добавить класс `.active` на `.tilt-zone-gas`, иначе снять (снять через 120 мс после `pointerup`, а не сразу).
+- Аналогично для `i.keys.brake` и `.tilt-zone-brake`.
+- Если `mode === "tilt"` и `Math.abs(tiltSmoothed.gamma) > 0.15` — сдвинуть `.tilt-indicator-dot` (`left: (50 + gamma*50) + '%'`), цвет: зелёный при `|gamma| < 0.15`, жёлтый при `0.15…0.5`, красный при `> 0.5`.
+
+---
+
+## 5. Интеграция в игровой цикл
+
+### 5.1. `animate()` (функция `g` в `U0()`)
+
+Раз в кадр (или через троттлинг 30–60 мс):
+- Если `mode === "tilt"` и `tiltGotEvent`:
+  - `tiltSmoothed.gamma = lerp(tiltSmoothed.gamma, clamp((tiltRaw.gamma - tiltCalibration.gamma) / 25 * tiltSensitivity * (tiltInvert ? -1 : 1), -1, 1), 0.18)` — сглаживание.
+  - Обновить `i.keys.left/right` (см. п. 4.2), **если `!swipeActive`**.
+  - Обновить `.tilt-indicator-dot` (сдвиг по `tiltSmoothed.gamma`).
+- Если `mode === "tilt"` и `!tiltGotEvent` в течение 2 с после `startTilt()` — откат на `buttons` (датчики не отвечают) + `Xt`-сообщение.
+
+### 5.2. `startGame()` / `crashGame()` / `renderMainMenu()` / `togglePause()`
+
+- При `startGame()` и `mode === "tilt"` — `startTilt()` (если ещё не), `tiltGotEvent = false`, `tiltCalibration` — использовать сохранённую или откалибровать по первым событиям. Показать `#tilt-overlay` (`hidden = false`), скрыть `#controls`.
+- При `crashGame()` / `renderMainMenu()` — `stopTilt()`, `#tilt-overlay.hidden = true` (экономия батареи).
+- При `togglePause()` → `paused = true` — не останавливать `startTilt()` (чтобы при снятии паузы не было задержки), но сбрасывать `i.keys.gas/brake` (как сейчас в `ft()`). `#tilt-overlay` — скрыть на паузе (там открыт `#overlay`).
+
+### 5.3. Переключение режима в настройках
+
+- Клик по `.ctrl-mode-card[data-ctrl-mode="buttons"]` → `i.controlMode = "buttons"`, `localStorage.setItem("bajajGO_controlMode", "buttons")`, `stopTilt()`, `#controls.hidden = false` (при `started && !ended`), `#tilt-overlay.hidden = true`, `#btn-flash-tilt.hidden = true`, перерисовать вкладку.
+- Клик по `.ctrl-mode-card[data-ctrl-mode="tilt"]`:
+  - Если `!tiltAvailable` — `Xt`-сообщение, ничего не делать.
+  - Иначе — `await requestTiltPermission()` (iOS): если OK — `i.controlMode = "tilt"`, `localStorage.setItem("bajajGO_controlMode", "tilt")`, `startTilt()`, `#controls.hidden = true`, `#tilt-overlay.hidden = false` (если в игре), `#btn-flash-tilt.hidden = false`, перерисовать вкладку. Если отказ — `Xt` «Доступ к датчикам отклонён», остаёмся на `buttons`.
+- `requestTiltPermission()`:
+  ```js
+  async function requestTiltPermission() {
+    if (typeof DeviceOrientationEvent === "undefined") return false;
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const r = await DeviceOrientationEvent.requestPermission();
+        return r === "granted";
+      } catch { return false; }
+    }
+    return true;
+  }
+  ```
+
+### 5.4. Калибровка
+
+- Кнопка `#tilt-calibrate` — сброс `tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0 }`, `tiltCalibrationSamples = []`, `tiltCalibrationActive = true` (в течение ~1 с собирать 10–15 событий, усреднить, сохранить в `localStorage` `bajajGO_tiltCalibration`).
+- При `startTilt()` — если калибровка есть (`calibratedAt > 0` и свежая) — использовать; если нет — автоматически калибровать по первым 10–15 событиям.
+- Показать в настройках текущее значение (`Wn("Калибровка: γ=" + tiltCalibration.gamma.toFixed(1) + "°")`) — опционально.
+
+### 5.5. Чувствительность и инверсия
+
+- **Поле настройки чувствительности** — слайдер `#tilt-sens-range` (50…200%, шаг 5) в настройках. При изменении — `tiltSensitivity = value / 100` (0.5…2.0), сохранить в `localStorage` (`bajajGO_tiltSensitivity`), обновить `#tilt-sens-val`. Работает **на лету** — без перезапуска заезда.
+- `#tilt-invert` — переключить `tiltInvert`, сохранить.
+- Перерисовать вкладку после каждого изменения (или обновлять только значения — без перерисовки, чтобы слайдер не «прыгал»).
+
+---
+
+## 6. Что НЕ менять
+
+- Не менять физику (`g0`, `_0`, `x0`, `S0`, `A0`, `R0`), HUD, экономику, сохранения, тюнинг, камеры, трафик, прыжки, погоду, постобработку, меню, гараж, магазин.
+- Не менять существующие `I0()` (клавиатура, `.ctrl`, свайп на `#view`) — **только дополнить** проверкой `mode === "tilt"` там, где нужно.
+- Не менять `#controls` HTML — **только скрывать/показывать** через `hidden` в зависимости от режима.
+- Не менять `#btn-flash` (в `#controls`), `#btn-camera`, `#btn-pause` — они работают в обоих режимах. В tilt-режиме `#btn-flash` **скрыт** (вместо него — `#btn-flash-tilt` в правой части экрана), `#btn-camera` и `#btn-pause` — остаются в `#controls` (но `#controls` скрыт в tilt — значит, эти кнопки тоже скрыты; **исключение**: `#btn-pause` **всегда виден** (он вне `#controls`, `position: absolute; top: 16px; right: 20px
