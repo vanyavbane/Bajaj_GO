@@ -47,6 +47,7 @@ export function initControls() {
   const activePointers = new Map();
   let hintTimer = 0;
   let lastOverlayVisible = null;
+  let tiltLastNow = 0;
 
   /* ---------- Состояние и загрузка настроек ---------- */
   G.controlMode = 'buttons';
@@ -415,11 +416,21 @@ export function initControls() {
 
   function updateTilt(now) {
     syncControlUi();
-    if (G.controlMode !== 'tilt') return;
+    if (G.controlMode !== 'tilt') {
+      tiltLastNow = 0;
+      return;
+    }
+
+    // Сглаживание не зависит от частоты кадров: на 60 и 120 Гц руль
+    // доезжает до целевого угла за одинаковое время.
+    const rawDt = tiltLastNow ? (now - tiltLastNow) / 1000 : 1 / 60;
+    tiltLastNow = now;
+    const dt = G.clamp(rawDt, 0, 0.05);
+    const smooth = 1 - Math.exp(-dt * 12);
 
     const running = !!(G.started && !G.ended && !G.paused && !G.uiModal);
     if (!running) {
-      G.tiltSmoothed = G.lerp(G.tiltSmoothed, 0, 0.2);
+      G.tiltSmoothed = G.lerp(G.tiltSmoothed, 0, smooth);
       return;
     }
 
@@ -434,26 +445,23 @@ export function initControls() {
     }
 
     if (G.tiltCalibrationActive && G.tiltCalibration.calibratedAt === 0) {
-      G.tiltSmoothed = G.lerp(G.tiltSmoothed, 0, 0.18);
+      G.tiltSmoothed = G.lerp(G.tiltSmoothed, 0, smooth);
     } else {
       const invert = G.tiltInvert ? -1 : 1;
-      let target = ((G.tiltRaw.gamma - G.tiltCalibration.gamma) / 25) * G.tiltSensitivity * invert;
-      target = G.clamp(target, -1, 1);
-      if (Math.abs(target) < 0.08) target = 0;
-      G.tiltSmoothed = G.lerp(G.tiltSmoothed, target, 0.18);
+      // Без мёртвой зоны: даже небольшой наклон сразу даёт малый поворот.
+      const target = G.clamp(
+        ((G.tiltRaw.gamma - G.tiltCalibration.gamma) / 25) * G.tiltSensitivity * invert,
+        -1,
+        1
+      );
+      G.tiltSmoothed = G.lerp(G.tiltSmoothed, target, smooth);
     }
 
+    // В наклоне руление идёт аналоговым G.tiltSmoothed; клавиши не трогаем,
+    // пока активен свайп, и гасим остатки после него.
     if (!G.swipeActive) {
-      if (G.tiltSmoothed < -0.15) {
-        G.keys.left = true;
-        G.keys.right = false;
-      } else if (G.tiltSmoothed > 0.15) {
-        G.keys.right = true;
-        G.keys.left = false;
-      } else {
-        G.keys.left = false;
-        G.keys.right = false;
-      }
+      G.keys.left = false;
+      G.keys.right = false;
     }
 
     updateZone(zoneGas, !!G.keys.gas);

@@ -111,6 +111,9 @@ export function initLoop() {
     }, dt, now, {
       left: G.keys.left,
       right: G.keys.right,
+      // Наклон передаётся аналогом: чем сильнее крен, тем сильнее поворот.
+      // Свайп по экрану по-прежнему работает дискретными keys.
+      steer: G.controlMode === 'tilt' && !G.swipeActive ? G.tiltSmoothed : undefined,
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,

@@ -35,7 +35,10 @@ export function stepSpeed(speed, dt, spec) {
 }
 
 export function stepSteer(body, dt, now, spec) {
-  const dir = (spec.right ? 1 : 0) - (spec.left ? 1 : 0);
+  // В режиме наклона приходит готовое значение −1…1; кнопки и свайп дают
+  // дискретные −1/0/1, поэтому старый расчёт остаётся запасным.
+  const analog = Number.isFinite(spec.steer) ? clamp(spec.steer, -1, 1) : null;
+  const dir = analog !== null ? analog : (spec.right ? 1 : 0) - (spec.left ? 1 : 0);
   const air = spec.airborne ? 0.36 : 1;
   let wobbleTimer = body.wobbleTimer;
   const wobblePenalty = wobbleTimer > 0 ? Math.sin(now * 0.045) * 2.4 : 0;
