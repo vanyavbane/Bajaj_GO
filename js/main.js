@@ -1,3 +1,4 @@
+import { initAdManager } from './adManager.js';
 import { initAtmosphere } from './atmosphere.js';
 import { initBike } from './bike.js';
 import { initBiome, initBiomeWorld } from './biome.js';
@@ -33,6 +34,9 @@ initBiomeWorld();
 initSky();
 initWeather();
 initRoadSurface();
+// Реклама стартует до roadside: модуль уже существует, а файлы догружаются
+// асинхронно и в любой момент увеличивают version — слоты перевыберут баннер.
+initAdManager();
 initRoadside();
 initStructures();
 initEffects();

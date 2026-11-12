@@ -313,7 +313,17 @@ export function initRoadside() {
 
     if (i % 2 === 1) {
       const bb = createBillboardMesh(i, i % 3 === 1);
-      slot.billboard = { group: bb.group, faceMat: bb.faceMat, texIndex: i, biome: -1, side: i % 4 === 1 ? 1 : -1 };
+      // adVersion/banner: первый кадр рисует процедурную текстуру, затем
+      // updateRoadside выбирает баннер через AdManager (там уже известен s слота).
+      slot.billboard = {
+        group: bb.group,
+        faceMat: bb.faceMat,
+        texIndex: i,
+        biome: -1,
+        side: i % 4 === 1 ? 1 : -1,
+        adVersion: -1,
+        banner: null
+      };
       G.scene.add(bb.group);
     }
 
@@ -328,13 +338,13 @@ export function initRoadside() {
       const beam = new THREE.Mesh(new THREE.BoxGeometry(21.2, 0.35, 0.35), G.M.chrome);
       beam.position.set(0, 7.4, 0);
       const boardMat = new THREE.MeshStandardMaterial({
-        map: overheadSignTextures[(i / 6) % overheadSignTextures.length],
+        map: overheadSignTextures[Math.floor(i / 6) % overheadSignTextures.length],
         roughness: 0.45
       });
       const board = new THREE.Mesh(new THREE.BoxGeometry(9.6, 2.4, 0.22), boardMat);
       board.position.set(0, 7.1, 0);
       pg.add(pL, pR, beam, board);
-      slot.portal = { group: pg, boardMat, biome: -1, texIndex: 0 };
+      slot.portal = { group: pg, boardMat, biome: -1, texIndex: 0, adVersion: -1, banner: null };
       G.scene.add(pg);
     }
 
@@ -398,6 +408,7 @@ export function initRoadside() {
       const dom = dominantBiomeAt(slot.s);
       const roadM = G.biomeOffsetM + slot.s;
       const inCity = cw > 0.5;
+      const adVersion = G.AdManager ? G.AdManager.version : 0;
       if (slot.billboard) {
         const bb = slot.billboard;
         const show = inCity ? (slot.idx === 3 || slot.idx === 17) : slot.idx === 7;
@@ -406,11 +417,25 @@ export function initRoadside() {
           const list = billboardIndexByBiome[dom];
           const rot = Math.floor(roadM / 240) + (inCity && bb.side > 0 ? 1 : 0);
           const texIndex = list[((rot % list.length) + list.length) % list.length];
-          if (bb.biome !== dom || bb.texIndex !== texIndex) {
+          if (bb.biome !== dom || bb.texIndex !== texIndex || bb.adVersion !== adVersion) {
             bb.biome = dom;
             bb.texIndex = texIndex;
-            bb.faceMat.map = billboardTextures[texIndex];
+            bb.adVersion = adVersion;
+            // Единая точка выбора: внешний провайдер → файлы AdManager/ →
+            // процедурная текстура. Без баннера материал остаётся прежним.
+            const banner = G.AdManager
+              ? G.AdManager.pickBannerForSlot({
+                kind: 'billboard',
+                id: 'billboard-' + slot.idx,
+                material: bb.faceMat,
+                slot,
+                sOffset: 6
+              })
+              : null;
+            bb.banner = banner;
+            bb.faceMat.map = banner ? banner.texture : billboardTextures[texIndex];
             bb.faceMat.needsUpdate = true;
+            if (banner && G.AdManager) G.AdManager.reportImpression(banner.bannerId);
           }
         }
       }
@@ -424,11 +449,23 @@ export function initRoadside() {
           const texIndex = inCity
             ? Math.floor(slot.idx / 6) % list.length
             : Math.floor(roadM / 480) % list.length;
-          if (po.biome !== dom || po.texIndex !== texIndex) {
+          if (po.biome !== dom || po.texIndex !== texIndex || po.adVersion !== adVersion) {
             po.biome = dom;
             po.texIndex = texIndex;
-            po.boardMat.map = list[texIndex];
+            po.adVersion = adVersion;
+            // На оверхеде AdManager вернёт только изображение или постер видео.
+            const banner = G.AdManager
+              ? G.AdManager.pickBannerForSlot({
+                kind: 'overhead',
+                id: 'overhead-' + slot.idx,
+                material: po.boardMat,
+                slot
+              })
+              : null;
+            po.banner = banner;
+            po.boardMat.map = banner ? banner.texture : list[texIndex];
             po.boardMat.needsUpdate = true;
+            if (banner && G.AdManager) G.AdManager.reportImpression(banner.bannerId);
           }
         }
       }

@@ -129,6 +129,75 @@ export interface VisualSettings {
   weakDevice: boolean;
 }
 
+/** Стенд, для которого AdManager выбирает баннер. */
+export type AdSlotKind = 'billboard' | 'overhead';
+
+export interface AdManagerSlot {
+  kind: AdSlotKind;
+  /** Материал стенда: AdManager меняет map у видео при приближении/удалении. */
+  material?: THREE.MeshStandardMaterial;
+  /** Внутренний слот обочины (roadsideSlots[i]) — для дистанции и видимости. */
+  slot?: any;
+  /** Смещение стенда от slot.s (у билборда +6 м, у портала 0). */
+  sOffset?: number;
+  /** Уникальный id стенда в пуле. */
+  id?: string;
+  /** Готовые мировые метры, если слот не roadside. */
+  s?: number;
+}
+
+/** Результат выбора баннера для одного стенда. */
+export interface AdManagerBanner {
+  texture: THREE.Texture;
+  isVideo: boolean;
+  videoEl?: HTMLVideoElement;
+  videoTexture?: THREE.VideoTexture;
+  posterTexture?: THREE.Texture;
+  bannerId: string;
+  file: string;
+  banner?: any;
+}
+
+export interface AdManagerStats {
+  billboardsLoaded: number;
+  overheadsLoaded: number;
+  billboardsTotal: number;
+  overheadsTotal: number;
+}
+
+/** Баннер внешнего провайдера (заглушка под будущий Google Play). */
+export interface ExternalAdBanner {
+  id: string;
+  type: 'image' | 'video';
+  srcUrl: string;
+  posterUrl?: string;
+  duration?: number;
+  enabled?: boolean;
+  kind?: 'billboard' | 'overhead';
+}
+
+/** Внешний провайдер рекламы. Сейчас никем не зарегистрирован. */
+export interface ExternalAdProvider {
+  id: string;
+  getName(): string;
+  getBanners(): Promise<ExternalAdBanner[]>;
+  onShown?(bannerId: string): void;
+  onClicked?(bannerId: string): void;
+}
+
+export interface AdManagerApi {
+  readonly version: number;
+  init: () => void;
+  pickBannerForSlot: (slot: AdManagerSlot) => AdManagerBanner | null;
+  getStats: () => AdManagerStats;
+  registerExternalProvider: (provider: ExternalAdProvider) => void;
+  unregisterExternalProvider: (providerId: string) => void;
+  reportImpression: (bannerId: string) => void;
+  reportClick: (bannerId: string) => void;
+  registerSettingsListeners: () => void;
+  update: (dt: number) => void;
+}
+
 /** Состояние биомной системы: где игрок и какие локации смешиваются. */
 export interface BiomeState {
   meters: number;
@@ -218,6 +287,10 @@ export interface GameState {
   inTunnel: boolean;
   smoothstep: (edge0: number, edge1: number, x: number) => number;
   M: Record<string, THREE.Material>;
+
+  /** Реклама из папки AdManager/ и будущих внешних провайдеров. */
+  AdManager: AdManagerApi;
+  updateAdManager: (dt: number) => void;
 
   [key: string]: any;
 }

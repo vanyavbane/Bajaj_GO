@@ -276,6 +276,7 @@ export function initLoop() {
     G.recycleRamps();
     G.tickJumpParticles(dt);
     G.updateRoadside(isNightish);
+    if (G.updateAdManager) G.updateAdManager(dt);
     G.updateMegaStructures(dt);
     G.updateExitWorld(dt);
     G.updateDeliveryMarker();

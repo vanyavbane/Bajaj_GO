@@ -26,7 +26,8 @@
 |   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money` |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары и бордюры по весу города, откосы |
-| 6 | `js/roadside.js` | процедурные текстуры билбордов и биомных указателей, `createBillboardMesh`, `createBuildingGroup`, эстакады; плотность и тексты зависят от биома |
+| 6 | `js/roadside.js` | процедурные текстуры билбордов и биомных указателей, `createBillboardMesh`, `createBuildingGroup`, эстакады; плотность и тексты зависят от биома. Текстуру щита/портала выбирает `G.AdManager.pickBannerForSlot`, без баннера остаётся процедурная |
+|   | `js/adManager.js` | реклама из папки `AdManager/` рядом с игрой: `manifest.json` → автолистинг каталога → процедурный fallback, `sessionStorage`-кэш `bajajGO_adManagerDiscovery`, загрузка JPG/PNG/WebP и MP4/WebM без звука, постеры, лимит двух активных видео, доля показов и API для будущего Google Play |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS`; мосты/тоннели реже вне города |
 |   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах; вне города скрываются и сжимаются по `cityWeightAtS` |
@@ -73,6 +74,11 @@
 | `limpMode` | `bajajGO_limp` | `'1'` — езда «своим ходом» после пустого бака (5 км/ч) |
 | `activeOrder` | `bajajGO_order` | JSON активного заказа: ресторан, остаток пути/времени, награда |
 | `biomeStoredMeters` | `bajajGO_biomeKm` | Пройденный по трассе путь в километрах (в памяти — метры). Задаёт зону биома; между заездами не сбрасывается. |
+| `AdManager` (доля) | `bajajGO_adUploadedShare` | 0…1 — вероятность показа файла из `AdManager/` вместо процедурной рекламы; по умолчанию 0.5 |
+| `AdManager` (вкл/выкл) | `bajajGO_adEnabled` | `'0'` полностью отключает `AdManager`; любое другое значение или отсутствие ключа — включено |
+
+Кэш обнаружения рекламы лежит в `sessionStorage` под ключом
+`bajajGO_adManagerDiscovery` и сбрасывается при перезагрузке страницы.
 
 **Состояние заезда (в памяти):** `speed`, `distance`, `score`, `playerS`,
 `laneOffset`, `lateralVelocity`, `jumpState`, `comboCount`, `todCycleTime`,
@@ -93,7 +99,7 @@ nextRainAt, rainEndsAt, flashes }`. `rain`/`cloud`/`wet` — плавные 0…
 чтобы награда не зачислилась дважды.
 
 **Мир:** `trafficPool` (20 машин, активных по лимиту биома), `roadsideSlots`,
-`megaStructures`,
+`megaStructures`, `G.AdManager` (обнаружение и пул рекламных материалов),
 `rampsPool`, `pedestrians`, `lampLights` (8 активных фонарей), `exitPool`
 (5 съездов с маркерными зонами), `deliveryMarker`, `biomeScenery`.
 
@@ -191,7 +197,7 @@ animate(now)
   ├─ placeOnRoad байка, updateWeather(dt), updateFollowCamera, aimSunAtPlayer
   ├─ updateRoadSurface + updateAtmosphereAndTimeOfDay
   ├─ recycleRamps и tickJumpParticles
-  ├─ updateRoadside, updateMegaStructures
+  ├─ updateRoadside, updateAdManager, updateMegaStructures
   ├─ updateExitWorld / updateDeliveryMarker
   ├─ updatePedestrians
   ├─ updateTraffic: движение, перелёты, столкновения → handleAccident()
@@ -201,6 +207,30 @@ animate(now)
 
 Slow-mo меняет только `dt` игрового мира. `updateSlowMo` продолжает плавно
 возвращать время к 1.0 даже при открытом модальном окне, чтобы эффект не завис.
+
+## Своя реклама (AdManager)
+
+Владелец кладёт файлы в `AdManager/` рядом с игрой: `billboards/` — обычные
+щиты (картинки и видео), `overheads/` — указатели над дорогой (картинка или
+постер видео), `manifest.json` — необязательный список файлов. UI загрузки и
+`<input type="file">` нет: всё обнаруживается при запуске.
+
+Порядок обнаружения: `manifest.json` → `fetch` содержимого папок (если сервер
+отдаёт directory listing) → только процедурная реклама с одним `console.warn`.
+Результат кэшируется в `sessionStorage` (`bajajGO_adManagerDiscovery`) и
+сбрасывается при перезагрузке. Изображения — JPG/PNG/WebP; видео — MP4/WebM
+без звука, не длиннее 10 с, не больше 10 МБ и 1024 px по большей стороне,
+иначе файл пропускается с предупреждением.
+
+`pickBannerForSlot` сначала отдаёт внешнего провайдера (будущий Google Play),
+затем с вероятностью `AD_UPLOADED_SHARE` (0.5) файл из папки, иначе `null` —
+`roadside.js` оставляет процедурную текстуру. Видео играют только на щитах
+впереди в пределах 120 м и не больше двух одновременно; остальные щиты и все
+overheads показывают постер. Загрузка асинхронная, любая ошибка ловится и не
+роняет игру.
+
+`vite.config.js` копирует `AdManager/` в `dist/AdManager/`, чтобы папка лежала
+рядом с собранным `bajaj-go.html`.
 
 Обочина, рампы, мосты, указатели съездов и штрихи разметки стоят в мире,
 пока не уедут за спину. Пока `s` тот же, `placeOnRoad` для них не вызывается.
@@ -461,7 +491,9 @@ Slow-mo меняет только `dt` игрового мира. `updateSlowMo`
 | Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` (поля `variant` и `hudStyle`); при новой геометрии — `js/models/motorcycle.js` + `applyBikeVariant` в `js/bike.js` |
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
 | Цвета неба, тумана, света | `todPalettes` + `updateAtmosphereAndTimeOfDay` в `js/atmosphere.js` |
-| Рекламные баннеры | `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js` |
+| Рекламные баннеры | Процедурные текстуры — `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js`; свои файлы — папка `AdManager/`, выбор — `pickBannerForSlot` в `js/adManager.js` |
+| Лимиты и доля показов рекламы | `AD_*` в `js/adManager.js`; пользовательские переопределения — `bajajGO_adUploadedShare`, `bajajGO_adEnabled` |
+| Будущая реклама Google Play | `registerExternalProvider` / `unregisterExternalProvider` в `js/adManager.js`; провайдер получает приоритет над папкой, показ и клик репортятся через `reportImpression` / `reportClick` |
 | Частицы, фид и звуки | `spawnOverflyParticles`, `pushFeed(text, tone, level, side)`, `playJumpSound`, `playExitChime` в `js/effects.js` |
 | Сторона уведомления комбо/перелёта | `side` в вызовах `G.pushFeed` из `js/traffic.js`; классы `.side-*` в `css/game.css` |
 | Физика разгона/торможения | `animate` в `js/loop.js` |
