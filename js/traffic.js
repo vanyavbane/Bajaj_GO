@@ -5,21 +5,41 @@ import { G } from './state.js';
 
 export function initTraffic() {
   /* =========================================================================
-   * 9. ТРАФИК (СЕДАНЫ, ТАКСИ, ГАЗЕЛИ, АВТОБУСЫ И СТАНДАРТНЫЙ BAJAJ QUTE)
+   * 9. ТРАФИК
+   * -------------------------------------------------------------------------
+   * 20 моделей с весами: легковые, кроссоверы, SUV, Газели, КАМАЗ, фура и
+   * автобус. Тяжёлые машины гарантированно есть в каждом биоме, даже если
+   * предпочтения биома заняли все слоты.
    * ========================================================================= */
   const QUTE_TRAFFIC_LANE = 3;
   const QUTE_TRAFFIC_SPEED = 50;
+  const HEAVY_TYPES = new Set(['kamaz', 'truck', 'bus']);
   G.trafficPool = [];
   const vehicleColors = [0xd8dee9, 0xb71c1c, 0x1565c0, 0x2e7d32, 0x455a64, 0x6d4c41, 0x37474f, 0xf5f5f5];
-  const vehicleTypes = ['sedan', 'taxi', 'gazelle_flatbed', 'qute_traffic', 'gazelle_van', 'bus', 'sedan'];
+  const vehicleTypes = [
+    'sedan', 'sedan', 'sedan',
+    'hatchback', 'hatchback',
+    'crossover', 'crossover',
+    'taxi', 'taxi',
+    'suv', 'suv',
+    'gazelle_flatbed', 'gazelle_flatbed',
+    'gazelle_van', 'gazelle_van',
+    'kamaz', 'truck', 'bus',
+    'qute_traffic', 'qute_traffic'
+  ];
   const POOL_SIZE = 20;
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const vType = vehicleTypes[i % vehicleTypes.length];
-    const model = createVehicleModel(vType, vehicleColors[i % vehicleColors.length]);
+    const model = createVehicleModel(vType, vehicleColors[i % vehicleColors.length], i);
     G.scene.add(model.root);
 
     G.trafficPool.push(parkedTraffic(model, trafficLane(vType, i % 4), 35 + i * 26));
+  }
+
+  const heavyIndices = [];
+  for (let i = 0; i < POOL_SIZE; i++) {
+    if (HEAVY_TYPES.has(G.trafficPool[i].model.type)) heavyIndices.push(i);
   }
 
   /* Какие машины пула работают в каждом биоме. Сначала идут предпочтительные
@@ -35,7 +55,20 @@ export function initTraffic() {
     };
     order.sort((a, c) => (rank(a) - rank(c)) || (a - c));
     const mask = new Uint8Array(POOL_SIZE);
-    for (let k = 0; k < Math.min(traffic.count, POOL_SIZE); k++) mask[order[k]] = 1;
+    const limit = Math.min(traffic.count, POOL_SIZE);
+    for (let k = 0; k < limit; k++) mask[order[k]] = 1;
+
+    // Хотя бы одна тяжёлая машина на дороге в любом биоме.
+    if (limit >= 3 && !heavyIndices.some((i) => mask[i] === 1)) {
+      for (let k = limit - 1; k >= 0; k--) {
+        const idx = order[k];
+        if (!heavyIndices.includes(idx)) {
+          mask[idx] = 0;
+          break;
+        }
+      }
+      mask[heavyIndices[0]] = 1;
+    }
     activeMask.push(mask);
   }
 
@@ -68,6 +101,9 @@ export function initTraffic() {
     );
     Object.assign(car, parkedTraffic(car.model, laneIdx, newS));
     car.model.alertSprite.visible = false;
+    if (car.model.blinkers) {
+      for (const blinker of car.model.blinkers) blinker.visible = false;
+    }
     car.model.root.visible = true;
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
@@ -106,8 +142,17 @@ export function initTraffic() {
       car.flashReactTimer = step.flashReactTimer;
 
       if (wasFlashing) {
-        car.model.alertSprite.visible = Math.floor(now / 120) % 2 === 0;
-        if (car.flashReactTimer <= 0) car.model.alertSprite.visible = false;
+        const blinkOn = Math.floor(now / 120) % 2 === 0;
+        car.model.alertSprite.visible = blinkOn;
+        if (car.model.blinkers) {
+          for (const blinker of car.model.blinkers) blinker.visible = blinkOn;
+        }
+        if (car.flashReactTimer <= 0) {
+          car.model.alertSprite.visible = false;
+          if (car.model.blinkers) {
+            for (const blinker of car.model.blinkers) blinker.visible = false;
+          }
+        }
       }
 
       const recycle = trafficRecycle(car.s, G.playerS);

@@ -90,6 +90,7 @@ export interface TrafficCar {
     wheels: Array<{ rotation: THREE.Euler }>;
     frontPivots: Array<{ rotation: THREE.Euler }>;
     alertSprite: THREE.Object3D;
+    blinkers?: THREE.Object3D[];
     halfWidth: number;
     halfLength: number;
     roofHeight: number;

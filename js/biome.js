@@ -25,7 +25,7 @@ const BIOMES = [
     short: 'Город',
     traffic: {
       count: 18,
-      pref: ['sedan', 'taxi', 'bus', 'qute_traffic', 'gazelle_flatbed', 'gazelle_van']
+      pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck']
     }
   },
   {
@@ -34,7 +34,7 @@ const BIOMES = [
     short: 'Поля',
     traffic: {
       count: 12,
-      pref: ['gazelle_flatbed', 'gazelle_van', 'bus', 'sedan', 'taxi', 'qute_traffic']
+      pref: ['gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck', 'bus', 'sedan', 'taxi', 'crossover', 'suv', 'hatchback', 'qute_traffic']
     }
   },
   {
@@ -43,7 +43,7 @@ const BIOMES = [
     short: 'Лес',
     traffic: {
       count: 9,
-      pref: ['sedan', 'taxi', 'qute_traffic', 'gazelle_van', 'gazelle_flatbed', 'bus']
+      pref: ['sedan', 'hatchback', 'crossover', 'suv', 'taxi', 'qute_traffic', 'bus', 'gazelle_van', 'gazelle_flatbed', 'kamaz', 'truck']
     }
   },
   {
@@ -52,7 +52,7 @@ const BIOMES = [
     short: 'Горы',
     traffic: {
       count: 10,
-      pref: ['gazelle_flatbed', 'gazelle_van', 'bus', 'sedan', 'taxi', 'qute_traffic']
+      pref: ['truck', 'kamaz', 'gazelle_flatbed', 'gazelle_van', 'bus', 'suv', 'crossover', 'sedan', 'hatchback', 'taxi', 'qute_traffic']
     }
   }
 ];

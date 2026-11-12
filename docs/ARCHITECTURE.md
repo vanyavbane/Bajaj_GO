@@ -31,8 +31,8 @@
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS`; мосты/тоннели реже вне города |
 |   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах; вне города скрываются и сжимаются по `cityWeightAtS` |
-| 9 | `js/traffic.js` | пул из 20 машин, маски активности по биомам (лимит и предпочтения), плавная скорость по `LANE_SPEEDS`, `resetTrafficVehicle`, `updateTraffic`, запуск slow-mo на третьей перелетённой машине |
-|   | `js/models/vehicles.js` | `createVehicleModel`: седан, такси, газель, автобус, Qute в трафике; `addLights` добавляет фарам additive-спрайты бликов |
+| 9 | `js/traffic.js` | пул из 20 машин (sedan×3, hatchback×2, crossover×2, taxi×2, suv×2, gazelle_flatbed×2, gazelle_van×2, kamaz, truck, bus, qute_traffic×2), маски активности по биомам (лимит и предпочтения) с гарантией тяжёлой машины, плавная скорость по `LANE_SPEEDS`, `resetTrafficVehicle`, `updateTraffic`, мигание поворотников по `flashReactTimer`, запуск slow-mo на третьей перелетённой машине |
+|   | `js/models/vehicles.js` | `createVehicleModel(type, color, variant)`: 11 типов трафика; общие материалы и кэш `box`/`cylinder`, детализированные двери/арки/диски/оптика/номера, `hiDetail`/`loDetail`, `blinkers`, additive-спрайты бликов фар `G.glowTex` |
 |   | `js/geom.js` | общий кэш `BoxGeometry` / `CylinderGeometry` / `PlaneGeometry` |
 | 10 | `js/bike.js` | сборка байка: материалы, фары, `applyBikeVariant` (Pulsar / Boxer / Avenger), `applyVisualTuningToModel` |
 |   | `js/models/motorcycle.js` | меш мотоцикла, варианты Boxer и чоппер Avenger, райдер, детали тюнинга |
@@ -163,12 +163,16 @@ z = -s
   указатели «ПОДМОСКОВНЫЕ ПОЛЯ», «ЛЕСНАЯ ДОРОГА», «ГОРНЫЙ СЕРПАНТИН»,
   «ПЕРЕВАЛ», «СМОТРОВАЯ ПЛОЩАДКА». Мосты/тоннели вне города появляются окном
   `roadMeters % 1600 < 320` и плавно масштабируются на краях.
-- **Трафик.** Пул — 20 машин. Для каждого биома строится маска активности по
-  лимиту и предпочтениям `BIOMES[i].traffic`: город 18 (легковые/такси/
-  автобусы), поле 12 (грузовики и фургоны), лес 9, горы 10. Машины плавно
-  вводятся и выводятся (`active`/`retiring`), скорость тянется к
-  `G.LANE_SPEEDS`; базовые скорости по биомам — `[40,60,70,55]`,
-  `[38,58,68,52]`, `[35,55,65,50]`, `[30,45,55,40]`.
+- **Трафик.** Пул — 20 слотов: sedan×3, hatchback×2, crossover×2, taxi×2,
+  suv×2, Газель-бортовая×2, Газель-фургон×2, КАМАЗ, фура, автобус и Qute×2.
+  Для каждого биома строится маска активности по лимиту и предпочтениям
+  `BIOMES[i].traffic`: город 18 (легковые/такси/автобус), поле 12 (грузовики
+  и фургоны), лес 9, горы 10. Если предпочтения не выбрали ни одной тяжёлой
+  машины, одна принудительно добавляется в маску. Цвет кузова детерминирован
+  по индексу пула (`variant`), поэтому после recycling машина не
+  перекрашивается. Машины плавно вводятся и выводятся (`active`/`retiring`),
+  скорость тянется к `G.LANE_SPEEDS`; базовые скорости по биомам —
+  `[40,60,70,55]`, `[38,58,68,52]`, `[35,55,65,50]`, `[30,45,55,40]`.
 - **Небо и погода.** `biomeAtmos` в `js/atmosphere.js` задаёт цвета-множители
   неба, тумана и облаков, плотность дымки, высоту и масштаб облаков; в горах
   облака опускаются ниже хребтов. Цикл день → закат → ночь и погода работают
@@ -468,7 +472,7 @@ overheads показывают постер. Загрузка асинхронн
   тоннель 0.3–0.5 с) и так же плавно возвращаются. Настройки: включение,
   интенсивность 0–100 %, длина лучей 0–100 %.
 - **Блики фар.** Чтобы встречные машины не потеряли свет вместе с лучами,
-  `addLights` в `js/models/vehicles.js` добавляет каждой фаре отдельный
+  `addHeadlight` в `js/models/vehicles.js` добавляет каждой фаре отдельный
   additive-спрайт `G.glowTex` (общий ленивый материал `getHeadGlowMat`).
   Блик не зависит от God Rays и от настроек постобработки.
 - **Авто-качество.** Скользящее среднее FPS за 60 кадров: ниже 34 —
@@ -486,7 +490,7 @@ overheads показывают постер. Загрузка асинхронн
 | Оттенки неба и облака по биомам | `biomeAtmos` + `blendBiomeAtmosphere` в `js/atmosphere.js` |
 | Трафик по биомам | `traffic` в `BIOMES`, `LANE_SPEEDS_BY_BIOME`, `activeMask` в `js/traffic.js` |
 | Баннер, меню и сохранение биома | `showBiomeBanner`, `biomeMenuMarkup`, `biomePauseValue`, `persistBiome` в `js/biome.js` |
-| Добавить машину в трафик | `createVehicleModel` в `js/models/vehicles.js` + `vehicleTypes` в `js/traffic.js` |
+| Добавить машину в трафик | `createVehicleModel` в `js/models/vehicles.js` + `vehicleTypes` в `js/traffic.js`; габариты `halfWidth` / `halfLength` / `roofHeight` возвращает билдер |
 | Общая геометрия кузовов | `box` / `cylinder` / `plane` в `js/geom.js`. Геометрию после выдачи не крутить |
 | Добавить мотоцикл в магазин | `bikeCatalog` в `js/catalog.js` (поля `variant` и `hudStyle`); при новой геометрии — `js/models/motorcycle.js` + `applyBikeVariant` в `js/bike.js` |
 | Добавить улучшение тюнинга | `tuningCatalog` в `js/catalog.js` |
