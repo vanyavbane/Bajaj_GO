@@ -4,6 +4,7 @@ import { initBike } from './bike.js';
 import { initBiome, initBiomeWorld } from './biome.js';
 import { initCamera } from './camera.js';
 import { initCatalog } from './catalog.js';
+import { initControls } from './controls.js';
 import { initDebug } from './debug.js';
 import { initEconomy } from './economy.js';
 import { initEffects } from './effects.js';
@@ -50,6 +51,7 @@ initAtmosphere();
 initHighbeam();
 
 initUi();
+initControls();
 initInput();
 initEconomy();
 initLoop();

@@ -243,6 +243,10 @@ export function initLoop() {
 
     if (G.tickFeed) G.tickFeed(dt);
 
+    // Наклон устройства и видимость tilt-оверлея обновляются даже в паузе,
+    // чтобы оверлей успевал скрыться вместе с открытием меню.
+    if (G.updateTilt) G.updateTilt(now);
+
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {
       if (G.setRainSound) G.setRainSound(0);

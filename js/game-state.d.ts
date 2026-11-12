@@ -274,6 +274,32 @@ export interface GameState {
   playerS: number;
   laneOffset: number;
   keys: { left: boolean; right: boolean; gas: boolean; brake: boolean };
+  /** Режим управления: экранные кнопки (по умолчанию) или наклон устройства. */
+  controlMode: 'buttons' | 'tilt';
+  tiltAvailable: boolean;
+  tiltSensitivity: number;
+  tiltInvert: boolean;
+  tiltCalibration: { beta: number; gamma: number; calibratedAt: number };
+  tiltRaw: { beta: number; gamma: number; alpha: number };
+  tiltSmoothed: number;
+  tiltGotEvent: boolean;
+  tiltEventCount: number;
+  tiltLastEventAt: number;
+  tiltActive: boolean;
+  tiltStartedAt: number;
+  /** Идёт ли свайп-руление на #view (перебивает наклон). */
+  swipeActive: boolean;
+  startTilt: () => boolean;
+  stopTilt: () => void;
+  startTiltSession: () => void;
+  setControlMode: (mode: 'buttons' | 'tilt') => Promise<{ ok: boolean; message?: string }>;
+  requestTiltPermission: () => Promise<boolean>;
+  probeTiltSensors: (timeout?: number) => Promise<boolean>;
+  calibrateTilt: () => boolean;
+  setTiltSensitivity: (value: number) => void;
+  setTiltInvert: (value: boolean) => void;
+  updateTilt: (now: number) => void;
+  syncControlUi: () => void;
   jumpState: JumpState;
   trafficPool: TrafficCar[];
   weather: WeatherState;

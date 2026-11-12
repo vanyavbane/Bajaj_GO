@@ -42,9 +42,10 @@
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `biomeAtmos` (тинты и плотность по биомам), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
 |   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), модалки Motion Blur и God Rays. Тюнинг только на съезде |
-| 15 | `js/input.js` | `handleKey`, экранные кнопки |
-| 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` (строка «Локация») |
+| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), включая «Управление», модалки Motion Blur и God Rays. Тюнинг только на съезде |
+| 15 | `js/input.js` | `handleKey`, экранные кнопки, свайп-руление (`G.swipeActive` перебивает наклон) |
+| 15b | `js/controls.js` | режим управления: `controlMode` (`buttons` / `tilt`), разрешение iOS `requestPermission`, подписка на `deviceorientation`, автокалибровка и кнопка калибровки, сглаживание наклона в `G.keys.left/right`, прозрачные зоны газа/тормоза по `pointerId`, `#btn-flash-tilt`, видимость tilt-оверлея |
+| 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` (строка «Локация», пункт «Управление») |
 | 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, `updateBiome`, трафик, коллизии, HUD, вызов `G.renderFrame` |
 | 18 | `js/postfx.js` | `EffectComposer`: `RenderPass` → `GodRaysPass` → `MotionBlurPass` → `OutputPass`; слой 1 (байк) поверх composer; настройки `G.visual`, авто-качество по FPS, `G.renderFrame` |
 |   | `js/debug.js` | снимок сцены `window.__bajaj` в разработке и по `?debug`. На экран не выводится |
@@ -76,6 +77,10 @@
 | `biomeStoredMeters` | `bajajGO_biomeKm` | Пройденный по трассе путь в километрах (в памяти — метры). Задаёт зону биома; между заездами не сбрасывается. |
 | `AdManager` (доля) | `bajajGO_adUploadedShare` | 0…1 — вероятность показа файла из `AdManager/` вместо процедурной рекламы; по умолчанию 0.5 |
 | `AdManager` (вкл/выкл) | `bajajGO_adEnabled` | `'0'` полностью отключает `AdManager`; любое другое значение или отсутствие ключа — включено |
+| `controlMode` | `bajajGO_controlMode` | `'buttons'` \| `'tilt'` — способ управления; по умолчанию кнопки. `tilt` включается только при доступных датчиках |
+| `tiltCalibration` | `bajajGO_tiltCalibration` | JSON `{beta, gamma, calibratedAt}` — нейтральное положение устройства; свежее 30 дней |
+| `tiltSensitivity` | `bajajGO_tiltSensitivity` | 0.5…2.0 — множитель наклона, по умолчанию 1 |
+| `tiltInvert` | `bajajGO_tiltInvert` | `'1'` — инверсия руления наклоном |
 
 Кэш обнаружения рекламы лежит в `sessionStorage` под ключом
 `bajajGO_adManagerDiscovery` и сбрасывается при перезагрузке страницы.

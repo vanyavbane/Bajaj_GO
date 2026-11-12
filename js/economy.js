@@ -1201,6 +1201,7 @@ export function initEconomy() {
           ${inline('☀️ Лучи от солнца', button({ id: 'pause-gr', variant: 'compact', label: onOff(visual.godRays) }))}
           ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
           ${inline('Кокпит: FOV / высота', button({ id: 'pause-cam-settings', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
+          ${inline('Управление', button({ id: 'pause-controls', variant: 'compact', label: G.controlMode === 'tilt' ? 'Акселерометр' : 'Кнопки' }))}
           ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
         ` : button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
         ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
@@ -1225,6 +1226,9 @@ export function initEconomy() {
       $('pause-cam-settings').addEventListener('click', () => {
         G.renderCameraSettings(() => renderPauseMenu(true));
       });
+      $('pause-controls').addEventListener('click', () => {
+        G.renderSettings('controls', 'pause');
+      });
     } else {
       $('pause-settings').addEventListener('click', () => renderPauseMenu(true));
     }
@@ -1239,6 +1243,7 @@ export function initEconomy() {
     }
     G.paused = true;
     G.keys.gas = G.keys.brake = G.keys.left = G.keys.right = false;
+    if (G.syncControlUi) G.syncControlUi();
     renderPauseMenu(false);
   }
   G.togglePause = togglePause;
@@ -1250,7 +1255,8 @@ export function initEconomy() {
     overlay.style.display = 'none';
     overlay.innerHTML = '';
     $('hud').hidden = false;
-    $('controls').hidden = false;
+    $('controls').hidden = G.controlMode === 'tilt';
+    if (G.syncControlUi) G.syncControlUi();
     G.lastTime = performance.now();
   }
   G.resumeGame = resumeGame;

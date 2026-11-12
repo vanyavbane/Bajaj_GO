@@ -114,6 +114,7 @@ export function initInput() {
     }
     swipeSteer = null;
     swipeId = null;
+    G.swipeActive = false;
   }
   view.addEventListener('pointerdown', e => {
     if (!G.started || G.ended || G.paused || G.uiModal) return;
@@ -132,6 +133,7 @@ export function initInput() {
       if (!(held instanceof HTMLElement) || !held.classList.contains('on')) G.keys[swipeSteer] = false;
     }
     swipeSteer = next;
+    G.swipeActive = next !== null;
     if (next) G.keys[next] = true;
   });
   view.addEventListener('pointerup', e => { if (e.pointerId === swipeId) clearSwipe(); });

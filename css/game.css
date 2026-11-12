@@ -379,6 +379,103 @@ canvas{display:block;width:100%;height:100%}
 }
 .fx-check input{width:18px;height:18px;accent-color:#17b7d6;cursor:pointer}
 
+/* УПРАВЛЕНИЕ: ВЫБОР РЕЖИМА И МИНИАТЮРЫ */
+.ctrl-mode-block{margin:4px 0 12px}
+.ctrl-mode-title{font-size:11px;font-weight:900;letter-spacing:1.4px;color:#cfe6fa;margin-bottom:8px}
+.ctrl-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ctrl-mode-card{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  background:rgba(8,15,27,.75);border:1.5px solid rgba(255,255,255,.14);
+  border-radius:14px;padding:12px 10px;color:var(--ds-text-soft);
+  text-align:center;cursor:pointer;transition:border-color .15s,background .15s,transform .1s;
+  font:inherit;
+}
+.ctrl-mode-card:hover:not(:disabled){border-color:var(--ds-text-dim);transform:translateY(-1px)}
+.ctrl-mode-card.on{border-color:var(--ds-warm);background:#162033;color:var(--ds-text);box-shadow:inset 0 0 0 1px rgba(255,205,130,.18)}
+.ctrl-mode-card:disabled{opacity:.45;cursor:not-allowed}
+.ctrl-mode-preview{position:relative;width:60px;height:80px;display:flex;align-items:center;justify-content:center;flex:none}
+.ctrl-mode-label{font-size:13px;font-weight:900;letter-spacing:.6px;color:#fff}
+.ctrl-mode-desc{font-size:10px;line-height:1.35;color:var(--ds-text-dim);font-weight:600}
+
+/* Миниатюра «Кнопки»: четыре квадратика как на #controls */
+.ctrl-preview-buttons{display:grid;grid-template-columns:repeat(2,18px);grid-auto-rows:18px;gap:5px}
+.ctrl-preview-buttons span{
+  display:flex;align-items:center;justify-content:center;width:18px;height:18px;
+  border-radius:5px;background:#243656;border:1px solid #9cb8d8;
+  color:#d7e9ff;font-size:10px;font-weight:900;line-height:1;
+}
+
+/* Миниатюра «Акселерометр»: телефон со стрелками и кнопкой сигнала */
+.ctrl-preview-phone{
+  position:relative;width:40px;height:70px;border-radius:8px;
+  border:1.5px solid #9cb8d8;background:#0a1321;
+  box-shadow:inset 0 0 12px rgba(40,90,140,.5);
+}
+.cpp-signal{position:absolute;top:3px;right:3px;font-size:9px;line-height:1}
+.cpp-steer{position:absolute;top:17px;right:3px;font-size:8px;font-weight:900;letter-spacing:1px;color:#7de3ff}
+.cpp-pedals{position:absolute;left:5px;bottom:6px;font-size:8px;line-height:1.1;font-weight:900;color:#9cb8d8}
+.cpp-center{
+  position:absolute;left:50%;top:52%;width:6px;height:6px;margin:-3px 0 0 -3px;
+  border-radius:50%;background:rgba(255,205,130,.85);box-shadow:0 0 8px rgba(255,205,130,.6);
+}
+
+/* ОВЕРЛЕЙ АКСЕЛЕРОМЕТРА */
+#tilt-overlay{position:fixed;inset:0;pointer-events:none;z-index:11}
+#tilt-overlay[hidden]{display:none!important}
+.tilt-zone{
+  position:absolute;bottom:0;height:55vh;width:50vw;
+  pointer-events:none;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:18px;border-radius:24px;
+  border:1.5px solid rgba(255,255,255,.12);
+  transition:background .12s ease,opacity .6s ease;opacity:1;
+}
+.tilt-zone-gas{right:0}
+.tilt-zone-brake{left:0}
+.tilt-zone-hint{
+  font-size:13px;font-weight:900;letter-spacing:1.5px;
+  color:rgba(255,255,255,.45);
+  text-shadow:0 2px 6px rgba(0,0,0,.8);
+  pointer-events:none;transition:opacity .4s ease;
+}
+.tilt-zone.hint-hidden .tilt-zone-hint{opacity:0}
+.tilt-zone-gas.active{background:rgba(60,206,120,.10);border-color:rgba(60,206,120,.4)}
+.tilt-zone-brake.active{background:rgba(225,91,85,.10);border-color:rgba(225,91,85,.4)}
+.tilt-indicator{
+  position:absolute;top:84px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  pointer-events:none;
+}
+.tilt-indicator-track{
+  width:120px;height:6px;border-radius:3px;
+  background:rgba(255,255,255,.18);position:relative;
+}
+.tilt-indicator-dot{
+  position:absolute;top:-3px;left:50%;width:12px;height:12px;
+  border-radius:50%;background:#fff;transform:translateX(-50%);
+  box-shadow:0 0 8px rgba(255,255,255,.6);
+  transition:left .08s linear,background .2s;
+}
+.tilt-indicator-label{
+  font-size:10px;font-weight:900;letter-spacing:1.5px;
+  color:rgba(255,255,255,.55);
+}
+.tilt-flash-btn{
+  position:fixed;right:18px;bottom:130px;
+  width:56px;height:56px;border-radius:50%;
+  background:rgba(10,19,33,.72);
+  border:2px solid rgba(156,184,216,.55);
+  color:#fff;font-size:22px;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;cursor:pointer;
+  box-shadow:0 6px 18px rgba(0,0,0,.45);
+  transition:transform .08s,border-color .15s,background .15s;
+  z-index:12;
+}
+.tilt-flash-btn:hover,.tilt-flash-btn:active,.tilt-flash-btn.on{
+  border-color:var(--ds-warm);transform:scale(.94);background:rgba(24,38,60,.85);
+}
+.tilt-flash-btn:active .tilt-flash-icon,.tilt-flash-btn.on .tilt-flash-icon{filter:brightness(1.6)}
+
 
 #fatal{display:none;position:fixed;inset:0;background:#101827;color:#fff;padding:25px;z-index:30}
 

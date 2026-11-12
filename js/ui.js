@@ -19,6 +19,8 @@ export function initUi() {
 
   /* ---------- Настройки: общий экран с вкладками ---------- */
   let settingsReturn = null;
+  let controlsNotice = '';
+  let controlsInfo = '';
 
   function saveVisual() {
     if (G.saveVisualSettings) G.saveVisualSettings();
@@ -76,6 +78,7 @@ export function initUi() {
       ['graphics', 'Графика'],
       ['lighting', 'Освещение'],
       ['camera', 'Вид камеры'],
+      ['controls', 'Управление'],
       ['sound', 'Звук']
     ];
     const tabsHtml = `<div class="ds-tabs">${tabs.map(([key, label]) => (
@@ -105,15 +108,71 @@ export function initUi() {
         ${inline('Кокпит: FOV / высота', button({ id: 'settings-cam-fov', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
         ${note('Вид от третьего лица фиксированный. Профиль камеры хранится отдельно для каждого мотоцикла.')}
       `;
+    } else if (tab === 'controls') {
+      const mode = G.controlMode === 'tilt' ? 'tilt' : 'buttons';
+      const tiltAvailable = !!G.tiltAvailable;
+      const noticeText = controlsNotice || G.controlModeNotice || '';
+      const infoText = controlsInfo;
+      controlsNotice = '';
+      controlsInfo = '';
+      G.controlModeNotice = '';
+      const calibration = G.tiltCalibration || { gamma: 0, calibratedAt: 0 };
+      const calibrationText = calibration.calibratedAt > 0
+        ? `Калибровка: γ=${Number(calibration.gamma).toFixed(1)}° · ${new Date(calibration.calibratedAt).toLocaleDateString('ru-RU')}`
+        : 'Калибровка ещё не выполнена — она пройдёт автоматически в первые секунды заезда.';
+
+      body = `
+        <div class="ctrl-mode-block">
+          <div class="ctrl-mode-title">СПОСОБ УПРАВЛЕНИЯ</div>
+          <div class="ctrl-mode-options">
+            <button type="button" class="ctrl-mode-card ${mode === 'buttons' ? 'on' : ''}" data-ctrl-mode="buttons">
+              <div class="ctrl-mode-preview">
+                <div class="ctrl-preview-buttons"><span>←</span><span>▼</span><span>▲</span><span>→</span></div>
+              </div>
+              <div class="ctrl-mode-label">Кнопки</div>
+              <div class="ctrl-mode-desc">Экранные кнопки газа, тормоза и поворота. Работает на любом устройстве.</div>
+            </button>
+            <button type="button" class="ctrl-mode-card ${mode === 'tilt' ? 'on' : ''}" data-ctrl-mode="tilt"${tiltAvailable ? '' : ' disabled'}>
+              <div class="ctrl-mode-preview">
+                <div class="ctrl-preview-phone">
+                  <span class="cpp-signal">💡</span>
+                  <span class="cpp-steer">← →</span>
+                  <span class="cpp-pedals">▲<br>▼</span>
+                  <span class="cpp-center"></span>
+                </div>
+              </div>
+              <div class="ctrl-mode-label">Акселерометр</div>
+              <div class="ctrl-mode-desc">Наклон устройства — руление. Правая часть экрана — газ, левая — тормоз. Кнопка «Сигнал» справа. Для мобильных.</div>
+            </button>
+          </div>
+        </div>
+        ${noticeText ? callout(noticeText, 'err') : ''}
+        ${infoText ? note(infoText) : ''}
+        ${!tiltAvailable ? callout('Акселерометр недоступен на этом устройстве. Используйте кнопки.', 'err') : ''}
+        ${mode === 'tilt' && tiltAvailable ? `
+          <div class="cam-slider-block">
+            <div class="cam-slider-head">
+              <span>ЧУВСТВИТЕЛЬНОСТЬ АКСЕЛЕРОМЕТРА</span>
+              <b><span id="tilt-sens-val">${Math.round(G.tiltSensitivity * 100)}</span>%</b>
+            </div>
+            <input type="range" id="tilt-sens-range" min="50" max="200" step="5" value="${Math.round(G.tiltSensitivity * 100)}">
+            <div class="cam-slider-hint">50% — плавное руление (нужен большой наклон) · 200% — резкое (маленький наклон)</div>
+          </div>
+          ${inline('Инверсия наклона', button({ id: 'tilt-invert', variant: 'compact', label: G.tiltInvert ? 'Вкл' : 'Выкл', pressed: G.tiltInvert }))}
+          ${button({ id: 'tilt-calibrate', variant: 'primary', icon: '🎯', label: 'КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)' })}
+          ${note(calibrationText)}
+          ${note('Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Не наклоняйте слишком сильно.')}
+        ` : ''}
+      `;
     } else {
       body = `
         ${note('Раздел «Звук» пока пуст и появится позже.')}
-        ${note('Сейчас доступны графика, качество освещения и вид камеры.')}
+        ${note('Сейчас доступны графика, качество освещения, вид камеры и управление.')}
       `;
     }
 
     overlay.innerHTML = panel(`
-        ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · ЗВУК')}
+        ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · УПРАВЛЕНИЕ · ЗВУК')}
         ${tabsHtml}
         <div class="ds-tab-body">${body}</div>
         ${button({ id: 'settings-back', label: '← НАЗАД' })}
@@ -155,6 +214,81 @@ export function initUi() {
     if (camFov) {
       camFov.addEventListener('click', () => {
         G.renderCameraSettings(() => renderSettings('camera', from));
+      });
+    }
+
+    overlay.querySelectorAll('[data-ctrl-mode]').forEach(btn => {
+      if (!(btn instanceof HTMLElement) || btn.hasAttribute('disabled')) return;
+      btn.addEventListener('click', async () => {
+        const next = btn.dataset.ctrlMode;
+        if (next === G.controlMode) return;
+
+        if (next === 'buttons') {
+          await G.setControlMode('buttons');
+          renderSettings('controls', from);
+          return;
+        }
+
+        if (!G.tiltAvailable) {
+          controlsNotice = 'Акселерометр недоступен на этом устройстве. Используйте кнопки.';
+          renderSettings('controls', from);
+          return;
+        }
+
+        const result = await G.setControlMode('tilt');
+        if (!result.ok) {
+          controlsNotice = result.message;
+          renderSettings('controls', from);
+          return;
+        }
+        renderSettings('controls', from);
+
+        const alive = await G.probeTiltSensors(2200);
+        if (!alive) {
+          await G.setControlMode('buttons');
+          G.controlModeNotice = 'Датчики не отвечают. Переключено на кнопки.';
+          if (G.currentScreen === 'settings') renderSettings('controls', from);
+          return;
+        }
+        if (!(G.started && !G.ended)) G.stopTilt();
+        const activeTab = overlay.querySelector('.ds-tab-on');
+        if (G.currentScreen === 'settings' && activeTab instanceof HTMLElement && activeTab.dataset.tab === 'controls') {
+          renderSettings('controls', from);
+        }
+      });
+    });
+
+    const tiltRange = /** @type {HTMLInputElement} */ (document.getElementById('tilt-sens-range'));
+    if (tiltRange) {
+      const valueEl = document.getElementById('tilt-sens-val');
+      tiltRange.addEventListener('input', () => {
+        const percent = G.clamp(Number(tiltRange.value), 50, 200);
+        G.setTiltSensitivity(percent / 100);
+        if (valueEl) valueEl.textContent = String(Math.round(percent));
+      });
+    }
+
+    const tiltInvert = document.getElementById('tilt-invert');
+    if (tiltInvert) {
+      tiltInvert.addEventListener('click', () => {
+        G.setTiltInvert(!G.tiltInvert);
+        renderSettings('controls', from);
+      });
+    }
+
+    const tiltCalibrate = document.getElementById('tilt-calibrate');
+    if (tiltCalibrate) {
+      tiltCalibrate.addEventListener('click', () => {
+        if (!G.calibrateTilt()) return;
+        controlsInfo = 'Идёт калибровка — держите устройство ровно.';
+        renderSettings('controls', from);
+        setTimeout(() => {
+          if (G.currentScreen !== 'settings') return;
+          controlsInfo = G.tiltCalibration.calibratedAt > 0
+            ? 'Калибровка сохранена. Наклон снова считается от текущего положения.'
+            : 'Датчики не прислали показания. Попробуйте ещё раз на телефоне.';
+          renderSettings('controls', from);
+        }, 1600);
       });
     }
   }
@@ -297,6 +431,7 @@ export function initUi() {
     G.currentScreen = 'main';
     G.started = false;
     G.ended = false;
+    if (G.stopTilt) G.stopTilt();
     $('hud').hidden = true;
     $('tp-hud').hidden = true;
     $('controls').hidden = true;
@@ -509,7 +644,9 @@ export function initUi() {
 
     $('overlay').style.display = 'none';
     $('hud').hidden = false;
-    $('controls').hidden = false;
+    $('controls').hidden = G.controlMode === 'tilt';
+    if (G.startTiltSession) G.startTiltSession();
+    if (G.syncControlUi) G.syncControlUi();
     G.syncVehicleAndCameraVisibility(false);
 
     const hint = $('hint');
@@ -531,6 +668,7 @@ export function initUi() {
     G.currentScreen = 'crash';
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
+    if (G.stopTilt) G.stopTilt();
     if (navigator.vibrate) navigator.vibrate(40);
 
     const earned = creditRun(G.score, G.bankedOrderRun);
