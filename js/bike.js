@@ -49,6 +49,21 @@ export function initBike() {
     const isBoxer = variant === 'boxer';
     const isAvenger = variant === 'avenger';
     const hudStyle = selected.hudStyle || 'digital';
+    const version = bike.versionGroups[selected.id] || bike.versionGroups.ns125;
+
+    for (const data of Object.values(bike.versionGroups)) {
+      const on = data === version;
+      data.chassis.visible = on;
+      data.tp.visible = on;
+      data.fender.visible = on;
+    }
+    if (bike.wheelStyles) {
+      for (const [key, style] of Object.entries(bike.wheelStyles)) {
+        const on = key === version.style;
+        style.front.visible = on;
+        style.rear.visible = on;
+      }
+    }
 
     if (G.bikeVariantGroups) {
       G.bikeVariantGroups.boxer.visible = isBoxer;
@@ -60,6 +75,10 @@ export function initBike() {
       G.bikeThirdPersonVariants.avenger.visible = isAvenger;
     }
     if (G.bikeThirdPersonRider) {
+      // Гонщик — часть третьего лица; в кокпите его скрывает родительская
+      // группа bikeThirdPersonBody. Флаг сбрасываем, чтобы после отладки или
+      // переключения вида райдер не остался невидимым.
+      G.bikeThirdPersonRider.visible = true;
       G.bikeThirdPersonRider.position.set(0, isAvenger ? -0.2 : 0, isAvenger ? 0.08 : 0);
       G.bikeThirdPersonRider.rotation.x = isAvenger ? 0.08 : 0;
     }
@@ -67,17 +86,33 @@ export function initBike() {
     // У Avenger длинная вилка выносит переднее колесо вперёд. Тюнинг-диски
     // висят на группе колеса, поэтому переезжают вместе с ним.
     G.frontWheelGroup.position.z = isAvenger ? -1.78 : -1.42;
-    bike.frontFender = bike.frontFenders[variant] || bike.frontFenders.pulsar;
+    bike.frontFender = version.fender;
+    for (const fender of bike.allFenders) fender.visible = fender === version.fender;
     for (const [key, fender] of Object.entries(bike.frontFenders)) {
       fender.visible = key === variant;
     }
 
     // Ветровое стекло не должно «висеть в воздухе» над длинной вилкой.
+    const isDominar = selected.id === 'dominar400' || selected.id === 'dominar250' || selected.id === 'dominar1000';
     bike.tuneBikeWindshieldExt.position.set(0, isAvenger ? -0.08 : 0, isAvenger ? -0.12 : 0);
-    bike.tuneBikeWindshieldExt.scale.setScalar(isAvenger ? 0.94 : 1);
+    bike.tuneBikeWindshieldExt.scale.set(1, isAvenger ? 1.2 : 1, 1);
 
-    if (G.bikeCockpitHandlebarGroup) G.bikeCockpitHandlebarGroup.visible = !isAvenger;
+    if (G.bikeCockpitHandlebarGroup) {
+      G.bikeCockpitHandlebarGroup.visible = !isAvenger && !isBoxer;
+    }
+    if (G.pulsarCockpitGroup) {
+      G.pulsarCockpitGroup.visible = !isBoxer && !isAvenger && !isDominar;
+    }
     if (G.avengerCockpitGroup) G.avengerCockpitGroup.visible = isAvenger;
+    if (G.boxerCockpitGroup) G.boxerCockpitGroup.visible = isBoxer;
+    if (G.dominarCockpitGroup) G.dominarCockpitGroup.visible = isDominar;
+    if (G.bikeCockpitTankGroup) G.bikeCockpitTankGroup.visible = !isBoxer && !isAvenger && !isDominar;
+    if (G.boxerCockpitTankGroup) G.boxerCockpitTankGroup.visible = isBoxer;
+    if (G.avengerCockpitTankGroup) G.avengerCockpitTankGroup.visible = isAvenger;
+    if (G.dominarCockpitTankGroup) G.dominarCockpitTankGroup.visible = isDominar;
+    // Приборка общая: и цифровая, и аналоговая рисуются в один G.dashTex,
+    // поэтому экран не скрываем — переключается только стиль отрисовки в camera.js.
+    if (G.bikeCockpitDashScreen) G.bikeCockpitDashScreen.visible = true;
     if (G.roundDashBezelGroup) G.roundDashBezelGroup.visible = hudStyle === 'round';
   }
   G.applyBikeVariant = applyBikeVariant;
@@ -106,7 +141,7 @@ export function initBike() {
     bike.rTire.scale.set(tireScaleX * 1.08, 1, 1);
     bike.rRim.scale.set(tireScaleX * 0.95, 1, 1);
     const fenderScale = hasWideTires ? 1.38 : 1.0;
-    for (const fender of Object.values(bike.frontFenders)) fender.scale.set(fenderScale, 1, 1);
+    for (const fender of bike.allFenders) fender.scale.set(fenderScale, 1, 1);
     for (const qw of G.quteWheels) qw.scale.set(hasWideTires ? 1.44 : 1.0, 1, 1);
 
     bike.tuneUpgradedBrakesGroup.visible = hasBrakes;

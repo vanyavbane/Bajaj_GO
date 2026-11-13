@@ -129,6 +129,12 @@ export function initScene() {
     glass: new THREE.MeshStandardMaterial({ color: 0x89b4d4, roughness: 0.08, metalness: 0.85, envMapIntensity: 1.5 }),
     glassWindow: new THREE.MeshStandardMaterial({ color: 0x9ad0f5, roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.32, envMapIntensity: 1.5 }),
     rubber: new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.88, metalness: 0.05 }),
+    rubberDark: new THREE.MeshStandardMaterial({ color: 0x080a0e, roughness: 0.96, metalness: 0.02 }),
+    leather: new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 0.84, metalness: 0.05 }),
+    headlightMat: new THREE.MeshStandardMaterial({ color: 0xfff8e1, emissive: 0xfff4d6, emissiveIntensity: 1.55, roughness: 0.18 }),
+    drlMat: new THREE.MeshStandardMaterial({ color: 0xf4f8ff, emissive: 0xdfe9ff, emissiveIntensity: 1.6, roughness: 0.2 }),
+    amberMat: new THREE.MeshStandardMaterial({ color: 0xffb300, emissive: 0xffa500, emissiveIntensity: 1.15, roughness: 0.32 }),
+    plateMat: new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.58, metalness: 0.08 }),
     concrete: new THREE.MeshLambertMaterial({ color: 0x737b88 }),
     bridgeSteel: new THREE.MeshLambertMaterial({ color: 0x3b4d63 }),
     tree1: new THREE.MeshLambertMaterial({ color: 0x28593a, flatShading: true }),
@@ -137,5 +143,32 @@ export function initScene() {
     neonCyan: new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00b8d4, emissiveIntensity: 2.2, roughness: 0.2 }),
     neonMagenta: new THREE.MeshStandardMaterial({ color: 0xff4081, emissive: 0xf50057, emissiveIntensity: 2.2, roughness: 0.2 }),
     neonYellow: new THREE.MeshStandardMaterial({ color: 0xffee58, emissive: 0xffab00, emissiveIntensity: 1.8, roughness: 0.25 })
+  };
+
+  // Номера: один материал на транспорт, текст детерминирован по id.
+  const plateTexts = ['А123ВС 77', 'В456ЕК 50', 'Е789МН 99', 'К321ОР 47', 'М654СТ 78', 'Н987УХ 23', 'О147АВ 116', 'Р258ВЕ 61', 'С369КМ 36', 'Т741НР 52'];
+  const plateMatCache = new Map();
+  G.getPlateMat = (key = '') => {
+    let hash = 0;
+    for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+    const text = plateTexts[hash % plateTexts.length];
+    let mat = plateMatCache.get(text);
+    if (!mat) {
+      const tex = G.createCanvasTexture(256, 64, (ctx, w, h) => {
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#181818';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.fillStyle = '#111111';
+        ctx.font = 'bold 38px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, w / 2, h / 2 + 2);
+      });
+      mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.58, metalness: 0.08 });
+      plateMatCache.set(text, mat);
+    }
+    return mat;
   };
 }

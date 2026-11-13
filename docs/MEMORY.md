@@ -68,6 +68,10 @@
 | 12.11.2026 | Оба режима пишут в одни и те же `G.keys.*`, поэтому физика, HUD, экономика и камеры не меняются. В tilt газ — правая половина экрана, тормоз — левая (прозрачные зоны, учёт `pointerId`), сигнал — отдельная `#btn-flash-tilt`. В buttons остаются `.ctrl`, свайп и прежний `#btn-flash`. |
 | 12.11.2026 | Свайп по `#view` имеет приоритет над наклоном: флаг `G.swipeActive` включается только при фактическом сдвиге (|dx| > 36), иначе удержание пальца на зоне газа отключало бы руление наклоном. |
 | 12.11.2026 | Калибровка наклона: авто по первым 12 событиям, кнопка «Калибровать» — вручную. `steer = clamp((gamma − calibration.gamma) / 25 × sensitivity, −1, 1)`, мёртвая зона 0.08, сглаживание `lerp` 0.18. Сохранённая калибровка считается свежей 30 дней; чувствительность 50–200 % и инверсия лежат в `bajajGO_tiltSensitivity` / `bajajGO_tiltInvert`. |
+| 13.11.2026 | Внутри трёх публичных семейств (`pulsar`, `boxer`, `avenger`) собраны 12 отдельных версий. Каждая — запись `G.bikeVersionGroups[id]` со своими группами `chassis` / `tp` / `fender`; `applyBikeVariant()` показывает ровно одну и переключает общий стиль колёс `G.bikeWheelStyles` (`spokedDrum`, `spokedDisc`, `alloy5`, `alloyPerf`, `cruiser5`). Публичные `bikeVariantGroups`, `bikeThirdPersonVariants`, `bikeParts.frontFenders` и слоты тюнинга сохранены, каталог/цены/`color`/`accent`/`variant`/`hudStyle` не менялись. |
+| 13.11.2026 | Кокпиты четырёх семейств: `G.pulsarCockpitGroup`, `G.boxerCockpitGroup`, `G.dominarCockpitGroup`, `G.avengerCockpitGroup`; базовый бак — `G.bikeCockpitTankGroup`. Цифровая и аналоговая приборки рисуются в один `G.dashTex`, поэтому `bikeCockpitDashScreen` больше не скрывается; `G.roundDashBezelGroup` — только декоративные хром-ободки при `hudStyle === 'round'`. |
+| 13.11.2026 | Видимый тюнинг на любой версии: `tuneBikeWindshieldExt`, `tuneUpgradedBrakesGroup`, `tuneZeroFilterGroup`, `tuneCarbReplaceGroup`/`tuneCarbScrewMesh`, `tuneIridiumPlugGroup`, `tuneSprocketMesh`, `tuneChainGuard`. Широкие шины масштабируют `fTire/fRim/rTire/rRim` до `1.52 / 1.40 / 1.64 / 1.44`, крылья — до `1.38`. |
+| 13.11.2026 | Qute и Qute Юры Волкова: габариты, `quteWheels[].position`, `quteFrontPivots[].position`, `quteSteeringWheelPivot.position` и `riderPivot` не менялись. Добавлены только детали (арки, двери, решётка, оптика, номера, поворотники, зеркала, крыша, пороги, бамперы, диски) и элементы кокпита (педали ниже руля, коврик, дефлекторы, обод руля, рычаг КПП). |
 
 ## Известные проблемы
 
@@ -438,3 +442,50 @@
   `js/engine/motion.js` заменяет дискретный `dir`. Чем сильнее наклон, тем
   сильнее поворот. У зон газа/тормоза убраны рамки и подсветка нажатия:
   остались только прозрачные области и гаснущие подсказки.
+
+### 13.11.2026
+
+- **~день** — задача 5, модели мотоциклов. `js/models/motorcycle.js`
+  переписан: вместо двух обвесов собраны 12 версий (`boxer100es`, `boxer125`,
+  `boxer150`, `ns125`, `ns200`, `n250`, `pulsar150ns`, `pulsar180`,
+  `dominar250`, `dominar400`, `dominar1000`, `avenger220`), у каждой свои рама,
+  двигатель, вилка, фара, бак, сиденье, хвост, руль и крыло. Стили колёс
+  (`spokedDrum`, `spokedDisc`, `alloy5`, `alloyPerf`, `cruiser5`) общие и
+  переключаются вместе с версией. Цвета бака и акцентов берутся из каталога,
+  `hc()` для кастомных цветов продолжает работать.
+- **~день** — публичные сущности не переименованы: `bikeChassisGroup`,
+  `frontWheelGroup`, `rearWheelGroup`, `bikeVariantGroups` (`boxer`, `avenger`),
+  `bikeThirdPersonBody`, `bikeThirdPersonVariants` (`pulsar`, `boxer`,
+  `avenger`), `bikeThirdPersonRider`, `bikeCockpitGroup`, `quteCockpitGroup`,
+  `bikeParts` (`fTire`, `fRim`, `rTire`, `rRim`, `frontFender`,
+  `frontFenders`), `applyBikeVariant`, `applyVisualTuningToModel`. Физика,
+  `A0`/`R0`/`C0`, LOD, HUD, экономика, сохранения и камеры не менялись;
+  `rearWheelGroup.position.z` остался `0.68`, а `frontWheelGroup.position.z` —
+  `-1.42`, кроме существующего переключения Avenger на `-1.78`.
+- **~день** — новые материалы в `js/scene.js`: `rubberDark`, `leather`,
+  `headlightMat`, `drlMat`, `amberMat`, `plateMat`; номера — через
+  `G.getPlateMat(key)`, чтобы не плодить материалы.
+- **~день** — кокпиты в `js/models/cockpit.js`: Pulsar, Boxer, Dominar и
+  Avenger получили свои рули, зеркала, баки и ободки. Круглая приборка рисуется
+  в тот же `G.dashTex`, поэтому `bikeCockpitDashScreen` всегда видим, а
+  `roundDashBezelGroup` — только декор при `hudStyle === 'round'`.
+- **~день** — Qute (`js/models/qute.js`, `js/models/cockpit.js`): пропорции и
+  размеры не менялись. Добавлены арки, двери с контуром и ручками, решётка,
+  оптика, номера, поворотники, зеркала, крыша, пороги, бамперы и диски; в
+  кокпите — педали газа/тормоза, коврик, дефлекторы, обод руля и рычаг КПП.
+  У Юры, как и раньше, неон, обвес и underglow.
+- **~день** — проверка: во всех 12 версиях ровно одна видимая группа
+  chassis/tp/fender и один стиль колёс; `frontZ` = −1.78 только у
+  `avenger220`, `rearZ` = 0.68 везде; цвета бака и акцентов совпадают с
+  каталогом; кокпиты и ободки переключаются по семейству и `hudStyle`;
+  все 8 позиций тюнинга включаются на любой версии. Qute: `riderPivot`
+  `(0, 1.33, −0.14)`, руль `(0, −0.28, −0.58)`, пивоты `(±0.7, 0.31, −1.24)`,
+  позиции колёс не изменились. Ошибок в консоли нет.
+- **~день** — исправлена пропажа гонщика: `applyBikeVariant()` теперь явно
+  возвращает `bikeThirdPersonRider.visible = true`. Группа райдера — часть
+  `bikeThirdPersonBody`, поэтому в кокпите её по-прежнему скрывает родитель,
+  а в третьем лице мотоциклист виден на всех 12 версиях (проверено рендером:
+  райдер добавляет 4.3–5.9 тыс. пикселей силуэта).
+- **~день** — `npm run typecheck` проходит; `npm run build` — успешно,
+  `dist/bajaj-go.html` 783.10 kB (gzip 219.03 kB). Обновлены `README.md`,
+  `docs/ARCHITECTURE.md` и `docs/MEMORY.md`.
