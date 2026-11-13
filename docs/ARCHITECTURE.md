@@ -44,7 +44,7 @@
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
 | 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), включая «Управление», модалки Motion Blur и God Rays. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки, свайп-руление (`G.swipeActive` перебивает наклон) |
-| 15b | `js/controls.js` | режим управления: `controlMode` (`buttons` / `tilt`), разрешение iOS `requestPermission`, подписка на `deviceorientation`, автокалибровка и кнопка калибровки, аналоговое сглаживание наклона в `G.tiltSmoothed` (без мёртвой зоны) и передача его в `stepSteer` через `spec.steer`, прозрачные зоны газа/тормоза по `pointerId`, `#btn-flash-tilt`, видимость tilt-оверлея |
+| 15b | `js/controls.js` | режим управления: `controlMode` (`buttons` / `tilt`), разрешение iOS `requestPermission`, подписка на `deviceorientation`, выбор оси по ориентации экрана (`gamma` в портрете, `beta` в ландшафте, `G.tiltAxis` / `G.tiltOrientationAngle`), автокалибровка и кнопка калибровки, автоматическая перекалибровка при повороте устройства, аналоговое сглаживание наклона в `G.tiltSmoothed` (без мёртвой зоны) и передача его в `stepSteer` через `spec.steer`, прозрачные зоны газа/тормоза по `pointerId`, `#btn-flash-tilt`, видимость tilt-оверлея |
 | 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` (строка «Локация», пункт «Управление») |
 | 17 | `js/loop.js` | `animate(now)`: `realDt`, множитель slow-mo (`dt = realDt × G.slowMoFactor`), физика, `updateBiome`, трафик, коллизии, HUD, вызов `G.renderFrame` |
 | 18 | `js/postfx.js` | `EffectComposer`: `RenderPass` → `GodRaysPass` → `MotionBlurPass` → `OutputPass`; слой 1 (байк) поверх composer; настройки `G.visual`, авто-качество по FPS, `G.renderFrame` |
@@ -78,7 +78,7 @@
 | `AdManager` (доля) | `bajajGO_adUploadedShare` | 0…1 — вероятность показа файла из `AdManager/` вместо процедурной рекламы; по умолчанию 0.5 |
 | `AdManager` (вкл/выкл) | `bajajGO_adEnabled` | `'0'` полностью отключает `AdManager`; любое другое значение или отсутствие ключа — включено |
 | `controlMode` | `bajajGO_controlMode` | `'buttons'` \| `'tilt'` — способ управления; по умолчанию кнопки. `tilt` включается только при доступных датчиках |
-| `tiltCalibration` | `bajajGO_tiltCalibration` | JSON `{beta, gamma, calibratedAt}` — нейтральное положение устройства; свежее 30 дней |
+| `tiltCalibration` | `bajajGO_tiltCalibration` | JSON `{beta, gamma, calibratedAt, axis, angle}` — нейтральное положение устройства для активной оси наклона; свежее 30 дней, при смене ориентации пересчитывается автоматически |
 | `tiltSensitivity` | `bajajGO_tiltSensitivity` | 0.5…2.0 — множитель наклона, по умолчанию 1 |
 | `tiltInvert` | `bajajGO_tiltInvert` | `'1'` — инверсия руления наклоном |
 

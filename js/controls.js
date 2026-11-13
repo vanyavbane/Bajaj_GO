@@ -19,6 +19,39 @@ const CALIBRATION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const SENSOR_TIMEOUT = 2200;
 const HINT_TIMEOUT = 4200;
 
+// Полный поворот руля примерно на 25° наклона — прежнее ощущение управления.
+const TILT_FULL_ANGLE = 25;
+
+/* Ось наклона зависит от того, как повёрнут экран:
+ *   портрет  — gamma (наклон влево/вправо вокруг длинной оси);
+ *   ландшафт — beta  (та же физическая ось после поворота телефона).
+ * angle берём из Screen Orientation API, со старым window.orientation
+ * как запасным вариантом для Safari. */
+function screenOrientationAngle() {
+  const orientation = typeof screen !== 'undefined' ? screen.orientation : null;
+  const angle = orientation && Number.isFinite(Number(orientation.angle))
+    ? Number(orientation.angle)
+    : (Number.isFinite(Number(window.orientation)) ? Number(window.orientation) : 0);
+  return ((Math.round(angle) % 360) + 360) % 360;
+}
+
+function tiltAxisForAngle(angle) {
+  return angle === 90 || angle === 270 ? 'beta' : 'gamma';
+}
+
+// При повороте на 90° и 270° знак beta меняется: без этого руль крутился бы
+// в противоположную сторону в одном из ландшафтных положений.
+function tiltAxisSign(angle) {
+  return angle === 270 || angle === 180 ? -1 : 1;
+}
+
+function normalizeTiltDelta(value) {
+  let delta = value;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
+}
+
 function readStorage(key) {
   try {
     return localStorage.getItem(key);
@@ -53,7 +86,7 @@ export function initControls() {
   G.controlMode = 'buttons';
   G.tiltSensitivity = 1;
   G.tiltInvert = false;
-  G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0 };
+  G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0, axis: '', angle: 0 };
   G.tiltRaw = { beta: 0, gamma: 0, alpha: 0 };
   G.tiltSmoothed = 0;
   G.tiltGotEvent = false;
@@ -68,6 +101,8 @@ export function initControls() {
   G.tiltHandler = null;
   G.controlModeNotice = '';
   G.swipeActive = false;
+  G.tiltOrientationAngle = screenOrientationAngle();
+  G.tiltAxis = tiltAxisForAngle(G.tiltOrientationAngle);
 
   const DeviceOrientation = /** @type {any} */ (window).DeviceOrientationEvent;
   // На десктопе без тач-экрана датчиков ориентации обычно нет: карточка
@@ -98,11 +133,15 @@ export function initControls() {
         G.tiltCalibration = {
           beta: Number(parsed.beta) || 0,
           gamma: Number(parsed.gamma) || 0,
-          calibratedAt: Number(parsed.calibratedAt) || 0
+          calibratedAt: Number(parsed.calibratedAt) || 0,
+          // У старых сохранений axis нет: такую калибровку пересчитаем
+          // автоматически при первом запуске наклона.
+          axis: parsed.axis === 'beta' || parsed.axis === 'gamma' ? parsed.axis : '',
+          angle: Number.isFinite(Number(parsed.angle)) ? Number(parsed.angle) : 0
         };
       }
     } catch (err) {
-      G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0 };
+      G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0, axis: '', angle: 0 };
     }
   }
 
@@ -145,7 +184,13 @@ export function initControls() {
     if (!G.tiltCalibrationActive || samples.length < CALIBRATION_SAMPLES) return;
     const beta = samples.reduce((sum, s) => sum + s.beta, 0) / samples.length;
     const gamma = samples.reduce((sum, s) => sum + s.gamma, 0) / samples.length;
-    G.tiltCalibration = { beta, gamma, calibratedAt: Date.now() };
+    G.tiltCalibration = {
+      beta,
+      gamma,
+      calibratedAt: Date.now(),
+      axis: G.tiltAxis,
+      angle: G.tiltOrientationAngle
+    };
     G.tiltCalibrationActive = false;
     G.tiltCalibrationSamples = [];
     saveCalibration();
@@ -153,9 +198,31 @@ export function initControls() {
   }
 
   function beginCalibration() {
-    G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0 };
+    G.tiltCalibration = {
+      beta: 0,
+      gamma: 0,
+      calibratedAt: 0,
+      axis: G.tiltAxis,
+      angle: G.tiltOrientationAngle
+    };
     G.tiltCalibrationSamples = [];
     G.tiltCalibrationActive = true;
+  }
+
+  /* Возвращает true, если ориентация экрана изменилась. При смене портрет ↔
+   * ландшафт активная калибровка начинается заново: у новой оси своё
+   * нейтральное положение, иначе руль сразу ушёл бы в сторону. */
+  function updateTiltOrientation() {
+    const angle = screenOrientationAngle();
+    const axis = tiltAxisForAngle(angle);
+    const changed = angle !== G.tiltOrientationAngle || axis !== G.tiltAxis;
+    G.tiltOrientationAngle = angle;
+    G.tiltAxis = axis;
+    if (changed && G.tiltActive) {
+      G.tiltSmoothed = 0;
+      beginCalibration();
+    }
+    return changed;
   }
 
   function tiltHandler(e) {
@@ -194,6 +261,7 @@ export function initControls() {
 
   function startTilt() {
     if (!G.tiltAvailable || G.tiltHandler) return !!G.tiltActive;
+    updateTiltOrientation();
     G.tiltHandler = tiltHandler;
     window.addEventListener('deviceorientation', G.tiltHandler, { passive: true });
     G.tiltActive = true;
@@ -203,6 +271,8 @@ export function initControls() {
     G.tiltStartedAt = performance.now();
     G.tiltSmoothed = 0;
     const calibrationFresh = G.tiltCalibration.calibratedAt > 0
+      && G.tiltCalibration.axis === G.tiltAxis
+      && G.tiltCalibration.angle === G.tiltOrientationAngle
       && Date.now() - G.tiltCalibration.calibratedAt < CALIBRATION_MAX_AGE;
     if (!calibrationFresh) {
       G.tiltCalibrationAutoStop = false;
@@ -230,6 +300,7 @@ export function initControls() {
 
   function calibrateTilt() {
     if (!G.tiltAvailable) return false;
+    updateTiltOrientation();
     const wasActive = G.tiltActive;
     if (!wasActive) startTilt();
     G.tiltCalibrationAutoStop = !wasActive;
@@ -394,6 +465,14 @@ export function initControls() {
     }
   });
 
+  // Смена портрет ↔ ландшафт: ось и калибровка пересчитываются на лету.
+  const orientationHandler = () => updateTiltOrientation();
+  if (typeof screen !== 'undefined' && screen.orientation
+    && typeof screen.orientation.addEventListener === 'function') {
+    screen.orientation.addEventListener('change', orientationHandler);
+  }
+  window.addEventListener('orientationchange', orientationHandler);
+
   flashBtn.addEventListener('pointerdown', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -420,6 +499,8 @@ export function initControls() {
       tiltLastNow = 0;
       return;
     }
+    // Страховка, если браузер не прислал orientationchange.
+    updateTiltOrientation();
 
     // Сглаживание не зависит от частоты кадров: на 60 и 120 Гц руль
     // доезжает до целевого угла за одинаковое время.
@@ -448,9 +529,13 @@ export function initControls() {
       G.tiltSmoothed = G.lerp(G.tiltSmoothed, 0, smooth);
     } else {
       const invert = G.tiltInvert ? -1 : 1;
+      const axis = G.tiltAxis === 'beta' ? 'beta' : 'gamma';
+      const rawAngle = axis === 'beta' ? G.tiltRaw.beta : G.tiltRaw.gamma;
+      const zero = Number(G.tiltCalibration[axis]) || 0;
       // Без мёртвой зоны: даже небольшой наклон сразу даёт малый поворот.
+      const delta = normalizeTiltDelta((rawAngle - zero) * tiltAxisSign(G.tiltOrientationAngle));
       const target = G.clamp(
-        ((G.tiltRaw.gamma - G.tiltCalibration.gamma) / 25) * G.tiltSensitivity * invert,
+        (delta / TILT_FULL_ANGLE) * G.tiltSensitivity * invert,
         -1,
         1
       );

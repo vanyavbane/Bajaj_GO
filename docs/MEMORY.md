@@ -72,6 +72,7 @@
 | 13.11.2026 | Кокпиты четырёх семейств: `G.pulsarCockpitGroup`, `G.boxerCockpitGroup`, `G.dominarCockpitGroup`, `G.avengerCockpitGroup`; базовый бак — `G.bikeCockpitTankGroup`. Цифровая и аналоговая приборки рисуются в один `G.dashTex`, поэтому `bikeCockpitDashScreen` больше не скрывается; `G.roundDashBezelGroup` — только декоративные хром-ободки при `hudStyle === 'round'`. |
 | 13.11.2026 | Видимый тюнинг на любой версии: `tuneBikeWindshieldExt`, `tuneUpgradedBrakesGroup`, `tuneZeroFilterGroup`, `tuneCarbReplaceGroup`/`tuneCarbScrewMesh`, `tuneIridiumPlugGroup`, `tuneSprocketMesh`, `tuneChainGuard`. Широкие шины масштабируют `fTire/fRim/rTire/rRim` до `1.52 / 1.40 / 1.64 / 1.44`, крылья — до `1.38`. |
 | 13.11.2026 | Qute и Qute Юры Волкова: габариты, `quteWheels[].position`, `quteFrontPivots[].position`, `quteSteeringWheelPivot.position` и `riderPivot` не менялись. Добавлены только детали (арки, двери, решётка, оптика, номера, поворотники, зеркала, крыша, пороги, бамперы, диски) и элементы кокпита (педали ниже руля, коврик, дефлекторы, обод руля, рычаг КПП). |
+| 13.11.2026 | Управление наклоном адаптируется к ориентации экрана: в портрете читается `gamma`, в ландшафте — `beta`. Угол берётся из `screen.orientation.angle` с запасным `window.orientation`; для 180° и 270° знак оси инвертируется. При смене ориентации ось переключается на лету, а нейтральное положение пересчитывается автоматически — новых кнопок в интерфейсе нет. |
 
 ## Известные проблемы
 
@@ -486,6 +487,16 @@
   `bikeThirdPersonBody`, поэтому в кокпите её по-прежнему скрывает родитель,
   а в третьем лице мотоциклист виден на всех 12 версиях (проверено рендером:
   райдер добавляет 4.3–5.9 тыс. пикселей силуэта).
+- **~день** — управление наклоном на телефоне: ось выбирается по ориентации
+  экрана. `screenOrientationAngle()` берёт `screen.orientation.angle` или
+  запасной `window.orientation`; `tiltAxisForAngle()` возвращает `gamma` для
+  портрета и `beta` для ландшафта, `tiltAxisSign()` инвертирует знак для 180°
+  и 270°. Калибровка хранит `axis` и `angle`, при смене ориентации начинается
+  заново (`updateTiltOrientation` + события `orientationchange` /
+  `screen.orientation.change`), чтобы старое нейтральное положение не тянуло
+  руль в сторону. Новых кнопок в интерфейсе нет — только обновлённая подпись
+  калибровки. Синтетические события проверены для 0°/90°/270°, инверсии и
+  поворота на лету: цель руления ±0.4 при наклоне 10°.
 - **~день** — `npm run typecheck` проходит; `npm run build` — успешно,
   `dist/bajaj-go.html` 783.10 kB (gzip 219.03 kB). Обновлены `README.md`,
   `docs/ARCHITECTURE.md` и `docs/MEMORY.md`.

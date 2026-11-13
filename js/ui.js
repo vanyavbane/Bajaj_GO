@@ -116,9 +116,10 @@ export function initUi() {
       controlsNotice = '';
       controlsInfo = '';
       G.controlModeNotice = '';
-      const calibration = G.tiltCalibration || { gamma: 0, calibratedAt: 0 };
+      const calibration = G.tiltCalibration || { beta: 0, gamma: 0, calibratedAt: 0, axis: '', angle: 0 };
+      const calibrationAxis = calibration.axis === 'beta' ? 'β' : 'γ';
       const calibrationText = calibration.calibratedAt > 0
-        ? `Калибровка: γ=${Number(calibration.gamma).toFixed(1)}° · ${new Date(calibration.calibratedAt).toLocaleDateString('ru-RU')}`
+        ? `Калибровка: ${calibrationAxis}=${Number(calibration.axis === 'beta' ? calibration.beta : calibration.gamma).toFixed(1)}° · ${new Date(calibration.calibratedAt).toLocaleDateString('ru-RU')}`
         : 'Калибровка ещё не выполнена — она пройдёт автоматически в первые секунды заезда.';
 
       body = `
@@ -161,7 +162,7 @@ export function initUi() {
           ${inline('Инверсия наклона', button({ id: 'tilt-invert', variant: 'compact', label: G.tiltInvert ? 'Вкл' : 'Выкл', pressed: G.tiltInvert }))}
           ${button({ id: 'tilt-calibrate', variant: 'primary', icon: '🎯', label: 'КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)' })}
           ${note(calibrationText)}
-          ${note('Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Не наклоняйте слишком сильно.')}
+          ${note('Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Ось выбирается автоматически: в портрете — γ, в ландшафте — β; при повороте телефона калибровка обновляется сама.')}
         ` : ''}
       `;
     } else {

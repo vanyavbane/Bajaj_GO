@@ -279,9 +279,12 @@ export interface GameState {
   tiltAvailable: boolean;
   tiltSensitivity: number;
   tiltInvert: boolean;
-  tiltCalibration: { beta: number; gamma: number; calibratedAt: number };
+  tiltCalibration: { beta: number; gamma: number; calibratedAt: number; axis: 'beta' | 'gamma' | ''; angle: number };
   tiltRaw: { beta: number; gamma: number; alpha: number };
   tiltSmoothed: number;
+  /** Текущая ориентация экрана (0/90/180/270) и выбранная по ней ось наклона. */
+  tiltOrientationAngle: number;
+  tiltAxis: 'beta' | 'gamma';
   tiltGotEvent: boolean;
   tiltEventCount: number;
   tiltLastEventAt: number;
