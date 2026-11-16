@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkCenterShift, forkClose, forkSide, forkSpreadAt, shoulderHeight, shoulderLats } from './engine/fork.js';
+import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkCenterShift, forkClose, forkHandoff, forkSide, forkSpreadAt, shoulderHeight, shoulderLats } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
@@ -562,7 +562,10 @@ function forkChosenSideForZone(zone) {
 function forkChosenSideAtS(s) {
   const meters = blendMetersAt(s);
   const zone = Math.floor(Math.max(0, meters) / ZONE_M);
-  return forkChosenSideForZone(zone);
+  const own = forkChosenSideForZone(zone);
+  if (own !== 0) return own;
+  if (zone > 0 && inheritedClose(meters, zone) > 0) return forkChosenSideForZone(zone - 1);
+  return 0;
 }
 
 function forkCenterShiftAtS(s) {
@@ -571,16 +574,37 @@ function forkCenterShiftAtS(s) {
   const local = meters - zone * ZONE_M;
   let shift = forkCenterShift(meters, ZONE_M, forkChosenSideForZone(zone), SPLIT_LEAD, FORK_SPREAD);
   if (zone > 0) {
-    const prev = forkChosenSideForZone(zone - 1);
-    const u = Math.min(1, local / FADE_M);
-    const t = u * u * (3 - 2 * u);
-    shift += prev * FORK_SPREAD * (1 - t);
+    shift += forkChosenSideForZone(zone - 1) * FORK_SPREAD * (1 - forkHandoff(local, FADE_M));
   }
   return shift;
 }
 
+/** Чужая лента на границе ещё закрыта и открывается за те же FADE_M, что и ось. */
+function inheritedClose(meters, zone) {
+  if (zone <= 0 || forkChosenSideForZone(zone - 1) === 0) return 0;
+  return 1 - forkHandoff(meters - zone * ZONE_M, FADE_M);
+}
+
 function forkCloseAtS(s) {
-  return forkClose(blendMetersAt(s), ZONE_M, SPLIT_LEAD);
+  const meters = blendMetersAt(s);
+  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
+  const own = forkChosenSideForZone(zone) === 0 ? 0 : forkClose(meters, ZONE_M, SPLIT_LEAD);
+  return Math.max(own, inheritedClose(meters, zone));
+}
+
+/** Кромки асфальта в точке s, уже со схлопыванием чужой ленты. Без сдвига оси. */
+function roadEdgesAt(s) {
+  return collapsedEdges(
+    roadWidthAtS(s) * 0.5,
+    forkSpreadAtS(s),
+    forkChosenSideAtS(s),
+    forkCloseAtS(s)
+  );
+}
+
+function roadOuterLat(s, side) {
+  const edge = roadEdgesAt(s);
+  return side < 0 ? edge.leftOuter : edge.rightOuter;
 }
 
 function splitLateralShiftAtS(s, lateralOffset) {
@@ -943,10 +967,9 @@ const SHOULDER = {
 
 /** Высота земли на удалении lat от оси. Линейка та же, что у ленты откоса в этой точке. */
 function groundOffset(lat, s) {
-  const half = roadWidthAtS(s) * 0.5;
-  const spread = forkSpreadAtS(s);
+  const asphalt = Math.abs(roadOuterLat(s, lat < 0 ? -1 : 1));
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
-  const lats = shoulderLats(half, spread, cityOuter, SHOULDER);
+  const lats = shoulderLats(asphalt, cityOuter, SHOULDER);
   return shoulderHeight(lat, lats, SHOULDER);
 }
 
@@ -1401,6 +1424,8 @@ export function initBiome() {
   G.forkCenterShiftAtS = forkCenterShiftAtS;
   G.forkChosenSideAtS = forkChosenSideAtS;
   G.forkCloseAtS = forkCloseAtS;
+  G.roadEdgesAt = roadEdgesAt;
+  G.roadOuterLat = roadOuterLat;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;

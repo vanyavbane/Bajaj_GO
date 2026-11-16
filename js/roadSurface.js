@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { branchEdges, shoulderLats } from './engine/fork.js';
+import { shoulderLats } from './engine/fork.js';
 import { laneDashOffsets } from './engine/lanes.js';
 
 export function initRoadSurface() {
@@ -139,7 +139,7 @@ export function initRoadSurface() {
   slopeRightMesh.frustumCulled = false;
   G.scene.add(slopeRightMesh);
 
-  function shadeSlope(geo) {
+  function shadeSlope(geo, side) {
     const norm = geo.attributes.normal.array;
     for (let r = 0; r < ROW; r++) {
       const ahead = r < ROW - 1;
@@ -163,10 +163,9 @@ export function initRoadSurface() {
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
       };
       const sh = G.shoulder;
-      const half = sampleHalf[r];
-      const spread = spreadAt(sampleS[r]);
-      const cityOuter = G.shoulder.cityEdge * sampleCity[r];
-      const lat = shoulderLats(half, spread, cityOuter, sh);
+      const asphalt = Math.abs(G.roadOuterLat(sampleS[r], side));
+      const cityOuter = sh.cityEdge * sampleCity[r];
+      const lat = shoulderLats(asphalt, cityOuter, sh);
       write(0, -lat.far, -lat.berm, sh.farY, sh.bermY);
       write(1, -lat.far, -lat.lip, sh.farY, sh.lipY);
       write(2, -lat.berm, -lat.lip, sh.bermY, sh.lipY);
@@ -272,14 +271,7 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const spread = spreadAt(sampleS[r]);
       if (spread > opened) opened = spread;
-      const edge = branchEdges(sampleHalf[r], spread);
-      const side = G.forkChosenSideAtS(sampleS[r]);
-      const close = G.forkCloseAtS(sampleS[r]);
-      if (side !== 0 && close > 0) {
-        const keep = 1 - close;
-        if (side > 0) edge.leftOuter = edge.leftInner - (edge.leftInner - edge.leftOuter) * keep;
-        else edge.rightOuter = edge.rightInner + (edge.rightOuter - edge.rightInner) * keep;
-      }
+      const edge = G.roadEdgesAt(sampleS[r]);
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
@@ -318,9 +310,8 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
-      const half = sampleHalf[r];
-      const spread = spreadAt(sampleS[r]);
-      const inner = half + spread + baseWidth * cw;
+      const asphalt = Math.abs(G.roadOuterLat(sampleS[r], side));
+      const inner = asphalt + baseWidth * cw;
       const halfW = width * 0.5 * cw;
       const center = side * (inner + halfW);
       const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
@@ -339,19 +330,18 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
-      const half = sampleHalf[r];
-      const spread = spreadAt(sampleS[r]);
       const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
-      const lat = shoulderLats(half, spread, cityOuter, sh);
+      const left = shoulderLats(Math.abs(G.roadOuterLat(sampleS[r], -1)), cityOuter, sh);
+      const right = shoulderLats(G.roadOuterLat(sampleS[r], 1), cityOuter, sh);
       const idx = r * 3;
-      posL.setXYZ(idx,     cx + rx * -lat.far, cy + sh.farY, cz + rz * -lat.far);
-      posL.setXYZ(idx + 1, cx + rx * -lat.berm, cy + sh.bermY, cz + rz * -lat.berm);
-      posL.setXYZ(idx + 2, cx + rx * -lat.lip, cy + sh.lipY, cz + rz * -lat.lip);
+      posL.setXYZ(idx,     cx + rx * -left.far, cy + sh.farY, cz + rz * -left.far);
+      posL.setXYZ(idx + 1, cx + rx * -left.berm, cy + sh.bermY, cz + rz * -left.berm);
+      posL.setXYZ(idx + 2, cx + rx * -left.lip, cy + sh.lipY, cz + rz * -left.lip);
 
-      posR.setXYZ(idx,     cx + rx * lat.lip, cy + sh.lipY, cz + rz * lat.lip);
-      posR.setXYZ(idx + 1, cx + rx * lat.berm, cy + sh.bermY, cz + rz * lat.berm);
-      posR.setXYZ(idx + 2, cx + rx * lat.far, cy + sh.farY, cz + rz * lat.far);
+      posR.setXYZ(idx,     cx + rx * right.lip, cy + sh.lipY, cz + rz * right.lip);
+      posR.setXYZ(idx + 1, cx + rx * right.berm, cy + sh.bermY, cz + rz * right.berm);
+      posR.setXYZ(idx + 2, cx + rx * right.far, cy + sh.farY, cz + rz * right.far);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -453,7 +443,7 @@ export function initRoadSurface() {
   }
 
   function innerLineLat(s, side, inset) {
-    const edge = branchEdges(widthAt(s) * 0.5, spreadAt(s));
+    const edge = G.roadEdgesAt(s);
     return side < 0 ? edge.leftInner - inset : edge.rightInner + inset;
   }
 
@@ -558,15 +548,15 @@ export function initRoadSurface() {
     // на внутренний край своей ветки и остаётся на асфальте, не в траве.
     updateLateralStrip(centerDoubleLine1, (r) => innerLineLat(sampleS[r], -1, 0.38), 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, (r) => innerLineLat(sampleS[r], 1, 0.38), 0.13, 0.08);
-    updateLateralStrip(edgeLineLeft, (r) => -(sampleHalf[r] + spreadAt(sampleS[r]) - 0.32), 0.16, 0.025);
-    updateLateralStrip(edgeLineRight, (r) => sampleHalf[r] + spreadAt(sampleS[r]) - 0.32, 0.16, 0.025);
+    updateLateralStrip(edgeLineLeft, (r) => G.roadOuterLat(sampleS[r], -1) + 0.32, 0.16, 0.025);
+    updateLateralStrip(edgeLineRight, (r) => G.roadOuterLat(sampleS[r], 1) - 0.32, 0.16, 0.025);
 
     shareRoadNormals();
     updateSlopeRibbons();
     if (Number.isNaN(lastSlopeShadeS) || Math.abs(playerS - lastSlopeShadeS) >= 4) {
       lastSlopeShadeS = playerS;
-      shadeSlope(slopeLeftMesh.geometry);
-      shadeSlope(slopeRightMesh.geometry);
+      shadeSlope(slopeLeftMesh.geometry, -1);
+      shadeSlope(slopeRightMesh.geometry, 1);
     }
 
     updateIsland(playerS);

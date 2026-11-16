@@ -1,4 +1,4 @@
-import { clampLaneIndex, sameLaneOffset } from './engine/lanes.js';
+import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -119,27 +119,35 @@ export function initTraffic() {
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
 
-  /** Полосы машины — биом в её точке, не биом байка. */
+  /** Полоса машины — ближайший центр в биоме её точки, не старый номер. */
+  function settleCarLane(car, cfg) {
+    if (car.changingLane) return;
+    const idx = nearestLaneIndex(cfg.offsets, car.lateralOffset);
+    const target = cfg.offsets[idx];
+    if (idx === car.laneIdx && Math.abs(car.lateralOffset - target) < 0.05) return;
+    const jump = Math.abs((car.lateralOffset || 0) - target);
+    if (jump > 1.2 && Math.abs(car.s - G.playerS) < 130) {
+      car.s = G.playerS + 170 + Math.random() * 110;
+    }
+    car.laneIdx = idx;
+    car.targetLaneIdx = idx;
+    car.lateralOffset = target;
+    car.steerAngle = 0;
+    if (car.model.type !== 'qute_traffic') car.speedKmh = cfg.speeds[idx];
+  }
+
   G.remapTrafficLanes = () => {
     for (const car of G.trafficPool) {
       const cfg = lanesAt(car.s);
-      let idx = car.model.type === 'qute_traffic' ? quteLane(cfg) : car.laneIdx;
-      if (idx >= cfg.count || idx < 0) {
-        const same = Math.max(1, cfg.count - cfg.oncomingCount);
-        idx = cfg.oncomingCount + Math.floor(Math.random() * same);
+      if (car.model.type === 'qute_traffic') {
+        const q = quteLane(cfg);
+        car.laneIdx = q;
+        car.targetLaneIdx = q;
+        car.lateralOffset = cfg.offsets[q];
+        car.changingLane = false;
+        car.speedKmh = QUTE_TRAFFIC_SPEED;
       }
-      idx = clampLaneIndex(idx, cfg.count);
-      const target = cfg.offsets[idx];
-      const jump = Math.abs((car.lateralOffset || 0) - target);
-      if (jump > 1.2 && Math.abs(car.s - G.playerS) < 130) {
-        car.s = G.playerS + 170 + Math.random() * 110;
-      }
-      car.laneIdx = idx;
-      car.targetLaneIdx = idx;
-      car.lateralOffset = target;
-      car.changingLane = false;
-      car.steerAngle = 0;
-      car.speedKmh = car.model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx];
+      settleCarLane(car, cfg);
     }
   };
 
@@ -191,8 +199,11 @@ export function initTraffic() {
         car.retiring = true;
       }
 
-      // Скорость — лимит полосы в точке машины.
-      const road = lanesAt(car.s);
+      // Скорость и направление — полоса биома в точке машины.
+      // settle мог перенести её вперёд, поэтому конфиг читаем ещё раз.
+      let road = lanesAt(car.s);
+      settleCarLane(car, road);
+      road = lanesAt(car.s);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
         : road.speeds[clampLaneIndex(car.laneIdx, road.count)];

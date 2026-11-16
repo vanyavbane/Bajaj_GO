@@ -216,10 +216,10 @@ export function initStructures() {
     const span = G.megaStructures.length * 320;
     for (const ms of G.megaStructures) {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
-      const spanM = G.roadWidthAtS(ms.userData.s) + G.forkSpreadAtS(ms.userData.s) * 2;
+      const spanM = G.roadOuterLat(ms.userData.s, 1) - G.roadOuterLat(ms.userData.s, -1);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, 0, 0);
-        ms.userData.baseWidth = G.roadWidthAtS(ms.userData.s);
+        ms.userData.baseWidth = spanM;
       }, Math.round(spanM * 50));
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
@@ -230,7 +230,7 @@ export function initStructures() {
       fade = fade * fade * (3 - 2 * fade);
       ms.visible = fade > 0.02;
       if (!ms.visible) continue;
-      const full = ms.userData.baseWidth + G.forkSpreadAtS(ms.userData.s) * 2;
+      const full = ms.userData.baseWidth;
       const widthFactor = Math.max(1, full / G.nominalRoadWidth);
       ms.scale.set(widthFactor * (0.05 + 0.95 * fade), 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {

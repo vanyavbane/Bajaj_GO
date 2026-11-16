@@ -213,14 +213,18 @@ export function menuTrafficNudge(carS, carLat, playerS, playerLat, menuDemo) {
 }
 
 /** Полоса, в которую попутная машина уходит от дальнего света. null — не реагирует. */
-export function highbeamYieldLane(car, playerS, playerLane, oncomingCount, laneCount) {
+export function highbeamYieldLane(car, playerS, playerLane, oncomingCount, laneCount, laneWidth) {
   if (!Number.isInteger(laneCount) || laneCount < 1) {
     throw new Error(`laneCount должен прийти из биома, получено ${laneCount}`);
+  }
+  if (!Number.isFinite(laneWidth) || laneWidth <= 0) {
+    throw new Error(`laneWidth должен прийти из биома машины, получено ${laneWidth}`);
   }
   if (isOncomingLane(car.laneIdx, oncomingCount) || car.changingLane) return null;
   const distAhead = car.s - playerS;
   if (distAhead < 6 || distAhead > 60) return null;
-  if (Math.abs(car.lateralOffset - playerLane) >= 2.9) return null;
+  const limit = laneWidth * 0.5 + 0.15;
+  if (Math.abs(car.lateralOffset - playerLane) >= limit) return null;
   const first = oncomingCount;
   const last = Math.max(first, laneCount - 1);
   if (last <= first) return null;

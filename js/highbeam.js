@@ -15,7 +15,9 @@ export function initHighbeam() {
 
     for (const car of G.trafficPool) {
       const carLanes = G.getLaneConfig(G.roadBiomeAtS(car.s));
-      const lane = highbeamYieldLane(car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count);
+      const lane = highbeamYieldLane(
+        car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count, carLanes.laneWidth
+      );
       if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;

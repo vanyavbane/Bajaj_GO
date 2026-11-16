@@ -31,6 +31,13 @@ export function forkClose(meters, zoneLength, lead = FORK_LEAD) {
   return smooth01(d / lead);
 }
 
+/** 0 на границе зоны, 1 когда прошлое решение уже отпустило ось. */
+export function forkHandoff(local, fadeLength) {
+  const span = fadeLength > 0 ? fadeLength : 1;
+  const u = Math.max(0, Math.min(1, local / span));
+  return u * u * (3 - 2 * u);
+}
+
 /** Сдвиг оси к выбранной ветке. side: -1 слева, +1 справа, 0 пока выбор не сделан. */
 export function forkCenterShift(meters, zoneLength, side, lead = FORK_LEAD, peak = FORK_SPREAD) {
   if (side !== -1 && side !== 1) return 0;
@@ -67,9 +74,21 @@ export function branchEdges(half, spread, seam = FORK_SEAM) {
   };
 }
 
-/** Откос начинается снаружи асфальта и не складывается внутрь ветки. */
-export function shoulderLats(half, spread, cityOuter, shoulder) {
-  const lip = half + spread + cityOuter;
+/** Те же кромки после схлопывания невыбранной ленты. close 0 — обе на месте, 1 — чужая исчезла. */
+export function collapsedEdges(half, spread, chosenSide, close, seam = FORK_SEAM) {
+  const edge = branchEdges(half, spread, seam);
+  const shut = Math.max(0, Math.min(1, Number.isFinite(close) ? close : 0));
+  if ((chosenSide === -1 || chosenSide === 1) && shut > 0) {
+    const keep = 1 - shut;
+    if (chosenSide > 0) edge.leftOuter = edge.leftInner - (edge.leftInner - edge.leftOuter) * keep;
+    else edge.rightOuter = edge.rightInner + (edge.rightOuter - edge.rightInner) * keep;
+  }
+  return edge;
+}
+
+/** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
+export function shoulderLats(asphaltAbs, cityOuter, shoulder) {
+  const lip = Math.abs(asphaltAbs) + cityOuter;
   const berm = Math.max(shoulder.berm, lip + 1.5);
   const far = Math.max(shoulder.far, berm + (shoulder.far - shoulder.berm));
   return { lip, berm, far };

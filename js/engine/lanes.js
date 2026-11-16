@@ -49,6 +49,21 @@ export function sameLaneOffset(a, b) {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1.6;
 }
 
+/** Индекс полосы, чей центр ближе всего к смещению. Номер из другого биома не переносится. */
+export function nearestLaneIndex(offsets, lateral) {
+  let best = 0;
+  let bestDist = Infinity;
+  const target = Number.isFinite(lateral) ? lateral : 0;
+  for (let i = 0; i < offsets.length; i++) {
+    const dist = Math.abs(offsets[i] - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return best;
+}
+
 /** Индекс полосы внутри текущего конфига. Дробное и пустое значение прижимается к диапазону. */
 export function clampLaneIndex(index, count) {
   const n = Math.round(Number(index));

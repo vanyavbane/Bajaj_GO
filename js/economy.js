@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { clampLaneIndex, readLanes } from './engine/lanes.js';
+import { nearestLaneIndex } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
@@ -602,8 +602,6 @@ export function initEconomy() {
 
   let exitPrevS = null;
 
-  const widthAtS = (s) => G.roadWidthAtS(s);
-
 /** Попутная полоса у обочины. Слева это ближайшая своя полоса, не встречная. */
 function exitLane(s, side) {
   const cfg = G.lanesAtS(s);
@@ -635,7 +633,7 @@ function exitLane(s, side) {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      const edge = widthAtS(e.s) * 0.5 + G.forkSpreadAtS(e.s);
+      const edge = Math.abs(G.roadOuterLat(e.s, e.side));
       const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.laneWorldOffsetAtS(zoneS, markerLogical);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
@@ -1159,17 +1157,19 @@ function exitLane(s, side) {
       G.saveGarage();
       if (pendingAccidentCar) {
         pendingAccidentCar.s = G.playerS + 120;
-        // Число полос могло измениться на стыке биомов: машину возвращаем
-        // на существующую полосу, а не в undefined.
-        const lanes = readLanes(G);
-        const idx = clampLaneIndex(pendingAccidentCar.laneIdx, lanes.count);
+        // Полоса берётся из дороги в новой точке: номер со старого биома
+        // там может быть уже встречной или лежать за кромкой.
+        const lanes = G.lanesAtS(pendingAccidentCar.s);
+        const idx = nearestLaneIndex(lanes.offsets, pendingAccidentCar.lateralOffset);
         pendingAccidentCar.laneIdx = idx;
         pendingAccidentCar.targetLaneIdx = idx;
         pendingAccidentCar.lateralOffset = lanes.offsets[idx];
         pendingAccidentCar.changingLane = false;
       }
+      const playerLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
       for (const c of G.trafficPool) {
-        if (Math.abs(c.s - G.playerS) < 32 && Math.abs(c.lateralOffset - G.laneOffset) < 6) {
+        const carLat = G.laneWorldOffsetAtS(c.s, c.lateralOffset);
+        if (Math.abs(c.s - G.playerS) < 32 && Math.abs(carLat - playerLat) < 6) {
           c.s = G.playerS + 130 + Math.random() * 40;
         }
       }
