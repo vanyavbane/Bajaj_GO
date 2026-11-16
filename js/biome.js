@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
 import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkSide, forkSpreadAt } from './engine/fork.js';
+import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
 /* =========================================================================
  * БИОМЫ: ПЛАН ЗАЕЗДА, ПРОФИЛЬ ДОРОГИ, РАЗВИЛКИ, ДЕКОРАЦИИ И СОХРАНЕНИЕ
  * -------------------------------------------------------------------------
- * Биом — функция пройденного пути, а не кадра. Профиль дороги, ширина,
- * небо и декорации читают одну и ту же точку маршрута, поэтому переход
- * всегда бесшовный. На стыке зон дорога расширяется в развилку с
- * островком, а новый биом включается уже после выбора ветки.
+ * Биом — функция пройденного пути, а не кадра. Живой биом (полосы, декор,
+ * небо) и закреплённый профиль дороги читают одну точку маршрута, но разные
+ * индексы: картинка дороги не прыгает, когда игрок меняет ветку уже в кадре.
+ * Развилка — две ленты из js/engine/fork.js, не островок посреди полотна.
  * ========================================================================= */
 
 const ZONE_M = 1500;              // длина одной локации
@@ -113,75 +114,29 @@ const TRANSITIONS = BIOMES.map((biome) => {
 });
 
 /* -------------------------------------------------------------------------
- * Профили дороги. Производные аналитические, чтобы не было шума и NaN.
+ * Профили дороги. Волны и производные считаются в js/engine/profile.js.
  * ---------------------------------------------------------------------- */
 const PROFILES = [
-  {
-    // Город: как раньше.
-    x: (s) => Math.sin(s * 0.0042) * 34 + Math.cos(s * 0.0021) * 48,
-    dx: (s) => Math.cos(s * 0.0042) * 34 * 0.0042 - Math.sin(s * 0.0021) * 48 * 0.0021,
-    ddx: (s) => -Math.sin(s * 0.0042) * 34 * 0.0042 * 0.0042
-      - Math.cos(s * 0.0021) * 48 * 0.0021 * 0.0021,
-    y: (s) => Math.sin(s * 0.055) * 1.65 + Math.cos(s * 0.029) * 1.15,
-    dy: (s) => Math.cos(s * 0.055) * 1.65 * 0.055 - Math.sin(s * 0.029) * 1.15 * 0.029,
-    ddy: (s) => -Math.sin(s * 0.055) * 1.65 * 0.055 * 0.055
-      - Math.cos(s * 0.029) * 1.15 * 0.029 * 0.029
-  },
-  {
-    // Поля: почти прямая, длинные мягкие волны и подъёмы до метра.
-    x: (s) => Math.sin(s * 0.0035) * 14 + Math.cos(s * 0.0014) * 7,
-    dx: (s) => Math.cos(s * 0.0035) * 14 * 0.0035 - Math.sin(s * 0.0014) * 7 * 0.0014,
-    ddx: (s) => -Math.sin(s * 0.0035) * 14 * 0.0035 * 0.0035
-      - Math.cos(s * 0.0014) * 7 * 0.0014 * 0.0014,
-    y: (s) => Math.sin(s * 0.0062) * 0.55 + Math.cos(s * 0.0031) * 0.35,
-    dy: (s) => Math.cos(s * 0.0062) * 0.55 * 0.0062 - Math.sin(s * 0.0031) * 0.35 * 0.0031,
-    ddy: (s) => -Math.sin(s * 0.0062) * 0.55 * 0.0062 * 0.0062
-      - Math.cos(s * 0.0031) * 0.35 * 0.0031 * 0.0031
-  },
-  {
-    // Лес: плавные изгибы и лёгкие «змейки».
-    x: (s) => Math.sin(s * 0.006) * 18 + Math.cos(s * 0.0027) * 10 + Math.sin(s * 0.0011) * 6,
-    dx: (s) => Math.cos(s * 0.006) * 18 * 0.006 - Math.sin(s * 0.0027) * 10 * 0.0027
-      + Math.cos(s * 0.0011) * 6 * 0.0011,
-    ddx: (s) => -Math.sin(s * 0.006) * 18 * 0.006 * 0.006
-      - Math.cos(s * 0.0027) * 10 * 0.0027 * 0.0027
-      - Math.sin(s * 0.0011) * 6 * 0.0011 * 0.0011,
-    y: (s) => Math.sin(s * 0.008) * 1.2 + Math.cos(s * 0.0042) * 0.7,
-    dy: (s) => Math.cos(s * 0.008) * 1.2 * 0.008 - Math.sin(s * 0.0042) * 0.7 * 0.0042,
-    ddy: (s) => -Math.sin(s * 0.008) * 1.2 * 0.008 * 0.008
-      - Math.cos(s * 0.0042) * 0.7 * 0.0042 * 0.0042
-  },
-  {
-    // Горы: серпантин с радиусом дуг 50–180 м и подъёмами до 15 м.
-    x: (s) => Math.sin(s * 0.019) * 30 + Math.sin(s * 0.0081) * 16 + Math.cos(s * 0.0023) * 7,
-    dx: (s) => Math.cos(s * 0.019) * 30 * 0.019
-      + Math.cos(s * 0.0081) * 16 * 0.0081
-      - Math.sin(s * 0.0023) * 7 * 0.0023,
-    ddx: (s) => -Math.sin(s * 0.019) * 30 * 0.019 * 0.019
-      - Math.sin(s * 0.0081) * 16 * 0.0081 * 0.0081
-      - Math.cos(s * 0.0023) * 7 * 0.0023 * 0.0023,
-    y: (s) => Math.sin(s * 0.0078) * 7.4 + Math.cos(s * 0.0039) * 4.6 + Math.sin(s * 0.0021) * 2.0,
-    dy: (s) => Math.cos(s * 0.0078) * 7.4 * 0.0078
-      - Math.sin(s * 0.0039) * 4.6 * 0.0039
-      + Math.cos(s * 0.0021) * 2.0 * 0.0021,
-    ddy: (s) => -Math.sin(s * 0.0078) * 7.4 * 0.0078 * 0.0078
-      - Math.cos(s * 0.0039) * 4.6 * 0.0039 * 0.0039
-      - Math.sin(s * 0.0021) * 2.0 * 0.0021 * 0.0021
-  },
-  {
-    // МКАД: широкие дуги R 400–800 м и ровный горизонт.
-    x: (s) => Math.sin(s * 0.0045) * 70 + Math.sin(s * 0.0018) * 30 + Math.cos(s * 0.0009) * 12,
-    dx: (s) => Math.cos(s * 0.0045) * 70 * 0.0045
-      + Math.cos(s * 0.0018) * 30 * 0.0018
-      - Math.sin(s * 0.0009) * 12 * 0.0009,
-    ddx: (s) => -Math.sin(s * 0.0045) * 70 * 0.0045 * 0.0045
-      - Math.sin(s * 0.0018) * 30 * 0.0018 * 0.0018
-      - Math.cos(s * 0.0009) * 12 * 0.0009 * 0.0009,
-    y: (s) => Math.sin(s * 0.0022) * 1.15 + Math.cos(s * 0.0011) * 0.75,
-    dy: (s) => Math.cos(s * 0.0022) * 1.15 * 0.0022 - Math.sin(s * 0.0011) * 0.75 * 0.0011,
-    ddy: (s) => -Math.sin(s * 0.0022) * 1.15 * 0.0022 * 0.0022
-      - Math.cos(s * 0.0011) * 0.75 * 0.0011 * 0.0011
-  }
+  makeProfile(
+    [sin(34, 0.0042), cos(48, 0.0021)],
+    [sin(1.65, 0.055), cos(1.15, 0.029)]
+  ),
+  makeProfile(
+    [sin(14, 0.0035), cos(7, 0.0014)],
+    [sin(0.55, 0.0062), cos(0.35, 0.0031)]
+  ),
+  makeProfile(
+    [sin(18, 0.006), cos(10, 0.0027), sin(6, 0.0011)],
+    [sin(1.2, 0.008), cos(0.7, 0.0042)]
+  ),
+  makeProfile(
+    [sin(30, 0.019), sin(16, 0.0081), cos(7, 0.0023)],
+    [sin(7.4, 0.0078), cos(4.6, 0.0039), sin(2.0, 0.0021)]
+  ),
+  makeProfile(
+    [sin(70, 0.0045), sin(30, 0.0018), cos(12, 0.0009)],
+    [sin(1.15, 0.0022), cos(0.75, 0.0011)]
+  )
 ];
 
 const TERRAIN_COLORS = [
@@ -454,19 +409,24 @@ function fadeWeights(local) {
   };
 }
 
-function fillBlend(meters) {
+function zoneSample(meters) {
   const m = Number.isFinite(meters) ? Math.max(0, meters) : 0;
   const zone = Math.floor(m / ZONE_M);
   const local = m - zone * ZONE_M;
   const fade = zone > 0 ? fadeWeights(local) : { t: 1, t1: 0, t2: 0 };
-  blendZone = zone;
-  blendLocal = local;
-  blendMeters = m;
-  blendA = zoneBiomeAt(zone - 1);
-  blendB = zoneBiomeAt(zone);
-  blendT = fade.t;
-  blendT1 = fade.t1;
-  blendT2 = fade.t2;
+  return { m, zone, local, fade };
+}
+
+function fillBlend(meters) {
+  const sample = zoneSample(meters);
+  blendZone = sample.zone;
+  blendLocal = sample.local;
+  blendMeters = sample.m;
+  blendA = zoneBiomeAt(sample.zone - 1);
+  blendB = zoneBiomeAt(sample.zone);
+  blendT = sample.fade.t;
+  blendT1 = sample.fade.t1;
+  blendT2 = sample.fade.t2;
 }
 
 /** Профиль дороги не должен прыгать, когда выбор ветки меняет ещё не закреплённую зону. */
@@ -482,78 +442,47 @@ function roadZoneIndex(zone) {
 }
 
 function fillRoad(meters) {
-  const m = Number.isFinite(meters) ? Math.max(0, meters) : 0;
-  const zone = Math.floor(m / ZONE_M);
-  const local = m - zone * ZONE_M;
-  const fade = zone > 0 ? fadeWeights(local) : { t: 1, t1: 0, t2: 0 };
-  roadA = roadZoneIndex(zone - 1);
-  roadB = roadZoneIndex(zone);
-  roadT = fade.t;
-  roadT1 = fade.t1;
-  roadT2 = fade.t2;
+  const sample = zoneSample(meters);
+  roadA = roadZoneIndex(sample.zone - 1);
+  roadB = roadZoneIndex(sample.zone);
+  roadT = sample.fade.t;
+  roadT1 = sample.fade.t1;
+  roadT2 = sample.fade.t2;
 }
 
-/* -------------------------------------------------------------------------
- * Публичные функции профиля. Их читают road.js, разметка, камера и трафик.
- * ---------------------------------------------------------------------- */
-function biomeRoadX(s) {
+function roadPair(s) {
   fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.x(s);
-  const pb = b.x(s);
-  return pa + roadT * (pb - pa);
+  return { a: PROFILES[roadA], b: PROFILES[roadB], t: roadT, t1: roadT1, t2: roadT2 };
+}
+
+function biomeRoadX(s) {
+  const r = roadPair(s);
+  return mixValue(r.a.x(s), r.b.x(s), r.t);
 }
 
 function biomeRoadDX(s) {
-  fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.x(s);
-  const pb = b.x(s);
-  return a.dx(s) + roadT1 * (pb - pa) + roadT * (b.dx(s) - a.dx(s));
+  const r = roadPair(s);
+  return mixDeriv(r.a.x(s), r.b.x(s), r.a.dx(s), r.b.dx(s), r.t, r.t1);
 }
 
 function biomeRoadDDX(s) {
-  fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.x(s);
-  const pb = b.x(s);
-  return a.ddx(s)
-    + roadT2 * (pb - pa)
-    + 2 * roadT1 * (b.dx(s) - a.dx(s))
-    + roadT * (b.ddx(s) - a.ddx(s));
+  const r = roadPair(s);
+  return mixSecond(r.a.x(s), r.b.x(s), r.a.dx(s), r.b.dx(s), r.a.ddx(s), r.b.ddx(s), r.t, r.t1, r.t2);
 }
 
 function biomeRoadY(s) {
-  fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.y(s);
-  const pb = b.y(s);
-  return pa + roadT * (pb - pa);
+  const r = roadPair(s);
+  return mixValue(r.a.y(s), r.b.y(s), r.t);
 }
 
 function biomeRoadDY(s) {
-  fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.y(s);
-  const pb = b.y(s);
-  return a.dy(s) + roadT1 * (pb - pa) + roadT * (b.dy(s) - a.dy(s));
+  const r = roadPair(s);
+  return mixDeriv(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.t, r.t1);
 }
 
 function biomeRoadDDY(s) {
-  fillRoad(blendMetersAt(s));
-  const a = PROFILES[roadA];
-  const b = PROFILES[roadB];
-  const pa = a.y(s);
-  const pb = b.y(s);
-  return a.ddy(s)
-    + roadT2 * (pb - pa)
-    + 2 * roadT1 * (b.dy(s) - a.dy(s))
-    + roadT * (b.ddy(s) - a.ddy(s));
+  const r = roadPair(s);
+  return mixSecond(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.a.ddy(s), r.b.ddy(s), r.t, r.t1, r.t2);
 }
 
 /* ---------- Ширина дороги и развилка ---------- */
@@ -1129,8 +1058,11 @@ function applyLaneConfig(dominant, playerS) {
     }
     if (G.remapTrafficLanes) G.remapTrafficLanes(cfg);
   }
-  // Кромка всегда считается от фактической (смешанной) ширины полотна.
-  G.ROAD_EDGE = Math.max(2.2, roadWidthAtS(playerS) * 0.5 - 0.7);
+  // Кромка в тех же логических метрах, что и laneOffset. Если полосы
+  // сжаты, чтобы влезть в закреплённую ширину, порог шире половины полотна.
+  const scale = Math.max(0.35, laneDisplayScaleAtS(playerS));
+  const visualHalf = Math.max(0, roadWidthAtS(playerS) * 0.5 - 0.7);
+  G.ROAD_EDGE = Math.max(2.2, visualHalf / scale);
 }
 
 function updateScenery() {
