@@ -261,12 +261,14 @@ export function initRepair() {
   }
   G.spawnRepair = spawnRepair;
 
-  function checkRepairCollision(playerS, lateralOffset, halfW = 1.7, halfL = null) {
-    const ev = G.repairEvent;
-    if (!ev.active) return false;
-    const limitL = halfL == null ? ev.length * 0.5 + 1 : halfL;
-    return Math.abs(playerS - ev.s) < limitL && Math.abs(lateralOffset - ev.laneOffset) < halfW;
-  }
+/** Попадание в яму в мировых метрах поперёк дороги, как и сама отрисовка. */
+function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
+  const ev = G.repairEvent;
+  if (!ev.active) return false;
+  const siteLat = G.laneWorldOffsetAtS(ev.s, ev.laneOffset);
+  const along = Math.abs(playerS - ev.s) < ev.length * 0.5 + 1;
+  return along && Math.abs(playerWorldLat - siteLat) < halfW;
+}
   G.checkRepairCollision = checkRepairCollision;
 
   function updateRepair(dt, now) {
@@ -291,8 +293,7 @@ export function initRepair() {
       return;
     }
 
-    const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
-    const worldLat = toWorld(slot.s, slot.lateralOffset);
+    const worldLat = G.laneWorldOffsetAtS(slot.s, slot.lateralOffset);
     G.placeOnRoad(slot.group, slot.s, worldLat, 0);
     const dist = Math.abs(slot.s - G.playerS);
     slot.near.visible = dist < 150;
@@ -305,11 +306,9 @@ export function initRepair() {
 
     if (!G.started || G.ended || (G.jumpState && G.jumpState.airborne)) return;
     if (G.speed <= 8 || G.accidentCooldown > 0 || G.uiModal) return;
-    const bikeLat = toWorld(G.playerS, G.laneOffset);
+    const bikeLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
     const half = playerHalfWidth(!!(G.frameStats && G.frameStats.isQute));
-    const along = Math.abs(G.playerS - slot.s) < slot.length * 0.5 + 1;
-    const across = Math.abs(bikeLat - worldLat) < 1.7 + half;
-    if (!along || !across) return;
+    if (!checkRepairCollision(G.playerS, bikeLat, 1.7 + half)) return;
     G.accidentCooldown = 2.5;
     if (G.handleAccident) G.handleAccident(null);
   }

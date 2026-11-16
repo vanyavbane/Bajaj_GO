@@ -56,10 +56,11 @@ export function initRoad() {
 
     // Смещение по полосе — в горизонтали, как у ленты асфальта. Дорога без крена.
     const lh = Math.hypot(dx, 1) || 1;
+    const lat = lateralOffset + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
     obj.position.set(
-      roadX(s) + lateralOffset / lh,
+      roadX(s) + lat / lh,
       roadY(s) + heightOffset,
-      -s + lateralOffset * dx / lh
+      -s + lat * dx / lh
     );
   }
   G.placeOnRoad = placeOnRoad;

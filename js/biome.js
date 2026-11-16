@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkSide, forkSpreadAt } from './engine/fork.js';
+import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkCenterShift, forkClose, forkSide, forkSpreadAt } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
@@ -10,7 +10,8 @@ import { G } from './state.js';
  * -------------------------------------------------------------------------
  * Биом — функция пройденного пути, а не кадра. Живой биом (полосы, декор,
  * небо) и закреплённый профиль дороги читают одну точку маршрута, но разные
- * индексы: картинка дороги не прыгает, когда игрок меняет ветку уже в кадре.
+ * индексы. Замок зоны ставится в момент выбора ветки, не раньше: до выбора
+ * профиль едет за стороной байка. Полосы на асфальте читают тот же индекс.
  * Развилка — две ленты из js/engine/fork.js, не островок посреди полотна.
  * ========================================================================= */
 
@@ -429,10 +430,12 @@ function fillBlend(meters) {
   blendT2 = sample.fade.t2;
 }
 
-/** Профиль дороги не должен прыгать, когда выбор ветки меняет ещё не закреплённую зону. */
+/** Профиль зоны замирает, когда выбор ветки, которая в неё ведёт, уже сделан. */
 function roadZoneIndex(zone) {
   const z = Math.max(0, zone);
   const live = zoneBiomeAt(z);
+  const decided = z === 0 || chosenZones.has(z - 1);
+  if (!decided) return live;
   const start = z * ZONE_M;
   const playerM = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0)
     + (Number.isFinite(G.playerS) ? G.playerS : 0);
@@ -522,18 +525,54 @@ function splitCenterS(playerS) {
   return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
 }
 
+function roadBiomeAtS(s) {
+  fillRoad(blendMetersAt(s));
+  return roadT < 0.5 ? roadA : roadB;
+}
+
 /** Во сколько раз сжать логические полосы, чтобы крайняя осталась на асфальте.
- *  Ширина — из замка профиля, смещения — из живого биома. Нижнего порога нет:
- *  иначе широкие полосы МКАД торчат с узкой закреплённой дороги. */
+ *  И ширина, и смещения берутся из профиля дороги, а не из живого декора. */
 function laneDisplayScaleAtS(s) {
-  fillBlend(blendMetersAt(s));
-  const dominant = blendT < 0.5 ? blendA : blendB;
-  const cfg = LANE_CONFIG[dominant];
+  const biome = roadBiomeAtS(s);
+  const cfg = LANE_CONFIG[biome];
   let maxAbs = 0;
   for (const off of cfg.offsets) maxAbs = Math.max(maxAbs, Math.abs(off));
   const half = roadWidthAtS(s) * 0.5 - 0.9;
   if (maxAbs <= 0.001 || half <= 0.5) return 1;
   return Math.min(1, half / (maxAbs + 1.15));
+}
+
+/** -1 слева, +1 справа, 0 пока развилка этой зоны не выбрана. */
+function forkChosenSideForZone(zone) {
+  if (!chosenZones.has(zone)) return 0;
+  const choices = splitChoices[zone];
+  const next = zoneBiomes[zone + 1];
+  if (!choices || next == null) return 0;
+  return biomeIndex(next) === biomeIndex(choices[1]) ? 1 : -1;
+}
+
+function forkChosenSideAtS(s) {
+  const meters = blendMetersAt(s);
+  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
+  return forkChosenSideForZone(zone);
+}
+
+function forkCenterShiftAtS(s) {
+  const meters = blendMetersAt(s);
+  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
+  const local = meters - zone * ZONE_M;
+  let shift = forkCenterShift(meters, ZONE_M, forkChosenSideForZone(zone), SPLIT_LEAD, FORK_SPREAD);
+  if (zone > 0) {
+    const prev = forkChosenSideForZone(zone - 1);
+    const u = Math.min(1, local / FADE_M);
+    const t = u * u * (3 - 2 * u);
+    shift += prev * FORK_SPREAD * (1 - t);
+  }
+  return shift;
+}
+
+function forkCloseAtS(s) {
+  return forkClose(blendMetersAt(s), ZONE_M, SPLIT_LEAD);
 }
 
 function splitLateralShiftAtS(s, lateralOffset) {
@@ -1072,12 +1111,10 @@ function updateScenery() {
   G.updateBiomeScenery();
 }
 
-/** Полосы биома в точке s. Без s — биом, в котором сейчас байк. */
+/** Полосы биома, которым нарисована дорога в точке s. Без s — под байком. */
 function lanesAtS(s) {
-  const idx = Number.isFinite(s)
-    ? dominantBiomeAtS(s)
-    : biomeIndex(G.biomeDominant != null ? G.biomeDominant : G.currentBiome);
-  return LANE_CONFIG[biomeIndex(idx)];
+  const at = Number.isFinite(s) ? s : G.playerS;
+  return LANE_CONFIG[biomeIndex(roadBiomeAtS(at))];
 }
 
 /** Случайная попутная полоса биома в точке s. */
@@ -1228,12 +1265,11 @@ function updateBiome(dt) {
   // currentBiome читаем после commitSplit: в кадре авто-выбора чип должен
   // сразу показать новый биом, а не обновиться следующим кадром.
   updateBiomeChip(G.currentBiome);
-  applyLaneConfig(dominant, G.playerS);
+  applyLaneConfig(roadBiomeAtS(G.playerS), G.playerS);
 
-  // Lane-assist после развилки: левая ветка уходила на встречные полосы,
-  // после слияния островка возвращаем байк в попутную полосу нового биома.
+  // Lane-assist после развилки: левая ветка уводила байк на встречные полосы.
   if (G.started && !G.ended) {
-    const cfg = LANE_CONFIG[dominant];
+    const cfg = lanesAtS(G.playerS);
     if (lastSplitSide === 0 && lastSplitZone >= 0) {
       const since = meters - (lastSplitZone + 1) * ZONE_M;
       if (since > 20 && since < 520) {
@@ -1358,6 +1394,10 @@ export function initBiome() {
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
   G.forkSpreadAtS = forkSpreadAtS;
+  G.forkCenterShiftAtS = forkCenterShiftAtS;
+  G.forkChosenSideAtS = forkChosenSideAtS;
+  G.forkCloseAtS = forkCloseAtS;
+  G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;

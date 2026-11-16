@@ -23,7 +23,20 @@ export function forkOffset(meters, zoneLength, lead = FORK_LEAD) {
   return m - splitM;
 }
 
-/** Боковой уход одной ветки, метры. Ноль на концах, пик в центре, без излома. */
+/** 0 до центра развилки, 1 через lead метров после. Выбранная ветка остаётся в стороне. */
+export function forkClose(meters, zoneLength, lead = FORK_LEAD) {
+  const d = forkOffset(meters, zoneLength, lead);
+  if (d <= 0) return 0;
+  if (d >= lead) return 1;
+  return smooth01(d / lead);
+}
+
+/** Сдвиг оси к выбранной ветке. side: -1 слева, +1 справа, 0 пока выбор не сделан. */
+export function forkCenterShift(meters, zoneLength, side, lead = FORK_LEAD, peak = FORK_SPREAD) {
+  if (side !== -1 && side !== 1) return 0;
+  return side * peak * forkClose(meters, zoneLength, lead);
+}
+/** Боковой уход одной ветки, метры. Ноль на концах, пик в центре. */
 export function forkSpreadAt(meters, zoneLength, lead = FORK_LEAD, peak = FORK_SPREAD) {
   const d = forkOffset(meters, zoneLength, lead);
   if (d <= -lead || d >= lead) return 0;

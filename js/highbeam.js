@@ -14,7 +14,7 @@ export function initHighbeam() {
     $('badge-beam').hidden = false;
 
     for (const car of G.trafficPool) {
-      const carLanes = G.getLaneConfig(G.dominantBiomeAtS(car.s));
+      const carLanes = G.getLaneConfig(G.roadBiomeAtS(car.s));
       const lane = highbeamYieldLane(car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count);
       if (lane == null) continue;
       car.changingLane = true;

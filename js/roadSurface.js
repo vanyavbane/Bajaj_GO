@@ -35,13 +35,16 @@ export function initRoadSurface() {
       const dx = G.roadDX(s);
       const lh = Math.hypot(dx, 1) || 1;
       sampleS[r] = s;
-      sampleX[r] = G.roadX(s);
+      const rx = 1 / lh;
+      const rz = dx / lh;
+      const shift = G.forkCenterShiftAtS(s);
+      sampleX[r] = G.roadX(s) + rx * shift;
       sampleY[r] = G.roadY(s);
-      sampleZ[r] = -s;
+      sampleZ[r] = -s + rz * shift;
       sampleCity[r] = G.cityWeightAtS(s);
       sampleHalf[r] = widthAt(s) * 0.5;
-      rightX[r] = 1 / lh;
-      rightZ[r] = dx / lh;
+      rightX[r] = rx;
+      rightZ[r] = rz;
     }
   }
 
@@ -209,7 +212,7 @@ export function initRoadSurface() {
     for (let k = 0; k < 32 && dense; k++) {
       const s = startDashS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
-      const cfg = G.getLaneConfig(G.dominantBiomeAtS(s));
+      const cfg = G.getLaneConfig(G.roadBiomeAtS(s));
       if (!cfg) continue;
       for (const rank of laneBoundaryRanks(cfg)) {
         for (const side of [-1, 1]) {
@@ -279,6 +282,13 @@ export function initRoadSurface() {
       const spread = spreadAt(sampleS[r]);
       if (spread > opened) opened = spread;
       const edge = branchEdges(sampleHalf[r], spread);
+      const side = G.forkChosenSideAtS(sampleS[r]);
+      const close = G.forkCloseAtS(sampleS[r]);
+      if (side !== 0 && close > 0) {
+        const keep = 1 - close;
+        if (side > 0) edge.leftOuter = edge.leftInner - (edge.leftInner - edge.leftOuter) * keep;
+        else edge.rightOuter = edge.rightInner + (edge.rightOuter - edge.rightInner) * keep;
+      }
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
@@ -469,7 +479,7 @@ export function initRoadSurface() {
       const lh = Math.hypot(dx, 1) || 1;
       const rx = 1 / lh;
       const rz = dx / lh;
-      const lat = innerLineLat(s, side, 0.2);
+      const lat = innerLineLat(s, side, 0.2) + G.forkCenterShiftAtS(s);
       const cx = G.roadX(s), cy = G.roadY(s) + 0.09, cz = -s;
       const idx = r * 2;
       pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));

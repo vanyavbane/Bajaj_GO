@@ -479,7 +479,7 @@ export function initCamera() {
 
       const camS = G.playerS - distBehind;
       const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
-      const camLat = toWorld(camS, camLatLogical);
+      const camLat = toWorld(camS, camLatLogical) + G.forkCenterShiftAtS(camS);
       const [camRx, camRz] = rightAt(camS);
       const minSafeY = G.roadY(camS) + 1.85;
       const targetCamX = G.roadX(camS) + camRx * camLat;
@@ -498,7 +498,7 @@ export function initCamera() {
 
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
       const lookLatLogical = isMenuView ? 0.5 : (G.laneOffset * 0.55);
-      const lookLat = toWorld(lookAheadS, lookLatLogical);
+      const lookLat = toWorld(lookAheadS, lookLatLogical) + G.forkCenterShiftAtS(lookAheadS);
       const [lookRx, lookRz] = rightAt(lookAheadS);
       const targetLookX = G.roadX(lookAheadS) + lookRx * lookLat;
       const targetLookZ = -lookAheadS + lookRz * lookLat;

@@ -604,11 +604,11 @@ export function initEconomy() {
 
   const widthAtS = (s) => G.roadWidthAtS(s);
 
-  /** Крайняя полоса биома в точке s. Справа это попутная, слева — встречная. */
-  function outerLane(s) {
-    const cfg = G.lanesAtS(s);
-    return cfg.offsets[cfg.count - 1];
-  }
+/** Попутная полоса у обочины. Слева это ближайшая своя полоса, не встречная. */
+function exitLane(s, side) {
+  const cfg = G.lanesAtS(s);
+  return side >= 0 ? cfg.offsets[cfg.count - 1] : cfg.offsets[cfg.oncomingCount];
+}
 
   function syncExitTrack() {
     exitPrevS = G.playerS;
@@ -636,7 +636,7 @@ export function initEconomy() {
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
       const edge = widthAtS(e.s) * 0.5 + G.forkSpreadAtS(e.s);
-      const markerLogical = e.side * outerLane(zoneS);
+      const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.laneWorldOffsetAtS(zoneS, markerLogical);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
         G.placeOnRoad(e.group, e.s, e.side * (edge + 3.1), 0);
@@ -666,7 +666,7 @@ export function initEconomy() {
 
       if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used
         && G.speed < EXIT_ENTER_SPEED
-        && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, e.side, outerLane(zoneS))) {
+        && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, exitLane(zoneS, e.side))) {
         openExitFromBox(e);
         break;
       }
@@ -697,7 +697,7 @@ export function initEconomy() {
     G.speed = 0;
     const where = inside === 'before' ? 'before' : (inside ? 'inside' : 'beside');
     G.playerS = exitBoxCenter(best.s) - (where === 'before' ? 30 : 0);
-    G.laneOffset = where === 'beside' ? 0 : best.side * outerLane(best.s);
+    G.laneOffset = where === 'beside' ? 0 : exitLane(best.s, best.side);
     G.lateralVelocity = 0;
     G.slipDriftVel = 0;
     for (const car of G.trafficPool || []) {
@@ -749,7 +749,7 @@ export function initEconomy() {
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
-      const lat = G.laneWorldOffsetAtS(activeOrder.targetS, outerLane(activeOrder.targetS));
+      const lat = G.laneWorldOffsetAtS(activeOrder.targetS, exitLane(activeOrder.targetS, 1));
       deliveryParkS = placeIfMoved(deliveryParkS, activeOrder.targetS, (s) => {
         G.placeOnRoad(deliveryMarker, s, lat, 0);
       }, Math.round(lat * 50));
@@ -984,7 +984,7 @@ export function initEconomy() {
       G.bankPoints -= TOW_PRICE;
       G.saveGarage();
       G.playerS += 120;
-      G.laneOffset = outerLane(G.playerS);
+      G.laneOffset = exitLane(G.playerS, 1);
       G.lateralVelocity = 0;
       syncExitTrack();
       G.speed = 0;

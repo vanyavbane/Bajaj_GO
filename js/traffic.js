@@ -31,7 +31,7 @@ export function initTraffic() {
   const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
 
   function lanesAt(s) {
-    return G.getLaneConfig(G.dominantBiomeAtS(s));
+    return G.getLaneConfig(G.roadBiomeAtS(s));
   }
 
   function quteLane(cfg) {
@@ -173,11 +173,12 @@ export function initTraffic() {
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
     const menuDemo = !G.started && !G.ended;
-    const dominant = Number.isInteger(G.biomeDominant) ? G.biomeDominant : 0;
+    const dominant = G.roadBiomeAtS(G.playerS + 240);
     const mask = activeMask[dominant] || activeMask[0];
     for (let i = 0; i < G.trafficPool.length; i++) {
       const car = G.trafficPool[i];
-      const wantActive = mask[i] === 1;
+      const where = car.active ? car.s : G.playerS + 240;
+      const wantActive = (activeMask[G.roadBiomeAtS(where)] || mask)[i] === 1;
 
       if (!car.active) {
         if (!wantActive) continue;
@@ -189,7 +190,7 @@ export function initTraffic() {
         car.retiring = true;
       }
 
-      // Плавно подтягиваем скорость к лимиту текущего биома.
+      // Скорость — лимит полосы в точке машины.
       const road = lanesAt(car.s);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED

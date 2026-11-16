@@ -18,13 +18,13 @@ export function exitBoxCenter(exitS) {
 }
 
 /** Отрезок fromS→toS пересёк коробку, и байк стоит в её ширине. */
-export function crossedExitBox(fromS, toS, lane, exitS, side, laneCenter) {
+export function crossedExitBox(fromS, toS, lane, exitS, targetLane) {
   const center = exitBoxCenter(exitS);
   const halfL = EXIT_ZONE_LENGTH * 0.5;
   const lo = Math.min(fromS, toS);
   const hi = Math.max(fromS, toS);
   const along = hi >= center - halfL && lo <= center + halfL;
-  const across = Math.abs(lane - side * laneCenter) <= EXIT_ZONE_WIDTH * 0.5;
+  const across = Math.abs(lane - targetLane) <= EXIT_ZONE_WIDTH * 0.5;
   return along && across;
 }
 
