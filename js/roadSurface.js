@@ -203,21 +203,18 @@ export function initRoadSurface() {
   }
 
   function updateDashes(playerS, dense) {
-    const dominant = Number.isInteger(G.biomeDominant) ? G.biomeDominant : 0;
-    const cfg = G.getLaneConfig(dominant);
-    if (!cfg) { dashMesh.count = 0; return; }
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
-    const ranks = laneBoundaryRanks(cfg);
     let used = 0;
-    for (const rank of ranks) {
-      for (const side of [-1, 1]) {
-        const logical = side * cfg.laneWidth * rank;
-        for (let k = 0; k < 32; k++) {
-          if (used >= MAX_DASHES || !dense) break;
-          const s = startDashS + k * spacing;
-          if (s < playerS - RIBBON_BEHIND + 2) continue;
-          const worldLat = toWorld(s, logical);
+    for (let k = 0; k < 32 && dense; k++) {
+      const s = startDashS + k * spacing;
+      if (s < playerS - RIBBON_BEHIND + 2) continue;
+      const cfg = G.getLaneConfig(G.dominantBiomeAtS(s));
+      if (!cfg) continue;
+      for (const rank of laneBoundaryRanks(cfg)) {
+        for (const side of [-1, 1]) {
+          if (used >= MAX_DASHES) break;
+          const worldLat = toWorld(s, side * cfg.laneWidth * rank);
           dummy.scale.set(1, 1, 1);
           G.placeOnRoad(dummy, s, worldLat, 0.03);
           dummy.updateMatrix();
@@ -535,8 +532,6 @@ export function initRoadSurface() {
     curbLeftMesh, curbRightMesh, sidewalkLeftMesh, sidewalkRightMesh,
     centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight
   ];
-  let lastDashS = NaN;
-  let lastDashBiome = -1;
 
   function shareRoadNormals() {
     shadeStrip(roadMesh.geometry);
@@ -574,14 +569,8 @@ export function initRoadSurface() {
     }
 
     updateIsland(playerS);
-
-    const dense = true;
-    if (Number.isNaN(lastDashS) || Math.abs(playerS - lastDashS) >= 8 || lastDashBiome !== G.biomeDominant) {
-      lastDashS = playerS;
-      lastDashBiome = G.biomeDominant;
-      updateDashes(playerS, dense);
-      updateBarrier(playerS, dense);
-    }
+    updateDashes(playerS, true);
+    updateBarrier(playerS, true);
   }
   let lastSlopeShadeS = NaN;
   G.updateRoadSurface = updateRoadSurface;

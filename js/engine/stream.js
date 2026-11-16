@@ -7,9 +7,11 @@ export function keepInWindow(s, playerS, behind, ahead, span) {
   return s;
 }
 
-/** Ставит объект на дорогу только когда s сменилось. Возвращает s, которое уже поставлено. */
-export function placeIfMoved(placedS, s, place) {
-  if (placedS === s) return placedS;
+/** Ставит объект, когда сменилась точка s или поза. pose — целое число снаружи.
+ *  Без позы ключ равен s, как раньше. */
+export function placeIfMoved(placedKey, s, place, pose = null) {
+  const key = pose == null ? s : `${s}|${pose}`;
+  if (placedKey === key) return placedKey;
   place(s);
-  return s;
+  return key;
 }

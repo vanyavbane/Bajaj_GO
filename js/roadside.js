@@ -396,15 +396,10 @@ export function initRoadside() {
 
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
-      // На стыке биомов меняется ширина полотна — слот переставляется,
-      // чтобы отбойник/фонарь не остались на старой кромке.
+      const edge = widthAt(slot.s) * 0.5 + G.forkSpreadAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
-      if (slot.lastDom !== dom) {
-        slot.lastDom = dom;
-        slot.placedS = NaN;
-      }
+      slot.lastDom = dom;
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        const edge = widthAt(slot.s) * 0.5 + G.forkSpreadAtS(slot.s);
         G.placeOnRoad(slot.leftGuard, slot.s, -(edge + 0.55), 0);
         G.placeOnRoad(slot.rightGuard, slot.s, edge + 0.55, 0);
         G.placeOnRoad(slot.leftLamp, slot.s, -(edge + 0.8), 0);
@@ -420,7 +415,7 @@ export function initRoadside() {
           const wf = Math.max(1, (edge * 2) / 19);
           slot.portal.group.scale.set(wf, 1, 1);
         }
-      });
+      }, Math.round(edge * 50));
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.

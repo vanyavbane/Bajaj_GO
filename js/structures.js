@@ -218,10 +218,11 @@ export function initStructures() {
     const span = G.megaStructures.length * 320;
     for (const ms of G.megaStructures) {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
+      const spanM = G.roadWidthAtS(ms.userData.s) + G.forkSpreadAtS(ms.userData.s) * 2;
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, 0, 0);
         ms.userData.baseWidth = G.roadWidthAtS(ms.userData.s);
-      });
+      }, Math.round(spanM * 50));
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
       const cw = G.cityWeightAtS(ms.userData.s);

@@ -629,17 +629,12 @@ export function initEconomy() {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      // Ширина полотна зависит от биома: съезд всегда остаётся за кромкой.
-      if (e.lastDom !== G.biomeDominant) {
-        e.lastDom = G.biomeDominant;
-        e.placedS = NaN;
-      }
+      const edge = widthAtS(e.s) * 0.5 + G.forkSpreadAtS(e.s);
+      const markerLat = G.laneWorldOffsetAtS(zoneS, e.side * G.START_LANE);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
-        const edge = widthAtS(e.s) * 0.5 + G.forkSpreadAtS(e.s);
         G.placeOnRoad(e.group, e.s, e.side * (edge + 3.1), 0);
-        const markerLat = e.side * G.START_LANE;
-        G.placeOnRoad(e.marker, zoneS, G.laneWorldOffsetAtS(zoneS, markerLat), 0.07);
-      });
+        G.placeOnRoad(e.marker, zoneS, markerLat, 0.07);
+      }, Math.round(edge * 50) * 10000 + Math.round(markerLat * 50));
 
       // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
       const dist = zoneS - G.playerS;
@@ -747,14 +742,10 @@ export function initEconomy() {
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
+      const lat = G.laneWorldOffsetAtS(activeOrder.targetS, G.START_LANE);
       deliveryParkS = placeIfMoved(deliveryParkS, activeOrder.targetS, (s) => {
-        G.placeOnRoad(
-          deliveryMarker,
-          s,
-          G.laneWorldOffsetAtS(s, G.START_LANE),
-          0
-        );
-      });
+        G.placeOnRoad(deliveryMarker, s, lat, 0);
+      }, Math.round(lat * 50));
     } else {
       deliveryMarker.visible = false;
       deliveryParkS = NaN;

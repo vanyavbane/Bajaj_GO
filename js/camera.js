@@ -467,7 +467,7 @@ export function initCamera() {
         const lh = Math.hypot(dx, 1) || 1;
         return [1 / lh, dx / lh];
       };
-      const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+      const toWorld = G.laneWorldOffsetAtS;
 
       const isMenuView = !G.started && !G.ended;
       const speedPullback = clamp(G.speed / 220, 0, 1.35);
