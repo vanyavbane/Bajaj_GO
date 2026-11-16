@@ -86,6 +86,62 @@ export function collapsedEdges(half, spread, chosenSide, close, seam = FORK_SEAM
   return edge;
 }
 
+const RIBBON_MARGIN = 0.7;
+const RIBBON_FLOOR = 2.2;
+
+/**
+ * Логические пределы байка по лентам, которые ещё шире двух отступов.
+ * Ноль — левая ветка. Промежуток между ветками в пределы не входит.
+ */
+export function logicalRoadLimits(edge, scale, spread) {
+  const span = Math.max(scale, 0.05);
+  const gap = Math.max(0, spread);
+  const ribbons = ribbonSpans(edge);
+  let minEdge = Infinity;
+  let maxEdge = -Infinity;
+  const include = (pre) => {
+    const logical = preToLogical(pre, span, gap);
+    if (logical == null) return;
+    minEdge = Math.min(minEdge, logical);
+    maxEdge = Math.max(maxEdge, logical);
+  };
+  for (const [from, to] of ribbons) {
+    include(from);
+    include(to);
+  }
+  if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };
+  if (minEdge > -RIBBON_FLOOR && preOnRibbon(-RIBBON_FLOOR, span, gap, ribbons)) minEdge = -RIBBON_FLOOR;
+  if (maxEdge < RIBBON_FLOOR && preOnRibbon(RIBBON_FLOOR, span, gap, ribbons)) maxEdge = RIBBON_FLOOR;
+  if (maxEdge < minEdge) {
+    const mid = (minEdge + maxEdge) * 0.5;
+    return { min: mid, max: mid };
+  }
+  return { min: minEdge, max: maxEdge };
+}
+
+function ribbonSpans(edge) {
+  const spans = [];
+  const minWidth = RIBBON_MARGIN * 2;
+  if (edge.leftInner - edge.leftOuter > minWidth) {
+    spans.push([edge.leftOuter + RIBBON_MARGIN, edge.leftInner - RIBBON_MARGIN]);
+  }
+  if (edge.rightOuter - edge.rightInner > minWidth) {
+    spans.push([edge.rightInner + RIBBON_MARGIN, edge.rightOuter - RIBBON_MARGIN]);
+  }
+  return spans;
+}
+
+function preToLogical(pre, scale, spread) {
+  if (pre <= -spread) return Math.min(0, (pre + spread) / scale);
+  if (pre >= spread) return Math.max(0, (pre - spread) / scale);
+  return null;
+}
+
+function preOnRibbon(logical, scale, spread, ribbons) {
+  const pre = logical * scale + (logical <= 0 ? -spread : spread);
+  return ribbons.some(([from, to]) => pre >= from - 0.05 && pre <= to + 0.05);
+}
+
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs, cityOuter, shoulder) {
   const lip = Math.abs(asphaltAbs) + cityOuter;

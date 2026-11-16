@@ -131,7 +131,9 @@ export function initLoop() {
       isYura: effStats.isYura,
       wideTires: effStats.wideTires,
       upgradedBrakes: effStats.upgradedBrakes,
-      roadEdge: G.ROAD_EDGE
+      roadEdge: G.ROAD_EDGE,
+      roadEdgeMin: G.roadEdgeMin,
+      roadEdgeMax: G.roadEdgeMax
     });
     G.laneOffset = steered.laneOffset;
     G.lateralVelocity = steered.lateralVelocity;

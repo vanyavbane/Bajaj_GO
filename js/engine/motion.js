@@ -61,11 +61,13 @@ export function stepSteer(body, dt, now, spec) {
   const slipDriftVel = lerp(body.slipDriftVel, (centrifugal + slip) * air, dt * 4.5);
   let laneOffset = body.laneOffset + (lateralVelocity + slipDriftVel + wobblePenalty) * dt;
 
-  const edgeSide = laneOffset > spec.roadEdge ? 1 : (laneOffset < -spec.roadEdge ? -1 : 0);
-  if (edgeSide !== 0) {
+  const minEdge = Number.isFinite(spec.roadEdgeMin) ? spec.roadEdgeMin : -spec.roadEdge;
+  const maxEdge = Number.isFinite(spec.roadEdgeMax) ? spec.roadEdgeMax : spec.roadEdge;
+  if (laneOffset > maxEdge || laneOffset < minEdge) {
+    const side = laneOffset > maxEdge ? 1 : -1;
     return {
-      laneOffset: edgeSide * spec.roadEdge,
-      lateralVelocity: -edgeSide * 4.5,
+      laneOffset: side > 0 ? maxEdge : minEdge,
+      lateralVelocity: -side * 4.5,
       steerVisual,
       slipDriftVel: 0,
       wobbleTimer,

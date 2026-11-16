@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkCenterShift, forkClose, forkHandoff, forkSide, forkSpreadAt, shoulderHeight, shoulderLats } from './engine/fork.js';
+import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkCenterShift, forkClose, forkHandoff, forkSide, forkSpreadAt, logicalRoadLimits, shoulderHeight, shoulderLats } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
@@ -559,37 +559,40 @@ function forkChosenSideForZone(zone) {
   return biomeIndex(next) === biomeIndex(choices[1]) ? 1 : -1;
 }
 
+function routeAt(s) {
+  const meters = Math.max(0, blendMetersAt(s));
+  const zone = Math.floor(meters / ZONE_M);
+  return { meters, zone, local: meters - zone * ZONE_M };
+}
+
+/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за FADE_M. */
+function previousChoice(route) {
+  if (route.zone <= 0) return { side: 0, close: 0 };
+  const side = forkChosenSideForZone(route.zone - 1);
+  const close = side === 0 ? 0 : 1 - forkHandoff(route.local, FADE_M);
+  return { side, close };
+}
+
 function forkChosenSideAtS(s) {
-  const meters = blendMetersAt(s);
-  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
-  const own = forkChosenSideForZone(zone);
+  const route = routeAt(s);
+  const own = forkChosenSideForZone(route.zone);
   if (own !== 0) return own;
-  if (zone > 0 && inheritedClose(meters, zone) > 0) return forkChosenSideForZone(zone - 1);
-  return 0;
+  const prev = previousChoice(route);
+  return prev.close > 0 ? prev.side : 0;
 }
 
 function forkCenterShiftAtS(s) {
-  const meters = blendMetersAt(s);
-  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
-  const local = meters - zone * ZONE_M;
-  let shift = forkCenterShift(meters, ZONE_M, forkChosenSideForZone(zone), SPLIT_LEAD, FORK_SPREAD);
-  if (zone > 0) {
-    shift += forkChosenSideForZone(zone - 1) * FORK_SPREAD * (1 - forkHandoff(local, FADE_M));
-  }
-  return shift;
-}
-
-/** Чужая лента на границе ещё закрыта и открывается за те же FADE_M, что и ось. */
-function inheritedClose(meters, zone) {
-  if (zone <= 0 || forkChosenSideForZone(zone - 1) === 0) return 0;
-  return 1 - forkHandoff(meters - zone * ZONE_M, FADE_M);
+  const route = routeAt(s);
+  const prev = previousChoice(route);
+  return forkCenterShift(route.meters, ZONE_M, forkChosenSideForZone(route.zone), SPLIT_LEAD, FORK_SPREAD)
+    + prev.side * FORK_SPREAD * prev.close;
 }
 
 function forkCloseAtS(s) {
-  const meters = blendMetersAt(s);
-  const zone = Math.floor(Math.max(0, meters) / ZONE_M);
-  const own = forkChosenSideForZone(zone) === 0 ? 0 : forkClose(meters, ZONE_M, SPLIT_LEAD);
-  return Math.max(own, inheritedClose(meters, zone));
+  const route = routeAt(s);
+  const own = forkChosenSideForZone(route.zone);
+  const ownClose = own === 0 ? 0 : forkClose(route.meters, ZONE_M, SPLIT_LEAD);
+  return Math.max(ownClose, previousChoice(route).close);
 }
 
 /** Кромки асфальта в точке s, уже со схлопыванием чужой ленты. Без сдвига оси. */
@@ -1124,11 +1127,10 @@ function applyLaneConfig(dominant, playerS) {
     }
     if (G.remapTrafficLanes) G.remapTrafficLanes(cfg);
   }
-  // Кромка в тех же логических метрах, что и laneOffset. Если полосы
-  // сжаты, чтобы влезть в закреплённую ширину, порог шире половины полотна.
-  const scale = laneDisplayScaleAtS(playerS);
-  const visualHalf = Math.max(0, roadWidthAtS(playerS) * 0.5 - 0.7);
-  G.ROAD_EDGE = Math.max(2.2, visualHalf / Math.max(scale, 0.05));
+  const limits = logicalRoadLimits(roadEdgesAt(playerS), laneDisplayScaleAtS(playerS), forkSpreadAtS(playerS));
+  G.roadEdgeMin = limits.min;
+  G.roadEdgeMax = limits.max;
+  G.ROAD_EDGE = Math.max(Math.abs(limits.min), limits.max);
 }
 
 function updateScenery() {
@@ -1549,9 +1551,7 @@ export function initBiomeWorld() {
           const s = slot.s + entry.ds;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
-          const half = G.roadWidthAtS(s) * 0.5;
-          const fork = Math.abs(G.splitLateralShiftAtS(s, side));
-          const lat = Math.max(entry.lat, half + fork + 8);
+          const lat = Math.max(entry.lat, Math.abs(roadOuterLat(s, side)) + 8);
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;
