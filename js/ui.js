@@ -631,13 +631,11 @@ export function initUi() {
     }
     for (let i = 0; i < G.rampsPool.length; i++) {
       const r = G.rampsPool[i];
-      // Рампа ставится на попутную полосу текущего биома: у горного их
-      // одна, у МКАД — четыре. Индексы 2/3 для двухполосной дороги
-      // выходили за массив смещений.
-      const laneIdx = G.randomRunLane();
-      r.laneIdx = laneIdx;
-      r.lateralOffset = G.LANE_OFFSETS[laneIdx];
+      // Попутная полоса берётся в точке рампы, а не у байка.
       r.s = G.findSafeRampS(150 + i * 280);
+      const laneIdx = G.randomRunLane(r.s);
+      r.laneIdx = laneIdx;
+      r.lateralOffset = G.lanesAtS(r.s).offsets[laneIdx];
       r.triggeredThisPass = false;
     }
     for (let i = 0; i < G.pedestrians.length; i++) {

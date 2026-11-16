@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { readLanes } from './engine/lanes.js';
 import { playerHalfWidth } from './engine/motion.js';
 import { G } from './state.js';
 
@@ -199,13 +198,23 @@ export function initRepair() {
     return biome ? biome.id : '';
   }
 
+  function biomeIdAt(s) {
+    const biome = G.BIOMES[G.dominantBiomeAtS(s)];
+    return biome ? biome.id : '';
+  }
+
   function allowedHere() {
     return G.REPAIR_ALLOWED_BIOMES.includes(biomeId());
+  }
+
+  function allowedAt(s) {
+    return G.REPAIR_ALLOWED_BIOMES.includes(biomeIdAt(s));
   }
 
   function siteBlocked(s) {
     const split = G.splitAmountAtS;
     if (split && (split(s) > 0.05 || split(s - 100) > 0.05 || split(s + 100) > 0.05)) return true;
+    if (!allowedAt(s)) return true;
     for (const ms of G.megaStructures || []) {
       if (ms.visible && Math.abs(ms.userData.s - s) < 80) return true;
     }
@@ -224,18 +233,18 @@ export function initRepair() {
   function spawnRepair() {
     if (G.repairEvent.active || !allowedHere()) return false;
     if (G.jumpState && G.jumpState.airborne) return false;
-    const lanes = readLanes(G);
-    const laneIdx = G.randomRunLane();
-    const length = 6 + Math.random() * 4;
     let s = G.playerS + 200;
     for (let attempt = 0; attempt < 6 && siteBlocked(s); attempt++) s += 90;
     if (siteBlocked(s)) return false;
+    const cfg = G.lanesAtS(s);
+    const laneIdx = G.randomRunLane(s);
+    const length = 6 + Math.random() * 4;
     const slot = G.repairPool.find((item) => !item.active);
     if (!slot) return false;
     slot.active = true;
     slot.s = s;
     slot.laneIdx = laneIdx;
-    slot.lateralOffset = lanes.offsets[laneIdx];
+    slot.lateralOffset = cfg.offsets[laneIdx];
     slot.length = length;
     slot.group.visible = true;
     slot.group.scale.set(1, 1, length / 8);
@@ -245,7 +254,7 @@ export function initRepair() {
       laneIdx,
       length,
       laneOffset: slot.lateralOffset,
-      biome: biomeId()
+      biome: biomeIdAt(s)
     };
     if (G.pushFeed) G.pushFeed('ВПЕРЕДИ РЕМОНТ ДОРОГИ', 'combo', 1, 'center');
     return true;

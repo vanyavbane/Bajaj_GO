@@ -286,8 +286,9 @@ export interface GameState {
   biomeProfile: (biomeId: number | string, s: number) => any;
   getLaneConfig: (biomeId: number | string) => any;
   getBiomeChoices: (currentBiome: number, visitCounts: number[]) => number[];
-  randomRunLane: () => number;
-  remapTrafficLanes: (cfg: any) => void;
+  randomRunLane: (s?: number) => number;
+  lanesAtS: (s?: number) => { count: number; oncomingCount: number; offsets: number[]; speeds: number[] };
+  remapTrafficLanes: (cfg?: any) => void;
   currentBiome: number;
   visitCounts: number[];
   pendingBiome: number | null;

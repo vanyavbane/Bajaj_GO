@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { readLanes } from './engine/lanes.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -175,8 +174,8 @@ export function initStructures() {
 
   for (let i = 0; i < 3; i++) {
     const r = createVoxelRampMesh();
-    const laneIdx = G.randomRunLane();
     const safeS = findSafeRampS(155 + i * 285);
+    const laneIdx = G.randomRunLane(safeS);
     G.scene.add(r.group);
     G.rampsPool.push({
       mesh: r.group,
@@ -185,23 +184,22 @@ export function initStructures() {
       height: r.height,
       s: safeS,
       laneIdx,
-      lateralOffset: G.LANE_OFFSETS[laneIdx],
+      lateralOffset: G.lanesAtS(safeS).offsets[laneIdx],
       triggeredThisPass: false
     });
   }
 
   function recycleRamps() {
     for (const ramp of G.rampsPool) {
-      const lanes = readLanes(G);
       if (ramp.s < G.playerS - 32) {
         let maxRampS = G.playerS;
         for (const other of G.rampsPool) if (other.s > maxRampS) maxRampS = other.s;
         const nextInterval = 240 + Math.random() * 200;
-        ramp.laneIdx = G.randomRunLane();
-        ramp.lateralOffset = lanes.offsets[ramp.laneIdx];
         ramp.s = findSafeRampS(maxRampS + nextInterval);
-        // На развилке трамплин не ставим — уводим за слияние.
-        if (G.splitAmountAtS && G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
+        if (G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
+        const cfg = G.lanesAtS(ramp.s);
+        ramp.laneIdx = G.randomRunLane(ramp.s);
+        ramp.lateralOffset = cfg.offsets[ramp.laneIdx];
         ramp.triggeredThisPass = false;
       }
       // Смещение полосы не меняем, пока трамплин впереди: смена числа полос

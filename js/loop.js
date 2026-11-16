@@ -1,4 +1,3 @@
-import { readLanes } from './engine/lanes.js';
 import { forkSide } from './engine/fork.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
@@ -74,8 +73,8 @@ export function initLoop() {
   function advanceMenuDemo(dt, now) {
     const forwardMeters = worldMeters(78, dt);
     G.playerS += forwardMeters;
-    const demoLanes = readLanes(G);
-    const demoTarget = demoLanes.offsets[demoLanes.oncoming];
+    const demoLanes = G.lanesAtS(G.playerS);
+    const demoTarget = demoLanes.offsets[demoLanes.oncomingCount];
     G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
     spinOwnWheels(forwardMeters);

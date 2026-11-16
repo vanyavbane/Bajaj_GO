@@ -1072,9 +1072,17 @@ function updateScenery() {
   G.updateBiomeScenery();
 }
 
-/** Случайная попутная полоса текущего биома (для трафика, рамп и старта). */
-function randomRunLane() {
-  const cfg = LANE_CONFIG[biomeIndex(G.biomeDominant != null ? G.biomeDominant : G.currentBiome)];
+/** Полосы биома в точке s. Без s — биом, в котором сейчас байк. */
+function lanesAtS(s) {
+  const idx = Number.isFinite(s)
+    ? dominantBiomeAtS(s)
+    : biomeIndex(G.biomeDominant != null ? G.biomeDominant : G.currentBiome);
+  return LANE_CONFIG[biomeIndex(idx)];
+}
+
+/** Случайная попутная полоса биома в точке s. */
+function randomRunLane(s) {
+  const cfg = lanesAtS(s);
   const same = Math.max(1, cfg.count - cfg.oncomingCount);
   return cfg.oncomingCount + Math.floor(Math.random() * same);
 }
@@ -1399,6 +1407,7 @@ export function initBiome() {
   G.updateBiome = updateBiome;
   G.resetBiomeRun = resetBiomeRun;
   G.randomRunLane = randomRunLane;
+  G.lanesAtS = lanesAtS;
   G.persistBiome = persistBiome;
   G.biomeMenuMarkup = biomeMenuMarkup;
   G.biomePauseValue = biomePauseValue;
