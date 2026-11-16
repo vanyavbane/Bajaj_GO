@@ -14,8 +14,8 @@ import { G } from './state.js';
 
 const ZONE_M = 1500;              // длина одной локации
 const FADE_M = 150;              // кросс-фейд после границы зоны, метров
-const SPLIT_LEAD = 60;           // центр развилки до конца зоны
-const SPLIT_ISLAND_W = 6.4;      // ширина островка развилки
+const SPLIT_LEAD = 120;          // центр развилки до конца зоны, метров
+const FORK_SPREAD = 26;          // на сколько метров каждая ветка уходит вбок в точке выбора
 const SPLIT_AUTO_D = 30;         // авто-выбор после центра развилки
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
 const STORAGE_KEY = 'bajajGO_biomeKm';
@@ -34,6 +34,7 @@ const BIOMES = [
     short: 'Город', accent: 0x4fc3f7,
     lanes: 4, oncoming: 2, laneWidth: 4.75,
     speeds: [40, 60, 70, 55],
+    sceneryScale: 1,
     traffic: {
       count: 18,
       pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck']
@@ -45,6 +46,7 @@ const BIOMES = [
     short: 'Поля', accent: 0xffb300,
     lanes: 4, oncoming: 2, laneWidth: 4.75,
     speeds: [40, 55, 65, 55],
+    sceneryScale: 1,
     traffic: {
       count: 12,
       pref: ['gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck', 'bus', 'sedan', 'taxi', 'crossover', 'suv', 'hatchback', 'qute_traffic']
@@ -56,6 +58,7 @@ const BIOMES = [
     short: 'Лес', accent: 0x66bb6a,
     lanes: 4, oncoming: 2, laneWidth: 4.75,
     speeds: [35, 50, 60, 50],
+    sceneryScale: 1,
     traffic: {
       count: 9,
       pref: ['sedan', 'hatchback', 'crossover', 'suv', 'taxi', 'qute_traffic', 'bus', 'gazelle_van', 'gazelle_flatbed', 'kamaz', 'truck']
@@ -67,6 +70,7 @@ const BIOMES = [
     short: 'Горы', accent: 0xb0bec5,
     lanes: 2, oncoming: 1, laneWidth: 4.6,
     speeds: [40, 55],
+    sceneryScale: 2.15,
     traffic: {
       count: 10,
       pref: ['truck', 'kamaz', 'gazelle_flatbed', 'gazelle_van', 'bus', 'suv', 'crossover', 'sedan', 'hatchback', 'taxi', 'qute_traffic']
@@ -78,6 +82,7 @@ const BIOMES = [
     short: 'МКАД', accent: 0xff7043,
     lanes: 8, oncoming: 4, laneWidth: 4.3,
     speeds: [50, 65, 75, 85, 85, 75, 65, 55],
+    sceneryScale: 1.45,
     traffic: {
       // Плотность вдвое выше города: 36 машин против 18.
       count: 36,
@@ -90,14 +95,22 @@ const CITY = BIOMES.findIndex((biome) => biome.id === 'city');
 const MKAD = BIOMES.findIndex((biome) => biome.id === 'mkad');
 if (CITY < 0 || MKAD < 0) throw new Error('В BIOMES нет city или mkad');
 
-/* Разрешённые переходы: из каждого биома всегда два разных направления. */
-const TRANSITIONS = [
-  [3, 4], // city → mountain / mkad
-  [0, 2], // field → city / forest
-  [1, 3], // forest → field / mountain
-  [0, 2], // mountain → city / forest
-  [0, 1]  // mkad → city / field
-];
+const TRANSITION_IDS = {
+  city: ['mountain', 'mkad'],
+  field: ['city', 'forest'],
+  forest: ['field', 'mountain'],
+  mountain: ['city', 'forest'],
+  mkad: ['city', 'field']
+};
+const TRANSITIONS = BIOMES.map((biome) => {
+  const next = TRANSITION_IDS[biome.id];
+  if (!next || next.length !== 2) throw new Error(`Нет двух переходов из биома ${biome.id}`);
+  return next.map((id) => {
+    const index = BIOMES.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error(`Переход ${biome.id} → ${id} указывает на неизвестный биом`);
+    return index;
+  });
+});
 
 /* -------------------------------------------------------------------------
  * Профили дороги. Производные аналитические, чтобы не было шума и NaN.
@@ -419,6 +432,13 @@ let blendT2 = 0;
 let blendZone = 0;
 let blendLocal = 0;
 let blendMeters = 0;
+let roadA = 0;
+let roadB = 0;
+let roadT = 1;
+let roadT1 = 0;
+let roadT2 = 0;
+/** Зона → биом, чьим профилем уже нарисована видимая дорога. Пока зона далеко, запись обновляется. */
+const roadLock = Object.create(null);
 
 function smooth01(v) {
   const t = Math.max(0, Math.min(1, v));
@@ -452,67 +472,99 @@ function fillBlend(meters) {
   blendT2 = t2;
 }
 
+/** Профиль дороги не должен прыгать, когда выбор ветки меняет ещё не закреплённую зону. */
+function roadZoneIndex(zone) {
+  const z = Math.max(0, zone);
+  const live = zoneBiomeAt(z);
+  const start = z * ZONE_M;
+  const playerM = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0)
+    + (Number.isFinite(G.playerS) ? G.playerS : 0);
+  if (start > playerM + 340) return live;
+  if (roadLock[z] == null) roadLock[z] = live;
+  return roadLock[z];
+}
+
+function fillRoad(meters) {
+  const m = Number.isFinite(meters) ? Math.max(0, meters) : 0;
+  const zone = Math.floor(m / ZONE_M);
+  const local = m - zone * ZONE_M;
+  let t = 1;
+  let t1 = 0;
+  let t2 = 0;
+  if (zone > 0 && local < FADE_M) {
+    const u = Math.max(0, Math.min(1, local / FADE_M));
+    t = u * u * (3 - 2 * u);
+    t1 = (6 * u * (1 - u)) / FADE_M;
+    t2 = (6 - 12 * u) / (FADE_M * FADE_M);
+  }
+  roadA = roadZoneIndex(zone - 1);
+  roadB = roadZoneIndex(zone);
+  roadT = t;
+  roadT1 = t1;
+  roadT2 = t2;
+}
+
 /* -------------------------------------------------------------------------
  * Публичные функции профиля. Их читают road.js, разметка, камера и трафик.
  * ---------------------------------------------------------------------- */
 function biomeRoadX(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.x(s);
   const pb = b.x(s);
-  return pa + blendT * (pb - pa);
+  return pa + roadT * (pb - pa);
 }
 
 function biomeRoadDX(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.x(s);
   const pb = b.x(s);
-  return a.dx(s) + blendT1 * (pb - pa) + blendT * (b.dx(s) - a.dx(s));
+  return a.dx(s) + roadT1 * (pb - pa) + roadT * (b.dx(s) - a.dx(s));
 }
 
 function biomeRoadDDX(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.x(s);
   const pb = b.x(s);
   return a.ddx(s)
-    + blendT2 * (pb - pa)
-    + 2 * blendT1 * (b.dx(s) - a.dx(s))
-    + blendT * (b.ddx(s) - a.ddx(s));
+    + roadT2 * (pb - pa)
+    + 2 * roadT1 * (b.dx(s) - a.dx(s))
+    + roadT * (b.ddx(s) - a.ddx(s));
 }
 
 function biomeRoadY(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.y(s);
   const pb = b.y(s);
-  return pa + blendT * (pb - pa);
+  return pa + roadT * (pb - pa);
 }
 
 function biomeRoadDY(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.y(s);
   const pb = b.y(s);
-  return a.dy(s) + blendT1 * (pb - pa) + blendT * (b.dy(s) - a.dy(s));
+  return a.dy(s) + roadT1 * (pb - pa) + roadT * (b.dy(s) - a.dy(s));
 }
 
 function biomeRoadDDY(s) {
-  fillBlend(blendMetersAt(s));
-  const a = PROFILES[blendA];
-  const b = PROFILES[blendB];
+  fillRoad(blendMetersAt(s));
+  const a = PROFILES[roadA];
+  const b = PROFILES[roadB];
   const pa = a.y(s);
   const pb = b.y(s);
   return a.ddy(s)
-    + blendT2 * (pb - pa)
-    + 2 * blendT1 * (b.dy(s) - a.dy(s))
-    + blendT * (b.ddy(s) - a.ddy(s));
+    + roadT2 * (pb - pa)
+    + 2 * roadT1 * (b.dy(s) - a.dy(s))
+    + roadT * (b.ddy(s) - a.ddy(s));
 }
 
 /* ---------- Ширина дороги и развилка ---------- */
@@ -528,16 +580,33 @@ function splitAmountAtMeters(meters) {
 }
 
 function baseRoadWidthAtMeters(meters) {
-  fillBlend(meters);
-  const wa = LANE_CONFIG[blendA].width;
-  const wb = LANE_CONFIG[blendB].width;
-  return wa + (wb - wa) * blendT;
+  fillRoad(meters);
+  const wa = LANE_CONFIG[roadA].width;
+  const wb = LANE_CONFIG[roadB].width;
+  return wa + (wb - wa) * roadT;
 }
 
-/** Полная ширина полотна в точке s (с расширением под развилку). */
+/**
+ * На сколько метров ветка ушла в сторону от оси.
+ * На концах развилки ноль и нулевая производная, в центре — FORK_SPREAD.
+ */
+function forkSpreadAtMeters(meters) {
+  const m = Number.isFinite(meters) ? meters : 0;
+  const zone = Math.floor(m / ZONE_M);
+  const splitM = (zone + 1) * ZONE_M - SPLIT_LEAD;
+  const d = m - splitM;
+  if (d <= -SPLIT_LEAD || d >= SPLIT_LEAD) return 0;
+  const u = 1 - Math.abs(d) / SPLIT_LEAD;
+  return FORK_SPREAD * smooth01(u);
+}
+
+function forkSpreadAtS(s) {
+  return forkSpreadAtMeters(blendMetersAt(s));
+}
+
+/** Ширина одной ветки. Зазор между ветками сюда не входит: его рисует полотно отдельно. */
 function roadWidthAtS(s) {
-  const meters = blendMetersAt(s);
-  return baseRoadWidthAtMeters(meters) + SPLIT_ISLAND_W * splitAmountAtMeters(meters);
+  return baseRoadWidthAtMeters(blendMetersAt(s));
 }
 
 function splitAmountAtS(s) {
@@ -565,10 +634,10 @@ function laneDisplayScaleAtS(s) {
 }
 
 function splitLateralShiftAtS(s, lateralOffset) {
-  const amount = splitAmountAtS(s);
-  if (amount <= 0.001) return 0;
+  const spread = forkSpreadAtS(s);
+  if (spread <= 0.001) return 0;
   const side = lateralOffset < 0 ? -1 : 1;
-  return side * (SPLIT_ISLAND_W * 0.5) * amount;
+  return side * spread;
 }
 
 /** Логическое смещение полосы → позиция на дороге с учётом ширины и развилки. */
@@ -1195,6 +1264,13 @@ function updateBiome(dt) {
   // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
   // увидеть решение сразу, а не следующим кадром.
   const chosen = chosenZones.has(zone);
+  // Пока следующая зона ещё не попала в кадр, её профиль едет за той стороной,
+  // где байк. После закрепления геометрия больше не перескакивает.
+  if (!chosen && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD) {
+    zoneBiomes[zone + 1] = choices[previewSide];
+  }
+  const forkAhead = splitM - meters;
+  G.forkView = forkAhead < 340 && forkAhead > -90 ? 1 : 0;
 
   G.biomeState = {
     meters,
@@ -1367,6 +1443,7 @@ export function initBiome() {
   G.mkadWeightAtS = mkadWeightAtS;
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
+  G.forkSpreadAtS = forkSpreadAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;
@@ -1378,6 +1455,7 @@ export function initBiome() {
   G.biomeProfile = biomeProfile;
   G.getLaneConfig = getLaneConfig;
   G.getBiomeChoices = getBiomeChoices;
+  G.forkView = 0;
   G.biomeState = null;
   G.biomeTransition = { active: false, from: 0, to: 0, t: 0 };
   G.splitState = null;
@@ -1472,25 +1550,23 @@ export function initBiomeWorld() {
     G.biomeScenery.push(slot);
   }
 
-  // Горы выше остальных декораций, высотки МКАД — крупнее городских.
-  const BIOME_SCENERY_SCALE = [1, 1, 1, 2.15, 1.45];
-
   G.updateBiomeScenery = () => {
     for (const slot of G.biomeScenery) {
-      slot.s = keepInWindow(slot.s, G.playerS, 42, Infinity, SCENERY_SPAN);
+      slot.s = keepInWindow(slot.s, G.playerS, 90, Infinity, SCENERY_SPAN);
       const w = G.biomeWeightsAtS(slot.s);
-      const w1 = w[1], w2 = w[2], w3 = w[3], w4 = w[4];
       for (const side of [-1, 1]) {
         const list = side < 0 ? slot.left : slot.right;
         for (const entry of list) {
-          const bw = entry.biome === 1 ? w1
-            : (entry.biome === 2 ? w2 : (entry.biome === 3 ? w3 : w4));
-          const visible = bw > 0.02;
+          const bw = w[entry.biome] || 0;
+          const visible = bw > 0.12;
           entry.group.visible = visible;
           if (!visible) continue;
           const s = slot.s + entry.ds;
-          const scale = 0.02 + 0.98 * bw;
-          entry.group.scale.setScalar(scale * BIOME_SCENERY_SCALE[entry.biome]);
+          const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
+          entry.group.scale.setScalar(sceneryScale);
+          const half = (G.roadWidthAtS ? G.roadWidthAtS(s) : 19) * 0.5;
+          const fork = Math.abs(G.splitLateralShiftAtS ? G.splitLateralShiftAtS(s, side) : 0);
+          const lat = Math.max(entry.lat, half + fork + 8);
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;
@@ -1499,8 +1575,8 @@ export function initBiomeWorld() {
           G.placeOnRoad(
             entry.group,
             s,
-            side * entry.lat,
-            groundOffset(entry.lat),
+            side * lat,
+            groundOffset(lat),
             entry.yaw
           );
         }

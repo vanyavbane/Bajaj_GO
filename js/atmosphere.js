@@ -225,7 +225,8 @@ export function initAtmosphere() {
     G.skyDomeMat.uniforms.midColor.value.copy(_skyMid);
     G.skyDomeMat.uniforms.botColor.value.copy(_skyBot);
     G.scene.fog.color.copy(_fogCol);
-    G.scene.fog.density = FOG_BASE * _biomeFogMul * (1 + 0.85 * wc);
+    const fork = G.forkView ? 0.62 : 1;
+    G.scene.fog.density = FOG_BASE * _biomeFogMul * (1 + 0.85 * wc) * fork;
 
     _cloudBase.copy(pA.cloud).lerp(pB.cloud, t);
     _stormCol.copy(pA.storm).lerp(pB.storm, t);

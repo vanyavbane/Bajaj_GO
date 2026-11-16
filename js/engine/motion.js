@@ -75,14 +75,25 @@ export function stepSteer(body, dt, now, spec) {
   return { laneOffset, lateralVelocity, steerVisual, slipDriftVel, wobbleTimer, scraped: false };
 }
 
-/** null, если байк не на трамплине. launch — нос уже на гребне. */
-export function rampUnderBike(playerS, lane, ramp) {
+/** null, если байк не на трамплине. launch — нос дошёл до гребня или пересёк его за кадр. */
+export function rampUnderBike(playerS, prevS, lane, ramp) {
   const halfL = ramp.length * 0.5;
-  const dS = playerS - ramp.s;
   const dLat = Math.abs(lane - ramp.lateralOffset);
-  if (dLat >= ramp.width * 0.5 + 0.35 || dS < -halfL || dS > halfL) return null;
-  const progress = clamp((dS + halfL) / ramp.length, 0, 1);
-  return { progress, height: progress * ramp.height, launch: progress >= 0.78 };
+  if (dLat >= ramp.width * 0.5 + 0.35) return null;
+  const from = Math.min(prevS, playerS);
+  const to = Math.max(prevS, playerS);
+  const start = ramp.s - halfL;
+  const end = ramp.s + halfL;
+  if (to < start || from > end) return null;
+  const along = clamp(playerS - ramp.s, -halfL, halfL);
+  const progress = (along + halfL) / ramp.length;
+  const launchAt = start + ramp.length * 0.78;
+  const onDeck = playerS >= start && playerS <= end;
+  return {
+    progress: onDeck ? progress : 1,
+    height: (onDeck ? progress : 1) * ramp.height,
+    launch: to >= launchAt && from <= end
+  };
 }
 
 export function jumpLaunchVy(speed, massFactor) {

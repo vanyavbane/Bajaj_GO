@@ -14,6 +14,7 @@ export function initCamera() {
    * ========================================================================= */
   G.camPosSmooth = new THREE.Vector3(0, 3.1, 6.4);
   G.camLookSmooth = new THREE.Vector3(0, 1.2, -32);
+  G.runIntro = 0;
 
   // Профили камеры от первого лица: отдельно для каждого мотоцикла.
   // { ns125: { fov: 75, height: 0 }, ... }
@@ -422,6 +423,11 @@ export function initCamera() {
     // Крен в поворотах: читаем кривизну профиля дороги, в горах усиливаем.
     // Сглаживание ~6/с убирает дрожь и не даёт камере прыгать на стыках биомов.
     const driving = G.started && !G.ended;
+    if (driving && G.runIntro > 0) G.runIntro = Math.max(0, G.runIntro - dt / 0.95);
+    const intro = driving ? clamp(G.runIntro || 0, 0, 1) : 0;
+    if (G.renderer && G.graphics) {
+      G.renderer.toneMappingExposure = G.graphics.exposure * (1 - 0.55 * intro);
+    }
     let targetRoll = 0;
     if (driving) {
       const wts = G.biomeWeightsAtS(G.playerS);
@@ -466,10 +472,10 @@ export function initCamera() {
       const isMenuView = !G.started && !G.ended;
       const speedPullback = clamp(G.speed / 220, 0, 1.35);
       const jumpPullback = G.jumpState.airborne ? clamp(G.jumpState.height * 0.55, 0, 2.2) : 0;
-      const distBehind = isMenuView ? 6.6 : (6.1 + speedPullback + jumpPullback);
-      const heightAboveRoad = isMenuView
+      const distBehind = (isMenuView ? 6.6 : (6.1 + speedPullback + jumpPullback)) + intro * 2.6;
+      const heightAboveRoad = (isMenuView
         ? 3.35
-        : (3.05 + G.jumpState.height * 0.72 + clamp(G.speed / 320, 0, 0.45));
+        : (3.05 + G.jumpState.height * 0.72 + clamp(G.speed / 320, 0, 0.45))) + intro * 1.15;
 
       const camS = G.playerS - distBehind;
       const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);

@@ -82,6 +82,17 @@ export function initRoadSurface() {
   }
 
   const roadMesh = makeRibbon(1, G.M.road);
+  const roadRightMat = G.M.road.clone();
+  roadRightMat.polygonOffset = true;
+  roadRightMat.polygonOffsetFactor = 1;
+  roadRightMat.polygonOffsetUnits = 1;
+  const roadRightMesh = makeRibbon(1, roadRightMat);
+  const gapMat = G.M.grass.clone();
+  gapMat.polygonOffset = true;
+  gapMat.polygonOffsetFactor = 1;
+  gapMat.polygonOffsetUnits = 1;
+  const forkGapMesh = makeRibbon(1, gapMat);
+  forkGapMesh.receiveShadow = true;
   const sidewalkLeftMesh = makeRibbon(3.2, G.M.sidewalk);
   const sidewalkRightMesh = makeRibbon(3.2, G.M.sidewalk);
   const curbLeftMesh = makeRibbon(0.35, G.M.curbWhite);
@@ -150,9 +161,15 @@ export function initRoadSurface() {
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
       };
       const sh = G.shoulder;
-      write(0, -sh.far, -sh.berm, sh.farY, sh.bermY);
-      write(1, -sh.far, -sh.lip, sh.farY, sh.lipY);
-      write(2, -sh.berm, -sh.lip, sh.bermY, sh.lipY);
+      const half = sampleHalf[r];
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const cityOuter = (0.35 + 3.2) * sampleCity[r];
+      const lipLat = half + spread + cityOuter;
+      const bermLat = Math.max(sh.berm, lipLat + 1.5);
+      const farLat = Math.max(sh.far, bermLat + (sh.far - sh.berm));
+      write(0, -farLat, -bermLat, sh.farY, sh.bermY);
+      write(1, -farLat, -lipLat, sh.farY, sh.lipY);
+      write(2, -bermLat, -lipLat, sh.bermY, sh.lipY);
     }
     geo.attributes.normal.needsUpdate = true;
   }
@@ -166,7 +183,11 @@ export function initRoadSurface() {
   dashMesh.receiveShadow = false;
   G.scene.add(dashMesh);
 
-  /* Бетонный отбойник по оси МКАД: короткие блоки вместо сплошной ленты. */
+  /* Бетонный отбойник по оси МКАД. Сплошной участок 90 м, проезд 10 м.
+     Сетка привязана к абсолютным метрам, поэтому проезд не съезжает. */
+  const BARRIER_PERIOD = 100;
+  const BARRIER_GAP = 10;
+  const BARRIER_HALF_W = 0.31;
   const MAX_BLOCKS = 96;
   const blockGeo = new THREE.BoxGeometry(0.62, 0.92, 3.6);
   const blockMesh = new THREE.InstancedMesh(blockGeo, G.M.concrete, MAX_BLOCKS);
@@ -213,6 +234,20 @@ export function initRoadSurface() {
     dashMesh.instanceMatrix.needsUpdate = true;
   }
 
+  function barrierGapAt(s) {
+    const meters = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0) + s;
+    const local = ((meters % BARRIER_PERIOD) + BARRIER_PERIOD) % BARRIER_PERIOD;
+    return local >= BARRIER_PERIOD - BARRIER_GAP;
+  }
+
+  G.medianBlocksBike = (s, worldLat, halfPlayer) => {
+    const weight = G.mkadWeightAtS ? G.mkadWeightAtS(s) : 0;
+    const split = G.splitAmountAtS ? G.splitAmountAtS(s) : 0;
+    if (weight < 0.55 || split > 0.05 || barrierGapAt(s)) return 0;
+    const reach = BARRIER_HALF_W + halfPlayer;
+    return Math.abs(worldLat) < reach ? reach : 0;
+  };
+
   function updateBarrier(playerS, dense) {
     const spacing = 4.2;
     const startS = Math.floor((playerS - 20) / spacing) * spacing;
@@ -223,7 +258,7 @@ export function initRoadSurface() {
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       const weight = G.mkadWeightAtS ? G.mkadWeightAtS(s) : 0;
       const split = G.splitAmountAtS ? G.splitAmountAtS(s) : 0;
-      const vis = weight > 0.08 && split < 0.05 ? weight : 0;
+      const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) ? weight : 0;
       if (vis <= 0.02) continue;
       dummy.scale.set(1, vis, 1);
       G.placeOnRoad(dummy, s, 0, 0.46 * vis);
@@ -236,17 +271,37 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Ленты с переменной шириной ---------------- */
-  function updateRoadRibbon(mesh) {
-    const pos = mesh.geometry.attributes.position;
+  function updateRoadRibbon() {
+    roadRightMat.envMapIntensity = G.M.road.envMapIntensity;
+    gapMat.color.copy(G.M.grass.color);
+    const posL = roadMesh.geometry.attributes.position;
+    const posR = roadRightMesh.geometry.attributes.position;
+    const posG = forkGapMesh.geometry.attributes.position;
+    let opened = 0;
     for (let r = 0; r < ROW; r++) {
       const half = sampleHalf[r];
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      if (spread > opened) opened = spread;
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
-      pos.setXYZ(idx, cx - rx * half, cy, cz - rz * half);
-      pos.setXYZ(idx + 1, cx + rx * half, cy, cz + rz * half);
+      // Половины встречаются на оси без ступеньки. Разъезд разводит их в стороны.
+      posL.setXYZ(idx, cx - rx * (half + spread), cy, cz - rz * (half + spread));
+      posL.setXYZ(idx + 1, cx - rx * spread, cy, cz - rz * spread);
+      posR.setXYZ(idx, cx + rx * spread, cy, cz + rz * spread);
+      posR.setXYZ(idx + 1, cx + rx * (half + spread), cy, cz + rz * (half + spread));
+      if (spread > 0.4) {
+        posG.setXYZ(idx, cx - rx * spread, cy, cz - rz * spread);
+        posG.setXYZ(idx + 1, cx + rx * spread, cy, cz + rz * spread);
+      } else {
+        posG.setXYZ(idx, cx, cy, cz);
+        posG.setXYZ(idx + 1, cx, cy, cz);
+      }
     }
-    pos.needsUpdate = true;
+    posL.needsUpdate = true;
+    posR.needsUpdate = true;
+    posG.needsUpdate = true;
+    forkGapMesh.visible = opened > 0.4;
   }
 
   /** Лента, у которой центр и ширина в мировых метрах зависят от точки s. */
@@ -272,7 +327,8 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const half = sampleHalf[r];
-      const inner = half + baseWidth * cw;
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const inner = half + spread + baseWidth * cw;
       const halfW = width * 0.5 * cw;
       const center = side * (inner + halfW);
       const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
@@ -292,18 +348,20 @@ export function initRoadSurface() {
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const half = sampleHalf[r];
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
       const cityOuter = (0.35 + 3.2) * sampleCity[r];
-      const l2 = -(half + cityOuter);
-      const r0 = half + cityOuter;
-      const idx = r * 3;
       const sh = G.shoulder;
-      posL.setXYZ(idx,     cx + rx * -sh.far, cy + sh.farY, cz + rz * -sh.far);
-      posL.setXYZ(idx + 1, cx + rx * -sh.berm, cy + sh.bermY, cz + rz * -sh.berm);
-      posL.setXYZ(idx + 2, cx + rx * l2, cy + sh.lipY, cz + rz * l2);
+      const lipLat = half + spread + cityOuter;
+      const bermLat = Math.max(sh.berm, lipLat + 1.5);
+      const farLat = Math.max(sh.far, bermLat + (sh.far - sh.berm));
+      const idx = r * 3;
+      posL.setXYZ(idx,     cx + rx * -farLat, cy + sh.farY, cz + rz * -farLat);
+      posL.setXYZ(idx + 1, cx + rx * -bermLat, cy + sh.bermY, cz + rz * -bermLat);
+      posL.setXYZ(idx + 2, cx + rx * -lipLat, cy + sh.lipY, cz + rz * -lipLat);
 
-      posR.setXYZ(idx,     cx + rx * r0, cy + sh.lipY, cz + rz * r0);
-      posR.setXYZ(idx + 1, cx + rx * sh.berm, cy + sh.bermY, cz + rz * sh.berm);
-      posR.setXYZ(idx + 2, cx + rx * sh.far, cy + sh.farY, cz + rz * sh.far);
+      posR.setXYZ(idx,     cx + rx * lipLat, cy + sh.lipY, cz + rz * lipLat);
+      posR.setXYZ(idx + 1, cx + rx * bermLat, cy + sh.bermY, cz + rz * bermLat);
+      posR.setXYZ(idx + 2, cx + rx * farLat, cy + sh.farY, cz + rz * farLat);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -417,8 +475,8 @@ export function initRoadSurface() {
   /** Цветная линия вдоль кромки островка (своя 49-рядная геометрия). */
   function updateIslandStrip(mesh, side) {
     const splitS = splitCenterS(G.playerS);
-    const from = splitS - 70;
-    const span = 140;
+    const from = splitS - 120;
+    const span = 240;
     const halfW = 0.13;
     const pos = mesh.geometry.attributes.position;
     for (let r = 0; r < ISLAND_ROWS; r++) {
@@ -427,7 +485,7 @@ export function initRoadSurface() {
       const lh = Math.hypot(dx, 1) || 1;
       const rx = 1 / lh;
       const rz = dx / lh;
-      const lat = side * (islandHalfAt(s) + 0.34);
+      const lat = side * Math.max(0.2, islandHalfAt(s) - 0.45);
       const cx = G.roadX(s), cy = G.roadY(s) + 0.09, cz = -s;
       const idx = r * 2;
       pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));
@@ -440,7 +498,7 @@ export function initRoadSurface() {
     const splitS = splitCenterS(playerS);
     const amount = G.splitAmountAtS ? G.splitAmountAtS(splitS) : 0;
     const active = amount > 0.01;
-    islandMesh.visible = active;
+    islandMesh.visible = false;
     signGroup.visible = active;
 
     const choices = G.splitState && G.splitState.choices ? G.splitState.choices : null;
@@ -453,26 +511,8 @@ export function initRoadSurface() {
     arrowRightA.material.color.setHex(rightBiome ? rightBiome.accent : 0xff7043);
     arrowRightB.material.color.copy(arrowRightA.material.color);
 
-    const from = splitS - 70;
-    const to = splitS + 70;
-    const pos = islandMesh.geometry.attributes.position;
-    for (let r = 0; r < ISLAND_ROWS; r++) {
-      const s = from + (to - from) * (r / (ISLAND_ROWS - 1));
-      const dx = G.roadDX(s);
-      const lh = Math.hypot(dx, 1) || 1;
-      const rx = 1 / lh;
-      const rz = dx / lh;
-      const half = islandHalfAt(s);
-      const cx = G.roadX(s), cy = G.roadY(s) + 0.075, cz = -s;
-      const idx = r * 2;
-      pos.setXYZ(idx, cx - rx * half, cy, cz - rz * half);
-      pos.setXYZ(idx + 1, cx + rx * half, cy, cz + rz * half);
-    }
-    pos.needsUpdate = true;
-    islandMesh.geometry.computeVertexNormals();
-    islandMesh.geometry.computeBoundingSphere();
-
-    // Цветные линии вдоль кромок островка.
+    // Серый островок выключен: зазор между ветками рисует травяная лента.
+    // Цветные линии вдоль внутренней кромки каждой ветки.
     accentLineL.visible = active;
     accentLineR.visible = active;
     if (active) {
@@ -483,7 +523,11 @@ export function initRoadSurface() {
     // Стрелки: по две на ветку до развилки. Боковое смещение считается от
     // ширины в точке стрелки, иначе на узкой горной дороге они уезжают за
     // кромку (ширина развилки там заметно больше обычной).
-    const hintLatAt = (s) => Math.max(1.9, Math.min(widthAt(s) * 0.32, widthAt(s) * 0.5 - 0.9));
+    const hintLatAt = (s) => {
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
+      const half = widthAt(s) * 0.5;
+      return spread + Math.max(1.6, Math.min(half * 0.45, half - 0.8));
+    };
     const arrows = [
       { mesh: arrowLeftA, s: splitS - 95, side: -1 },
       { mesh: arrowLeftB, s: splitS - 48, side: -1 },
@@ -511,6 +555,7 @@ export function initRoadSurface() {
 
   function shareRoadNormals() {
     shadeStrip(roadMesh.geometry);
+    shadeStrip(roadRightMesh.geometry);
     const from = roadMesh.geometry.attributes.normal.array;
     for (const mesh of flatStrips) {
       mesh.geometry.attributes.normal.array.set(from);
@@ -520,7 +565,7 @@ export function initRoadSurface() {
 
   function updateRoadSurface(playerS) {
     sampleCenterline(playerS);
-    updateRoadRibbon(roadMesh);
+    updateRoadRibbon();
 
     // Тротуары и бордюры существуют только в городе.
     updateCityStrip(curbLeftMesh, -1, 0.0, 0.35, 0.12);
@@ -531,8 +576,14 @@ export function initRoadSurface() {
     // Осевая разметка уходит на кромки островка во время развилки.
     updateLateralStrip(centerDoubleLine1, (r) => toWorld(sampleS[r], -0.22), 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, (r) => toWorld(sampleS[r], 0.22), 0.13, 0.08);
-    updateLateralStrip(edgeLineLeft, (r) => -(sampleHalf[r] - 0.32), 0.16, 0.025);
-    updateLateralStrip(edgeLineRight, (r) => sampleHalf[r] - 0.32, 0.16, 0.025);
+    updateLateralStrip(edgeLineLeft, (r) => {
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      return -(sampleHalf[r] + spread - 0.32);
+    }, 0.16, 0.025);
+    updateLateralStrip(edgeLineRight, (r) => {
+      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      return sampleHalf[r] + spread - 0.32;
+    }, 0.16, 0.025);
 
     shareRoadNormals();
     updateSlopeRibbons();

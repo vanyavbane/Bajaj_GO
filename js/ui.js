@@ -650,7 +650,18 @@ export function initUi() {
     }
 
     G.prepareRunEconomy();
+    if (G.resetRepair) G.resetRepair();
 
+    // Меню гаснет под вуалью, экспозиция и камера догоняют уже в заезде.
+    G.runIntro = 1;
+    const veil = $('run-veil');
+    if (veil) {
+      veil.style.transition = 'none';
+      veil.style.opacity = '1';
+      void veil.offsetWidth;
+      veil.style.transition = '';
+      veil.style.opacity = '0';
+    }
     $('overlay').style.display = 'none';
     $('hud').hidden = false;
     $('controls').hidden = G.controlMode === 'tilt';
@@ -674,6 +685,7 @@ export function initUi() {
     if (G.ended) return;
     G.ended = true;
     G.started = false;
+    G.runIntro = 0;
     G.currentScreen = 'crash';
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();

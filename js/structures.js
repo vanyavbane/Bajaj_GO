@@ -193,12 +193,6 @@ export function initStructures() {
   function recycleRamps() {
     for (const ramp of G.rampsPool) {
       const lanes = readLanes(G);
-      const validLane = ramp.laneIdx >= lanes.oncoming && ramp.laneIdx < lanes.count;
-      if (!validLane) {
-        ramp.laneIdx = G.randomRunLane();
-        ramp.lateralOffset = lanes.offsets[ramp.laneIdx];
-        ramp.placedS = NaN;
-      }
       if (ramp.s < G.playerS - 32) {
         let maxRampS = G.playerS;
         for (const other of G.rampsPool) if (other.s > maxRampS) maxRampS = other.s;
@@ -209,14 +203,13 @@ export function initStructures() {
         // На развилке трамплин не ставим — уводим за слияние.
         if (G.splitAmountAtS && G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
         ramp.triggeredThisPass = false;
-        ramp.placedS = NaN;
       }
-      ramp.placedS = placeIfMoved(ramp.placedS, ramp.s, () => {
-        const lat = G.laneWorldOffsetAtS
-          ? G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset)
-          : ramp.lateralOffset;
-        G.placeOnRoad(ramp.mesh, ramp.s, lat, 0);
-      });
+      // Смещение полосы не меняем, пока трамплин впереди: смена числа полос
+      // не должна переносить его на другую полосу в кадре.
+      const lat = G.laneWorldOffsetAtS
+        ? G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset)
+        : ramp.lateralOffset;
+      G.placeOnRoad(ramp.mesh, ramp.s, lat, 0);
     }
   }
   G.recycleRamps = recycleRamps;

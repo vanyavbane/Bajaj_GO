@@ -173,6 +173,33 @@ export function initTraffic() {
     }
   };
 
+  function holdForRepair(car, oncoming) {
+    const ev = G.repairEvent;
+    if (!ev || !ev.active || oncoming || car.changingLane || car.laneIdx !== ev.laneIdx) return;
+    if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
+    let rank = 0;
+    for (const other of G.trafficPool) {
+      if (other !== car && other.active && other.laneIdx === ev.laneIdx && other.s > car.s && other.s < ev.s) rank++;
+    }
+    const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
+    if (car.s > stop) {
+      car.s = stop;
+      car.speedKmh = 0;
+    } else if (car.s > stop - 14) {
+      car.speedKmh = Math.min(car.speedKmh, 14);
+    }
+    if (G.playerS > ev.s + ev.length && car.speedKmh < 2) {
+      const lanesNow = readLanes(G);
+      const last = lanesNow.count - 1;
+      const alt = car.laneIdx < last ? car.laneIdx + 1 : Math.max(lanesNow.oncomingCount, car.laneIdx - 1);
+      if (alt !== car.laneIdx && alt >= lanesNow.oncomingCount) {
+        car.changingLane = true;
+        car.targetLaneIdx = alt;
+        car.speedKmh = 22;
+      }
+    }
+  }
+
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
     const menuDemo = !G.started && !G.ended;
@@ -224,6 +251,15 @@ export function initTraffic() {
       const recycle = trafficRecycle(car.s, G.playerS);
       if (recycle) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
 
+      const choosing = !!(G.splitState && G.splitState.active);
+      if (choosing && car.active && car.s > G.playerS - 20 && car.s < G.playerS + 180) {
+        // На развилке полоса выбора должна быть пустой: машины уводятся вперёд.
+        car.s = G.playerS + 240 + Math.random() * 70;
+      }
+
+      const oncoming = isOncomingLane(car.laneIdx, oncomingCount());
+      holdForRepair(car, oncoming);
+
       // Ширина полотна и островок развилки сжимают полосы: все смещения
       // переводим в мировые метры от оси дороги.
       const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
@@ -233,9 +269,11 @@ export function initTraffic() {
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;
 
-      const oncoming = isOncomingLane(car.laneIdx, oncomingCount());
       const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
       G.placeOnRoad(car.model.root, car.s, carWorldLat, 0, vehicleYaw);
+      car.model.root.visible = !choosing;
+
+      if (choosing) continue;
 
       // Машины, выбывшие из биома, доезжают и скрываются вдали.
       if (car.retiring && Math.abs(car.s - G.playerS) > 150) {

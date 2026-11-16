@@ -444,6 +444,11 @@ button{font-family:var(--ds-font)}
   display:flex;align-items:center;justify-content:center;
   padding:16px;
 }
+#run-veil{
+  position:fixed;inset:0;z-index:20;pointer-events:none;
+  background:#070b14;opacity:0;
+  transition:opacity .85s ease;
+}
 
 /* ---------- Полоска биома в меню и паузе ---------- */
 .ds-biome{margin-top:8px;max-width:100%}

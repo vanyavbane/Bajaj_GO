@@ -1,5 +1,5 @@
 import { readLanes } from './engine/lanes.js';
-import { jumpLaunchVy, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
+import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
 import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
 import { G } from './state.js';
@@ -153,6 +153,7 @@ export function initLoop() {
     G.quteSteeringWheelPivot.rotation.z = -G.steerVisual * 0.88;
 
     const forwardMeters = worldMeters(G.speed, dt);
+    const prevS = G.playerS;
     G.playerS += forwardMeters;
     G.distance += (G.speed * dt) / 3600;
 
@@ -161,9 +162,18 @@ export function initLoop() {
     G.tickOrder(dt);
 
     // 4. ФИЗИКА ТРАМПЛИНОВ И ПРЫЖКОВ
+    const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
     let surfaceRampHeight = 0;
     for (const ramp of G.rampsPool) {
-      const contact = !G.jumpState.airborne && rampUnderBike(G.playerS, G.laneOffset, ramp);
+      const bikeLat = toWorld(G.playerS, G.laneOffset);
+      const rampLat = toWorld(ramp.s, ramp.lateralOffset);
+      const contact = !G.jumpState.airborne && rampUnderBike(G.playerS, prevS, bikeLat, {
+        s: ramp.s,
+        length: ramp.length,
+        width: ramp.width,
+        height: ramp.height,
+        lateralOffset: rampLat
+      });
       if (contact) {
         surfaceRampHeight = contact.height;
 
@@ -185,6 +195,8 @@ export function initLoop() {
         }
       }
     }
+
+    stopAtMedian(prevS, playerHalfWidth(effStats.isQute));
 
     if (G.jumpState.airborne) {
       const air = stepJump(G.jumpState, dt, G.keys.gas, G.keys.brake);
@@ -225,6 +237,26 @@ export function initLoop() {
     }
 
     spinOwnWheels(forwardMeters);
+  }
+
+  function stopAtMedian(prevS, halfPlayer) {
+    if (!G.medianBlocksBike || G.jumpState.airborne) return;
+    const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+    let reach = 0;
+    for (let i = 0; i <= 4; i++) {
+      const s = prevS + (G.playerS - prevS) * (i / 4);
+      const hit = G.medianBlocksBike(s, toWorld(s, G.laneOffset), halfPlayer);
+      if (hit) {
+        reach = hit;
+        break;
+      }
+    }
+    if (!reach) return;
+    G.speed = 0;
+    G.lateralVelocity = 0;
+    const scale = G.laneDisplayScaleAtS ? G.laneDisplayScaleAtS(G.playerS) : 1;
+    const sign = G.laneOffset < 0 ? -1 : 1;
+    G.laneOffset = sign * (reach + 0.12) / (Math.abs(scale) < 0.2 ? 1 : scale);
   }
 
   function placePlayer(isQute) {
@@ -303,6 +335,7 @@ export function initLoop() {
     G.updateRoadSurface(G.playerS);
     const isNightish = G.updateAtmosphereAndTimeOfDay(dt, G.playerS);
     G.recycleRamps();
+    if (G.updateRepair) G.updateRepair(dt, now);
     G.tickJumpParticles(dt);
     G.updateRoadside(isNightish);
     if (G.updateAdManager) G.updateAdManager(dt);

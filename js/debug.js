@@ -95,6 +95,15 @@ export function initDebug() {
         visits: Array.isArray(G.visitCounts) ? G.visitCounts.slice() : null,
         pending: G.pendingBiome
       },
+      repair: G.repairEvent ? {
+        active: !!G.repairEvent.active,
+        s: round(G.repairEvent.s, 1),
+        laneIdx: G.repairEvent.laneIdx,
+        length: round(G.repairEvent.length, 1),
+        biome: G.repairEvent.biome || '',
+        progress: round(G.repairProgress, 1),
+        next: round(G.repairNextS, 1)
+      } : null,
       split: G.splitState ? {
         active: !!G.splitState.active,
         zone: G.splitState.zone,

@@ -493,6 +493,7 @@ export function initEconomy() {
   }
 
   const exitPool = [];
+  G.exitPool = exitPool;
   const deliveryMarker = new THREE.Group();
 
   function createExitObject() {
