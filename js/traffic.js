@@ -11,7 +11,6 @@ export function initTraffic() {
    * автобус. Тяжёлые машины гарантированно есть в каждом биоме, даже если
    * предпочтения биома заняли все слоты.
    * ========================================================================= */
-  const QUTE_TRAFFIC_LANE = 3;
   const QUTE_TRAFFIC_SPEED = 50;
   const HEAVY_TYPES = new Set(['kamaz', 'truck', 'bus']);
   G.trafficPool = [];
@@ -27,14 +26,39 @@ export function initTraffic() {
     'kamaz', 'truck', 'bus',
     'qute_traffic', 'qute_traffic'
   ];
-  const POOL_SIZE = 20;
+  // МКАД — 36 машин (вдвое плотнее города), поэтому пул рассчитан на 8 полос.
+  const POOL_SIZE = 36;
+
+  function laneCount() {
+    return Math.max(2, G.laneCount || 4);
+  }
+
+  function oncomingCount() {
+    return Math.max(0, Math.min(laneCount() - 1, G.oncomingCount || 2));
+  }
+
+  function runLaneIndices() {
+    const first = oncomingCount();
+    const list = [];
+    for (let i = first; i < laneCount(); i++) list.push(i);
+    return list;
+  }
+
+  function randomLaneIndex() {
+    return Math.floor(Math.random() * laneCount());
+  }
+
+  function quteLaneIndex() {
+    const run = runLaneIndices();
+    return run[Math.min(run.length - 1, Math.max(0, run.length - 2))];
+  }
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const vType = vehicleTypes[i % vehicleTypes.length];
     const model = createVehicleModel(vType, vehicleColors[i % vehicleColors.length], i);
     G.scene.add(model.root);
 
-    G.trafficPool.push(parkedTraffic(model, trafficLane(vType, i % 4), 35 + i * 26));
+    G.trafficPool.push(parkedTraffic(model, trafficLane(vType, i % laneCount()), 35 + i * 26));
   }
 
   const heavyIndices = [];
@@ -45,7 +69,7 @@ export function initTraffic() {
   /* Какие машины пула работают в каждом биоме. Сначала идут предпочтительные
    * типы (грузовики в полях, легковые в лесу), затем остальные — до лимита. */
   const activeMask = [];
-  for (let b = 0; b < 4; b++) {
+  for (let b = 0; b < G.BIOMES.length; b++) {
     const traffic = G.BIOMES[b].traffic;
     const order = [];
     for (let i = 0; i < POOL_SIZE; i++) order.push(i);
@@ -73,17 +97,27 @@ export function initTraffic() {
   }
 
   function trafficLane(type, fallbackLane) {
-    return type === 'qute_traffic' ? QUTE_TRAFFIC_LANE : fallbackLane;
+    return type === 'qute_traffic' ? quteLaneIndex() : fallbackLane;
+  }
+
+  function clampedLane(idx) {
+    return Math.max(0, Math.min(laneCount() - 1, Math.round(Number(idx) || 0)));
+  }
+
+  function laneSpeed(idx) {
+    const speeds = G.LANE_SPEEDS || [];
+    return speeds[Math.max(0, Math.min(speeds.length - 1, idx))] || 55;
   }
 
   function parkedTraffic(model, laneIdx, s) {
+    const idx = clampedLane(laneIdx);
     return {
       model,
-      laneIdx,
-      targetLaneIdx: laneIdx,
-      lateralOffset: G.LANE_OFFSETS[laneIdx],
+      laneIdx: idx,
+      targetLaneIdx: idx,
+      lateralOffset: G.LANE_OFFSETS[idx],
       s,
-      speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : G.LANE_SPEEDS[laneIdx],
+      speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : laneSpeed(idx),
       changingLane: false,
       flashReactTimer: 0,
       steerAngle: 0,
@@ -97,7 +131,7 @@ export function initTraffic() {
   function resetTrafficVehicle(car, newS, forcedLane = null) {
     const laneIdx = trafficLane(
       car.model.type,
-      forcedLane !== null ? forcedLane : Math.floor(Math.random() * 4)
+      forcedLane !== null ? forcedLane : randomLaneIndex()
     );
     Object.assign(car, parkedTraffic(car.model, laneIdx, newS));
     car.model.alertSprite.visible = false;
@@ -107,6 +141,33 @@ export function initTraffic() {
     car.model.root.visible = true;
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
+
+  /** Смена числа полос: машины переезжают на валидные индексы без телепорта. */
+  G.remapTrafficLanes = (cfg) => {
+    if (!cfg || !Array.isArray(cfg.offsets)) return;
+    for (const car of G.trafficPool) {
+      let idx = car.laneIdx;
+      if (car.model.type === 'qute_traffic') {
+        idx = Math.max(cfg.oncomingCount, cfg.count - 2);
+      }
+      if (idx >= cfg.count) {
+        idx = cfg.oncomingCount + Math.floor(Math.random() * Math.max(1, cfg.count - cfg.oncomingCount));
+      }
+      idx = Math.max(0, Math.min(cfg.count - 1, idx));
+      const target = cfg.offsets[idx];
+      const jump = Math.abs((car.lateralOffset || 0) - target);
+      if (jump > 1.2 && Math.abs(car.s - G.playerS) < 130) {
+        // Близкую машину уводим вперёд: иначе она «прыгнет» поперёк дороги в кадре.
+        car.s = G.playerS + 170 + Math.random() * 110;
+      }
+      car.laneIdx = idx;
+      car.targetLaneIdx = idx;
+      car.lateralOffset = target;
+      car.changingLane = false;
+      car.steerAngle = 0;
+      car.speedKmh = car.model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : laneSpeed(idx);
+    }
+  };
 
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
@@ -129,11 +190,11 @@ export function initTraffic() {
       // Плавно подтягиваем скорость к лимиту текущего биома.
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
-        : G.LANE_SPEEDS[car.laneIdx];
+        : laneSpeed(car.laneIdx);
       car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
 
       const wasFlashing = car.flashReactTimer > 0;
-      const step = stepTrafficCar(car, dt, G.LANE_OFFSETS);
+      const step = stepTrafficCar(car, dt, G.LANE_OFFSETS, G.oncomingCount || 2);
       car.s = step.s;
       car.lateralOffset = step.lateralOffset;
       car.steerAngle = step.steerAngle;
@@ -158,12 +219,18 @@ export function initTraffic() {
       const recycle = trafficRecycle(car.s, G.playerS);
       if (recycle) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
 
-      const nudge = menuTrafficNudge(car.s, car.lateralOffset, G.playerS, G.laneOffset, menuDemo);
+      // Ширина полотна и островок развилки сжимают полосы: все смещения
+      // переводим в мировые метры от оси дороги.
+      const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+      const carWorldLat = toWorld(car.s, car.lateralOffset);
+      const playerWorldLat = toWorld(G.playerS, G.laneOffset);
+
+      const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;
 
-      const oncoming = isOncomingLane(car.laneIdx);
+      const oncoming = isOncomingLane(car.laneIdx, G.oncomingCount || 2);
       const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
-      G.placeOnRoad(car.model.root, car.s, car.lateralOffset, 0, vehicleYaw);
+      G.placeOnRoad(car.model.root, car.s, carWorldLat, 0, vehicleYaw);
 
       // Машины, выбывшие из биома, доезжают и скрываются вдали.
       if (car.retiring && Math.abs(car.s - G.playerS) > 150) {
@@ -192,7 +259,7 @@ export function initTraffic() {
         oncoming,
         alreadyJumped: car.jumpedInCurrentJump,
         dS: Math.abs(car.s - G.playerS),
-        dLat: Math.abs(car.lateralOffset - G.laneOffset),
+        dLat: Math.abs(carWorldLat - playerWorldLat),
         halfLength: car.model.halfLength,
         halfWidth: car.model.halfWidth,
         playerHalfW,
@@ -204,7 +271,7 @@ export function initTraffic() {
         car.jumpedInCurrentJump = true;
         G.jumpState.carsJumped++;
         const cCount = G.jumpState.carsJumped;
-        const side = car.lateralOffset < G.laneOffset ? 'left' : 'right';
+        const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.spawnOverflyParticles(car.model.root.position);
         G.pushFeed(`ПЕРЕЛЁТ ×${cCount}`, 'overfly', cCount, side);
         if (cCount >= 3) G.triggerSlowMo();
@@ -216,7 +283,7 @@ export function initTraffic() {
         G.comboTimer = COMBO_WINDOW;
         const pts = nearMissPoints(G.comboCount, G.laneOffset);
         G.score += pts;
-        const side = car.lateralOffset < G.laneOffset ? 'left' : 'right';
+        const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);
       }
     }

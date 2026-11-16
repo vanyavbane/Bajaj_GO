@@ -104,6 +104,68 @@ button{font-family:var(--ds-font)}
   white-space:normal;word-break:break-word;
 }
 
+/* Индикатор текущего биома в блоке экономики */
+#biome-chip{
+  display:flex;align-items:center;gap:6px;
+  margin:0 0 7px;padding-bottom:6px;
+  border-bottom:1px solid var(--bf-line);
+  font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--chip-accent,var(--bf-accent));
+}
+#biome-chip .chip-ico{font-size:14px;line-height:1}
+#biome-chip .chip-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* Выбор пути на развилке: ~260 м до split и до слияния веток */
+#split-banner{
+  position:absolute;top:64px;left:50%;transform:translate(-50%,-8px);
+  display:flex;flex-direction:column;gap:5px;
+  min-width:min(360px,calc(100vw - 24px));max-width:min(460px,92vw);
+  padding:7px 10px 8px;
+  border:1px solid var(--bf-line);border-left:2px solid var(--bf-accent);
+  border-radius:2px;background:rgba(10,14,20,.86);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  opacity:0;transition:opacity .2s ease,transform .2s ease;
+  pointer-events:none;z-index:5;
+}
+#split-banner[hidden]{display:none}
+#split-banner:not([hidden]){opacity:1;transform:translate(-50%,0)}
+#split-banner.decided{border-left-color:var(--bf-signal)}
+#split-banner .split-head{
+  font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--bf-accent);
+}
+#split-banner.decided .split-head{color:var(--bf-signal)}
+#split-banner .split-row{
+  display:grid;grid-template-columns:1fr 1fr;gap:7px;
+}
+#split-banner .split-opt{
+  display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:6px;
+  padding:5px 8px;border:1px solid rgba(120,160,190,.28);border-radius:2px;
+  background:rgba(18,26,36,.7);
+  transition:border-color .15s ease,background .15s ease;
+}
+#split-banner .split-opt.left{border-left:2px solid var(--opt-accent,var(--bf-accent))}
+#split-banner .split-opt.right{border-right:2px solid var(--opt-accent,var(--bf-accent))}
+#split-banner .split-opt.active{
+  border-color:var(--opt-accent,var(--bf-accent));
+  background:rgba(255,255,255,.08);
+}
+#split-banner .split-key{
+  font:700 9px/1.2 var(--bf-mono);letter-spacing:.02em;color:var(--bf-text-mute);
+}
+#split-banner .split-ico{font-size:16px;line-height:1}
+#split-banner .split-name{
+  min-width:0;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--bf-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#split-banner .split-hint{
+  font:600 9px/1.4 var(--bf-mono);letter-spacing:.02em;
+  color:var(--bf-text-mute);text-align:center;
+}
+
 /* ---------- Экономика в HUD ---------- */
 #eco-hud{
   position:absolute;left:20px;bottom:20px;width:218px;
@@ -691,6 +753,17 @@ button{font-family:var(--ds-font)}
   #biome-banner .biome-ico{font-size:18px}
   #biome-banner .biome-name{font-size:12px;letter-spacing:.08em}
   #biome-banner .biome-sub{font-size:9px;letter-spacing:.04em;white-space:normal;word-break:break-word}
+  #split-banner{
+    position:static;transform:none;width:100%;min-width:0;max-width:100%;
+    padding:5px 8px 6px;gap:4px;flex:0 0 auto;order:1;
+  }
+  #split-banner:not([hidden]){transform:none}
+  #split-banner .split-row{gap:5px}
+  #split-banner .split-opt{padding:4px 6px;gap:4px}
+  #split-banner .split-ico{font-size:14px}
+  #split-banner .split-name{font-size:10px;letter-spacing:.05em}
+  #split-banner .split-hint{font-size:8px}
+  #split-banner .split-head{font-size:8px;letter-spacing:.14em}
   #exit-hint{
     position:static;transform:none;
     max-width:100%;width:100%;
@@ -820,8 +893,13 @@ button{font-family:var(--ds-font)}
 @media (max-width: 680px) and (orientation: landscape) {
   #hud #hud-feedzone{top:52px;left:8px;right:8px;bottom:196px;max-height:none}
   #event-feed{margin-top:0;max-height:none}
-  /* Два широких баннера не помещаются над левой колонкой — оставляем ленту */
+  /* Два широких баннера не помещаются над левой колонкой — оставляем ленту.
+     Выбор пути критичен для управления, поэтому его оставляем компактным. */
   #biome-banner,#exit-hint{display:none!important}
+  #split-banner{padding:4px 8px 5px;gap:3px}
+  #split-banner .split-hint{display:none}
+  #split-banner .split-opt{padding:3px 6px}
+  #split-banner .split-ico{font-size:13px}
   #hint{display:none}
   #tp-hud{bottom:10px}
   #eco-hud{bottom:106px}

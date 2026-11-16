@@ -456,8 +456,12 @@ export function initCamera() {
         G.camera.updateProjectionMatrix();
       }
 
-      const roadYaw = -Math.atan(G.roadDX(G.playerS));
-      const cosY = Math.cos(-roadYaw), sinY = Math.sin(-roadYaw);
+      const rightAt = (s) => {
+        const dx = G.roadDX(s);
+        const lh = Math.hypot(dx, 1) || 1;
+        return [1 / lh, dx / lh];
+      };
+      const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
 
       const isMenuView = !G.started && !G.ended;
       const speedPullback = clamp(G.speed / 220, 0, 1.35);
@@ -468,11 +472,12 @@ export function initCamera() {
         : (3.05 + G.jumpState.height * 0.72 + clamp(G.speed / 320, 0, 0.45));
 
       const camS = G.playerS - distBehind;
-      const camLat = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
-      const camYaw = -Math.atan(G.roadDX(camS));
+      const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
+      const camLat = toWorld(camS, camLatLogical);
+      const [camRx, camRz] = rightAt(camS);
       const minSafeY = G.roadY(camS) + 1.85;
-      const targetCamX = G.roadX(camS) + Math.cos(camYaw) * camLat;
-      const targetCamZ = -camS + Math.sin(camYaw) * camLat;
+      const targetCamX = G.roadX(camS) + camRx * camLat;
+      const targetCamZ = -camS + camRz * camLat;
       const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
 
       const followRate = Math.min(1, dt * 11.5);
@@ -486,9 +491,11 @@ export function initCamera() {
       G.camera.position.copy(G.camPosSmooth);
 
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
-      const lookLat = isMenuView ? 0.5 : (G.laneOffset * 0.55);
-      const targetLookX = G.roadX(lookAheadS) + cosY * lookLat;
-      const targetLookZ = -lookAheadS + sinY * lookLat;
+      const lookLatLogical = isMenuView ? 0.5 : (G.laneOffset * 0.55);
+      const lookLat = toWorld(lookAheadS, lookLatLogical);
+      const [lookRx, lookRz] = rightAt(lookAheadS);
+      const targetLookX = G.roadX(lookAheadS) + lookRx * lookLat;
+      const targetLookZ = -lookAheadS + lookRz * lookLat;
       const targetLookY = G.roadY(lookAheadS) + 1.25 + G.jumpState.height * 0.25;
 
       G.camLookSmooth.x = lerp(G.camLookSmooth.x, targetLookX, Math.min(1, dt * 13));

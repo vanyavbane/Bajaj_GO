@@ -85,6 +85,26 @@ export function initDebug() {
       },
       bikePosition: vec(G.bikeRoot && G.bikeRoot.position),
       graphics: G.graphics || null,
+      biome: {
+        current: G.currentBiome,
+        dominant: G.biomeDominant,
+        zone: G.biomeState ? G.biomeState.zone : null,
+        meters: round(G.biomeState ? G.biomeState.meters : null),
+        roadWidth: round(G.roadWidthAtS ? G.roadWidthAtS(G.playerS) : null),
+        transition: G.biomeTransition || null,
+        visits: Array.isArray(G.visitCounts) ? G.visitCounts.slice() : null,
+        pending: G.pendingBiome
+      },
+      split: G.splitState ? {
+        active: !!G.splitState.active,
+        zone: G.splitState.zone,
+        s: round(G.splitState.s, 1),
+        d: round(G.splitState.d, 1),
+        side: G.splitState.side,
+        chosen: !!G.splitState.chosen,
+        chosenSide: G.splitState.chosenSide,
+        choices: Array.isArray(G.splitState.choices) ? G.splitState.choices.slice() : null
+      } : null,
       render: info ? {
         calls: info.render.calls,
         triangles: info.render.triangles,

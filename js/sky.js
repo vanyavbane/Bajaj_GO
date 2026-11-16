@@ -139,7 +139,9 @@ export function initSky() {
     G.stormClouds.push(cg);
   }
 
-  G.MAX_ACTIVE_LAMPS = 4;
+  // Пул фонарей рассчитан на МКАД: шесть ближайших источников, вне его
+  // бюджет урезается настройками графики до 4.
+  G.MAX_ACTIVE_LAMPS = 6;
   G.lampLights = [];
   for (let i = 0; i < G.MAX_ACTIVE_LAMPS; i++) {
     const pl = new THREE.PointLight(0xffb74d, 0, 28, 1.7);

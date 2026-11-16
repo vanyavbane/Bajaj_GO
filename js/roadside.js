@@ -5,6 +5,10 @@ import { G } from './state.js';
 export function initRoadside() {
   /* =========================================================================
    * 6. БИЛБОРДЫ, ЗДАНИЯ И ПРИДОРОЖНЫЕ СЛОТЫ
+   * -------------------------------------------------------------------------
+   * Инфраструктура (отбойники, фонари, здания, порталы) принадлежит городу и
+   * МКАД. Ширина полос у них разная, поэтому все позиции считаются от
+   * фактической кромки roadWidthAtS(), а не от старых фиксированных метров.
    * ========================================================================= */
   const billboardTextures = [];
   function buildBillboardTextures() {
@@ -131,16 +135,18 @@ export function initRoadside() {
       biomeSignTexture('ГОРНЫЙ СЕРПАНТИН', 'ПЕРЕВАЛ · СМОТРОВАЯ ПЛОЩАДКА'),
       biomeSignTexture('ПЕРЕВАЛ', 'ВНИМАНИЕ · КРУТЫЕ ПОВОРОТЫ'),
       biomeSignTexture('СМОТРОВАЯ ПЛОЩАДКА', 'ОСТАНОВКА · ОТДЫХ · ВИД')
-    ]
+    ],
+    overheadSignTextures
   ];
 
-  // Индексы текстур билбордов по биомам: город — весь набор, остальным
-  // достаются только логотип, PULSAR/DOMINAR и заправка.
+  // Индексы текстур билбордов по биомам: город и МКАД — весь набор,
+  // остальным достаются только логотип, PULSAR/DOMINAR и заправка.
   const billboardIndexByBiome = [
     [0, 1, 2, 3, 4, 5, 6, 7, 8],
     [2, 0, 8],
     [2, 0],
-    [1, 2]
+    [1, 2],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8]
   ];
 
   G.NUM_ROADSIDE_SLOTS = 24;
@@ -224,15 +230,21 @@ export function initRoadside() {
     return g;
   }
 
+  /**
+   * Билборд: два столба позади щита. Рекламный блок глубже столбов и выдвинут
+   * вперёд, поэтому столбы не перекрывают картинку.
+   */
   function createBillboardMesh(texIndex, withSpotlights) {
     const g = new THREE.Group();
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 7.5, 8), G.M.metalDark);
-    post.position.y = 3.75;
-    post.castShadow = true;
-    g.add(post);
+    for (const px of [-2.7, 2.7]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 8.0, 8), G.M.metalDark);
+      post.position.set(px, 4.0, -0.55);
+      post.castShadow = true;
+      g.add(post);
+    }
 
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(7.6, 3.1, 0.32), G.M.metalDark);
-    frame.position.set(0, 7.6, 0);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(9.4, 3.7, 0.5), G.M.metalDark);
+    frame.position.set(0, 8.4, -0.15);
     frame.castShadow = true;
     g.add(frame);
 
@@ -241,21 +253,42 @@ export function initRoadside() {
       roughness: 0.4,
       emissive: withSpotlights ? 0x222222 : 0x000000
     });
-    const face = new THREE.Mesh(new THREE.BoxGeometry(7.2, 2.75, 0.36), faceMat);
-    face.position.set(0, 7.6, 0);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(8.9, 3.3, 0.9), faceMat);
+    face.position.set(0, 8.4, 0.28);
     g.add(face);
 
     if (withSpotlights) {
-      for (const sx of [-2.4, 2.4]) {
-        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7), G.M.chrome);
-        bar.position.set(sx, 9.2, 0.35);
+      for (const sx of [-3.0, 3.0]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.85), G.M.chrome);
+        bar.position.set(sx, 10.35, 0.55);
         g.add(bar);
-        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.24), lampHeadMat);
-        lamp.position.set(sx, 9.15, 0.65);
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.28), lampHeadMat);
+        lamp.position.set(sx, 10.3, 0.9);
         g.add(lamp);
       }
     }
     return { group: g, faceMat };
+  }
+
+  function addLampPart(lgrp, side) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 6.2, 8), G.M.metalDark);
+    pole.position.y = 3.1;
+    pole.castShadow = true;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.12), G.M.metalDark);
+    arm.position.set(-side * 0.75, 6.1, 0);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.18, 0.32), lampHeadMat);
+    head.position.set(-side * 1.45, 6.05, 0);
+
+    // МКАД: вторая голова на той же мачте — «двойные мачты» магистрали.
+    const arm2 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 0.1), G.M.metalDark);
+    arm2.position.set(-side * 0.55, 6.55, 0);
+    const head2 = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.3), lampHeadMat);
+    head2.position.set(-side * 1.05, 6.5, 0);
+    arm2.visible = false;
+    head2.visible = false;
+
+    lgrp.add(pole, arm, head, arm2, head2);
+    lgrp.userData.extraHeads = [arm2, head2];
   }
 
   for (let i = 0; i < G.NUM_ROADSIDE_SLOTS; i++) {
@@ -282,14 +315,7 @@ export function initRoadside() {
     }
 
     for (const [side, lgrp] of [[-1, slot.leftLamp], [1, slot.rightLamp]]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 6.2, 8), G.M.metalDark);
-      pole.position.y = 3.1;
-      pole.castShadow = true;
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.12), G.M.metalDark);
-      arm.position.set(-side * 0.75, 6.1, 0);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.18, 0.32), lampHeadMat);
-      head.position.set(-side * 1.45, 6.05, 0);
-      lgrp.add(pole, arm, head);
+      addLampPart(lgrp, side);
       G.scene.add(lgrp);
     }
 
@@ -351,12 +377,15 @@ export function initRoadside() {
     G.roadsideSlots.push(slot);
   }
 
+  const widthAt = (s) => (G.roadWidthAtS ? G.roadWidthAtS(s) : G.ROAD_WIDTH || 19);
+
   /* Доминирующий биом в точке s. Массив весов общий, поэтому забираем только скаляр. */
   function dominantBiomeAt(s) {
+    if (G.dominantBiomeAtS) return G.dominantBiomeAtS(s);
     const w = G.biomeWeightsAtS(s);
     let dom = 0;
     let best = -1;
-    for (let b = 0; b < 4; b++) {
+    for (let b = 0; b < G.BIOMES.length; b++) {
       if (w[b] > best) { best = w[b]; dom = b; }
     }
     return dom;
@@ -368,54 +397,73 @@ export function initRoadside() {
 
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
+      // На стыке биомов меняется ширина полотна — слот переставляется,
+      // чтобы отбойник/фонарь не остались на старой кромке.
+      const dom = dominantBiomeAt(slot.s);
+      if (slot.lastDom !== dom) {
+        slot.lastDom = dom;
+        slot.placedS = NaN;
+      }
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        G.placeOnRoad(slot.leftGuard, slot.s, -10.05, 0);
-        G.placeOnRoad(slot.rightGuard, slot.s, 10.05, 0);
-        G.placeOnRoad(slot.leftLamp, slot.s, -10.3, 0);
-        G.placeOnRoad(slot.rightLamp, slot.s, 10.3, 0);
-        G.placeOnRoad(slot.leftProp, slot.s, -21.5, 0);
-        G.placeOnRoad(slot.rightProp, slot.s, 21.5, 0);
+        const half = widthAt(slot.s) * 0.5;
+        G.placeOnRoad(slot.leftGuard, slot.s, -(half + 0.55), 0);
+        G.placeOnRoad(slot.rightGuard, slot.s, half + 0.55, 0);
+        G.placeOnRoad(slot.leftLamp, slot.s, -(half + 0.8), 0);
+        G.placeOnRoad(slot.rightLamp, slot.s, half + 0.8, 0);
+        G.placeOnRoad(slot.leftProp, slot.s, -(half + 12), 0);
+        G.placeOnRoad(slot.rightProp, slot.s, half + 12, 0);
         if (slot.billboard) {
-          G.placeOnRoad(slot.billboard.group, slot.s + 6, slot.billboard.side * 15.8, 0, slot.billboard.side * -0.22);
+          const bb = slot.billboard;
+          G.placeOnRoad(bb.group, slot.s + 6, bb.side * (half + 4.8), 0, bb.side * -0.18);
         }
-        if (slot.portal) G.placeOnRoad(slot.portal.group, slot.s, 0, 0);
+        if (slot.portal) {
+          G.placeOnRoad(slot.portal.group, slot.s, 0, 0);
+          // Гантри тянется по фактической ширине: на МКАД она вдвое шире.
+          const wf = Math.max(1, widthAt(slot.s) / 19);
+          slot.portal.group.scale.set(wf, 1, 1);
+        }
       });
 
-      // Городская инфраструктура живёт только в городе: вне его отбойники,
-      // фонари и здания сжимаются до нуля и перестают рендериться.
-      const cw = G.cityWeightAtS(slot.s);
-      const cityVisible = cw > 0.02;
-      const cityScale = cityVisible ? cw : 0;
-      slot.leftGuard.visible = cityVisible;
-      slot.rightGuard.visible = cityVisible;
-      slot.leftLamp.visible = cityVisible;
-      slot.rightLamp.visible = cityVisible;
-      slot.leftProp.visible = cityVisible;
-      slot.rightProp.visible = cityVisible;
-      if (cityVisible) {
-        slot.leftGuard.scale.setScalar(cityScale);
-        slot.rightGuard.scale.setScalar(cityScale);
-        slot.leftLamp.scale.setScalar(cityScale);
-        slot.rightLamp.scale.setScalar(cityScale);
-        slot.leftProp.scale.setScalar(cityScale);
-        slot.rightProp.scale.setScalar(cityScale);
+      // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
+      // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.
+      const cw = G.cityWeightAtS ? G.cityWeightAtS(slot.s) : 1;
+      const mw = G.mkadWeightAtS ? G.mkadWeightAtS(slot.s) : 0;
+      const infra = Math.max(cw, mw);
+      const infraVisible = infra > 0.02;
+      const infraScale = infraVisible ? infra : 0;
+      const inCity = cw > 0.5;
+      const inMkad = mw > 0.5;
+      const inMetro = inCity || inMkad;
+
+      for (const grp of [slot.leftGuard, slot.rightGuard, slot.leftLamp, slot.rightLamp, slot.leftProp, slot.rightProp]) {
+        grp.visible = infraVisible;
+      }
+      if (infraVisible) {
+        slot.leftGuard.scale.setScalar(infraScale);
+        slot.rightGuard.scale.setScalar(infraScale);
+        // На МКАД мачты выше и с двумя головами.
+        const lampScale = infraScale * (1 + 0.18 * mw);
+        slot.leftLamp.scale.setScalar(lampScale);
+        slot.rightLamp.scale.setScalar(lampScale);
+        for (const lg of [slot.leftLamp, slot.rightLamp]) {
+          for (const head of lg.userData.extraHeads || []) head.visible = mw > 0.35;
+        }
+        // Небоскрёбы МКАД: те же дома, вытянутые по высоте.
+        slot.leftProp.scale.set(infraScale, infraScale * (1 + 0.75 * mw), infraScale);
+        slot.rightProp.scale.set(infraScale, infraScale * (1 + 0.75 * mw), infraScale);
       }
 
-      // Билборды разрешены везде, но вне города реже, и текст релевантен биому.
-      // В городе два щита на круг (200–280 м друг от друга), по бокам дороги;
-      // текст прокручивается по абсолютному пробегу, поэтому со временем
-      // встречаются все обязательные бренды, а не одна и та же пара.
-      const dom = dominantBiomeAt(slot.s);
+      // Билборды разрешены везде. В городе и на МКАД — раз в 200 м (высокая
+      // плотность), в остальных биомах — один на круг, текст по биому.
       const roadM = G.biomeOffsetM + slot.s;
-      const inCity = cw > 0.5;
       const adVersion = G.AdManager ? G.AdManager.version : 0;
       if (slot.billboard) {
         const bb = slot.billboard;
-        const show = inCity ? (slot.idx === 3 || slot.idx === 17) : slot.idx === 7;
+        const show = inMetro ? slot.idx % 10 === 5 : slot.idx === 7;
         bb.group.visible = show;
         if (show) {
-          const list = billboardIndexByBiome[dom];
-          const rot = Math.floor(roadM / 240) + (inCity && bb.side > 0 ? 1 : 0);
+          const list = billboardIndexByBiome[dom] || billboardIndexByBiome[0];
+          const rot = Math.floor(roadM / 200) + (inMetro && bb.side > 0 ? 1 : 0);
           const texIndex = list[((rot % list.length) + list.length) % list.length];
           if (bb.biome !== dom || bb.texIndex !== texIndex || bb.adVersion !== adVersion) {
             bb.biome = dom;
@@ -442,11 +490,11 @@ export function initRoadside() {
 
       if (slot.portal) {
         const po = slot.portal;
-        const show = inCity ? slot.idx % 6 === 0 : slot.idx === 7;
+        const show = inMetro ? slot.idx % 6 === 0 : slot.idx === 7;
         po.group.visible = show;
         if (show) {
-          const list = biomeSignTextures[dom];
-          const texIndex = inCity
+          const list = biomeSignTextures[dom] || biomeSignTextures[0];
+          const texIndex = inMetro
             ? Math.floor(slot.idx / 6) % list.length
             : Math.floor(roadM / 480) % list.length;
           if (po.biome !== dom || po.texIndex !== texIndex || po.adVersion !== adVersion) {
@@ -470,18 +518,32 @@ export function initRoadside() {
         }
       }
 
-      if (cw > 0.45 && Math.abs(slot.s - G.playerS) < 85) {
-        nearestLampPositions.push(slot.leftLamp.position, slot.rightLamp.position);
+      if (infra > 0.35 && Math.abs(slot.s - G.playerS) < 95) {
+        const lampScale = infraScale * (1 + 0.18 * mw);
+        const headY = 6.05 * lampScale;
+        for (const lg of [slot.leftLamp, slot.rightLamp]) {
+          const p = lg.position;
+          nearestLampPositions.push({
+            x: p.x, y: p.y + headY, z: p.z,
+            d: Math.abs(slot.s - G.playerS)
+          });
+        }
       }
     }
 
-    const lampBudget = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    nearestLampPositions.sort((a, b) => a.d - b.d);
+
+    const setting = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    // Бюджет: 4 источника вне МКАД, до 6 на МКАД, но не больше настройки.
+    const mwNow = G.mkadWeightAtS ? G.mkadWeightAtS(G.playerS) : 0;
+    const cap = mwNow > 0.5 ? 6 : 4;
+    const lampBudget = Math.min(G.MAX_ACTIVE_LAMPS || 6, setting, cap);
     const wetGlow = 1 + 0.55 * (G.weather ? G.weather.wet : 0);
     for (let i = 0; i < G.lampLights.length; i++) {
       const pl = G.lampLights[i];
       if (isNightish && i < lampBudget && i < nearestLampPositions.length) {
         const lp = nearestLampPositions[i];
-        pl.position.set(lp.x, lp.y + 5.8, lp.z);
+        pl.position.set(lp.x, lp.y, lp.z);
         pl.intensity = 14 * wetGlow;
       } else {
         pl.intensity = 0;

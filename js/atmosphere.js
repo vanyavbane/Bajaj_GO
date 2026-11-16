@@ -97,6 +97,13 @@ export function initAtmosphere() {
       bot: new THREE.Color(0xe6f0fa), fog: new THREE.Color(0xd6e3f2),
       cloud: new THREE.Color(0xeaf1fa),
       fogMul: 1.12, cloudY: -22, cloudScale: 1.16
+    },
+    {
+      // МКАД: сухая бетонная дымка, пыльный тёплый горизонт.
+      top: new THREE.Color(0xdfe6ee), mid: new THREE.Color(0xf0e7dc),
+      bot: new THREE.Color(0xf6ece2), fog: new THREE.Color(0xe4ded6),
+      cloud: new THREE.Color(0xf1eae1),
+      fogMul: 1.06, cloudY: -2, cloudScale: 1.08
     }
   ];
 
@@ -112,26 +119,32 @@ export function initAtmosphere() {
 
   function blendBiomeAtmosphere(playerS) {
     const w = G.biomeWeightsAtS(playerS);
-    const w0 = w[0], w1 = w[1], w2 = w[2], w3 = w[3];
-    const a = biomeAtmos[0], b = biomeAtmos[1], c = biomeAtmos[2], d = biomeAtmos[3];
-    _tintTop.setRGB(a.top.r * w0 + b.top.r * w1 + c.top.r * w2 + d.top.r * w3,
-      a.top.g * w0 + b.top.g * w1 + c.top.g * w2 + d.top.g * w3,
-      a.top.b * w0 + b.top.b * w1 + c.top.b * w2 + d.top.b * w3);
-    _tintMid.setRGB(a.mid.r * w0 + b.mid.r * w1 + c.mid.r * w2 + d.mid.r * w3,
-      a.mid.g * w0 + b.mid.g * w1 + c.mid.g * w2 + d.mid.g * w3,
-      a.mid.b * w0 + b.mid.b * w1 + c.mid.b * w2 + d.mid.b * w3);
-    _tintBot.setRGB(a.bot.r * w0 + b.bot.r * w1 + c.bot.r * w2 + d.bot.r * w3,
-      a.bot.g * w0 + b.bot.g * w1 + c.bot.g * w2 + d.bot.g * w3,
-      a.bot.b * w0 + b.bot.b * w1 + c.bot.b * w2 + d.bot.b * w3);
-    _tintFog.setRGB(a.fog.r * w0 + b.fog.r * w1 + c.fog.r * w2 + d.fog.r * w3,
-      a.fog.g * w0 + b.fog.g * w1 + c.fog.g * w2 + d.fog.g * w3,
-      a.fog.b * w0 + b.fog.b * w1 + c.fog.b * w2 + d.fog.b * w3);
-    _tintCloud.setRGB(a.cloud.r * w0 + b.cloud.r * w1 + c.cloud.r * w2 + d.cloud.r * w3,
-      a.cloud.g * w0 + b.cloud.g * w1 + c.cloud.g * w2 + d.cloud.g * w3,
-      a.cloud.b * w0 + b.cloud.b * w1 + c.cloud.b * w2 + d.cloud.b * w3);
-    _biomeFogMul = a.fogMul * w0 + b.fogMul * w1 + c.fogMul * w2 + d.fogMul * w3;
-    _biomeCloudY = a.cloudY * w0 + b.cloudY * w1 + c.cloudY * w2 + d.cloudY * w3;
-    _biomeCloudScale = a.cloudScale * w0 + b.cloudScale * w1 + c.cloudScale * w2 + d.cloudScale * w3;
+    const w1 = w[1] || 0;
+    const mix = (target, key) => {
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < biomeAtmos.length; i++) {
+        const wi = w[i] || 0;
+        if (wi <= 0) continue;
+        const c = biomeAtmos[i][key];
+        r += c.r * wi; g += c.g * wi; b += c.b * wi;
+      }
+      target.setRGB(r, g, b);
+    };
+    mix(_tintTop, 'top');
+    mix(_tintMid, 'mid');
+    mix(_tintBot, 'bot');
+    mix(_tintFog, 'fog');
+    mix(_tintCloud, 'cloud');
+    _biomeFogMul = 0; _biomeCloudY = 0; _biomeCloudScale = 0;
+    for (let i = 0; i < biomeAtmos.length; i++) {
+      const wi = w[i] || 0;
+      if (wi <= 0) continue;
+      _biomeFogMul += biomeAtmos[i].fogMul * wi;
+      _biomeCloudY += biomeAtmos[i].cloudY * wi;
+      _biomeCloudScale += biomeAtmos[i].cloudScale * wi;
+    }
+    if (_biomeFogMul <= 0) _biomeFogMul = 1;
+    if (_biomeCloudScale <= 0) _biomeCloudScale = 1;
     _biomeField = w1;
   }
 

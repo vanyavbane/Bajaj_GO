@@ -600,6 +600,8 @@ export function initEconomy() {
 
   let exitPrevS = null;
 
+  const widthAtS = (s) => (G.roadWidthAtS ? G.roadWidthAtS(s) : G.ROAD_WIDTH || 19);
+
   function syncExitTrack() {
     exitPrevS = G.playerS;
   }
@@ -625,9 +627,20 @@ export function initEconomy() {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
+      // Ширина полотна зависит от биома: съезд всегда остаётся за кромкой.
+      if (e.lastDom !== G.biomeDominant) {
+        e.lastDom = G.biomeDominant;
+        e.placedS = NaN;
+      }
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
-        G.placeOnRoad(e.group, e.s, e.side * 12.6, 0);
-        G.placeOnRoad(e.marker, zoneS, e.side * G.START_LANE, 0.07);
+        G.placeOnRoad(e.group, e.s, e.side * (widthAtS(e.s) * 0.5 + 3.1), 0);
+        const markerLat = e.side * G.START_LANE;
+        G.placeOnRoad(
+          e.marker,
+          zoneS,
+          G.laneWorldOffsetAtS ? G.laneWorldOffsetAtS(zoneS, markerLat) : markerLat,
+          0.07
+        );
       });
 
       // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
@@ -737,7 +750,12 @@ export function initEconomy() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
       deliveryParkS = placeIfMoved(deliveryParkS, activeOrder.targetS, (s) => {
-        G.placeOnRoad(deliveryMarker, s, G.START_LANE, 0);
+        G.placeOnRoad(
+          deliveryMarker,
+          s,
+          G.laneWorldOffsetAtS ? G.laneWorldOffsetAtS(s, G.START_LANE) : G.START_LANE,
+          0
+        );
       });
     } else {
       deliveryMarker.visible = false;
@@ -1145,7 +1163,13 @@ export function initEconomy() {
       G.saveGarage();
       if (pendingAccidentCar) {
         pendingAccidentCar.s = G.playerS + 120;
-        pendingAccidentCar.lateralOffset = G.LANE_OFFSETS[pendingAccidentCar.laneIdx];
+        // Число полос могло измениться на стыке биомов: машину возвращаем
+        // на существующую полосу, а не в undefined.
+        const lanes = G.LANE_OFFSETS ? G.LANE_OFFSETS.length : 1;
+        const idx = Math.max(0, Math.min(lanes - 1, Math.round(Number(pendingAccidentCar.laneIdx) || 0)));
+        pendingAccidentCar.laneIdx = idx;
+        pendingAccidentCar.targetLaneIdx = idx;
+        pendingAccidentCar.lateralOffset = G.LANE_OFFSETS[idx];
         pendingAccidentCar.changingLane = false;
       }
       for (const c of G.trafficPool) {

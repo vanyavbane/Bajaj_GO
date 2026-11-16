@@ -119,8 +119,12 @@ export function overflyOverlap(dS, dLat, halfLength, halfWidth) {
 
 export const ONCOMING_LANES = 2;
 
-export function isOncomingLane(laneIdx) {
-  return laneIdx < ONCOMING_LANES;
+/**
+ * Полоса встречная, если её номер меньше числа встречных полос биома.
+ * У МКАД их четыре (8 полос), у гор — одна.
+ */
+export function isOncomingLane(laneIdx, oncomingCount = ONCOMING_LANES) {
+  return laneIdx < oncomingCount;
 }
 
 export function nearMissOverlap(dS, dLat, halfWidth) {
@@ -145,8 +149,8 @@ export function classifyCarContact(hit) {
 }
 
 /** Шаг чужой машины: ход, перестроение, затухание реакции на свет. Направление берётся до смены полосы. */
-export function stepTrafficCar(car, dt, laneOffsets) {
-  const oncoming = isOncomingLane(car.laneIdx);
+export function stepTrafficCar(car, dt, laneOffsets, oncomingCount = ONCOMING_LANES) {
+  const oncoming = isOncomingLane(car.laneIdx, oncomingCount);
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
   let steerAngle = car.steerAngle;
@@ -196,10 +200,14 @@ export function menuTrafficNudge(carS, carLat, playerS, playerLat, menuDemo) {
 }
 
 /** Полоса, в которую попутная машина уходит от дальнего света. null — не реагирует. */
-export function highbeamYieldLane(car, playerS, playerLane) {
-  if (isOncomingLane(car.laneIdx) || car.changingLane) return null;
+export function highbeamYieldLane(car, playerS, playerLane, oncomingCount = ONCOMING_LANES, laneCount = 4) {
+  if (isOncomingLane(car.laneIdx, oncomingCount) || car.changingLane) return null;
   const distAhead = car.s - playerS;
   if (distAhead < 6 || distAhead > 60) return null;
   if (Math.abs(car.lateralOffset - playerLane) >= 2.9) return null;
-  return car.laneIdx === 2 ? 3 : 2;
+  const first = oncomingCount;
+  const last = Math.max(first, laneCount - 1);
+  if (last <= first) return null;
+  const target = car.laneIdx >= last ? last - 1 : car.laneIdx + 1;
+  return Math.max(first, Math.min(last, target));
 }

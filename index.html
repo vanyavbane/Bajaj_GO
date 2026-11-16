@@ -42,6 +42,24 @@
         <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
       </span>
     </div>
+
+    <!-- ВЫБОР ПУТИ НА РАЗВИЛКЕ -->
+    <div id="split-banner" hidden aria-live="polite">
+      <div class="split-head">ВЫБОР ПУТИ</div>
+      <div class="split-row">
+        <div class="split-opt left">
+          <span class="split-key">A / ←</span>
+          <span class="split-ico">🌲</span>
+          <span class="split-name">Лес</span>
+        </div>
+        <div class="split-opt right">
+          <span class="split-key">D / →</span>
+          <span class="split-ico">🏔️</span>
+          <span class="split-name">Горы</span>
+        </div>
+      </div>
+      <div class="split-hint">A / ← — влево · D / → — вправо</div>
+    </div>
     <div id="exit-hint">
       <span id="exit-hint-ico">🍔</span>
       <span class="exit-copy">
@@ -68,6 +86,10 @@
 
   <!-- ЭКОНОМИКА: ТОПЛИВО, ИЗНОС, БАЛАНС -->
   <div id="eco-hud">
+    <div id="biome-chip" title="Текущая локация">
+      <span class="chip-ico">🏙️</span>
+      <span class="chip-name">Город</span>
+    </div>
     <div class="eco-row"><span>⛽ ТОПЛИВО</span><b id="eco-fuel-val">100%</b></div>
     <div class="eco-bar"><i id="eco-fuel-bar"></i></div>
     <div class="eco-wear">

@@ -72,7 +72,8 @@ export function initLoop() {
   function advanceMenuDemo(dt, now) {
     const forwardMeters = worldMeters(78, dt);
     G.playerS += forwardMeters;
-    G.laneOffset = lerp(G.laneOffset, G.LANE_OFFSETS[2], dt * 2.5);
+    const demoTarget = G.LANE_OFFSETS[G.oncomingCount || 0];
+    G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
     spinOwnWheels(forwardMeters);
   }
@@ -102,6 +103,13 @@ export function initLoop() {
 
     G.accelPitchOffset = lerp(G.accelPitchOffset, clamp((stepped.speed - prevSpeed) / Math.max(dt, 0.001) * 0.0008, -0.04, 0.05), dt * 6);
 
+    // Lane-assist: после развилки мягко возвращает байк в попутную полосу,
+    // не отбирая управление — игрок всё равно может перестроиться.
+    if (G.laneAssistTarget != null && !G.jumpState.airborne) {
+      const assist = G.laneAssistTarget - G.laneOffset;
+      G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
+    }
+
     const steered = stepSteer({
       laneOffset: G.laneOffset,
       lateralVelocity: G.lateralVelocity,
@@ -129,6 +137,15 @@ export function initLoop() {
     G.slipDriftVel = steered.slipDriftVel;
     G.jumpState.wobbleTimer = steered.wobbleTimer;
     if (steered.scraped) G.speed = scrapeSpeed(G.speed, dt);
+
+    // Островок развилки нельзя переехать: до выбора байк мягко выталкивается
+    // на свою половину (при нуле — влево, как и авто-выбор).
+    const splitAmount = G.splitAmountAtS ? G.splitAmountAtS(G.playerS) : 0;
+    if (splitAmount > 0.45 && Math.abs(G.laneOffset) < 1.1) {
+      const dir = G.laneOffset < 0 ? -1 : 1;
+      G.laneOffset = dir * Math.min(1.1, Math.abs(G.laneOffset) + dt * 8);
+      G.lateralVelocity *= 0.6;
+    }
 
     for (const fp of G.quteFrontPivots) fp.rotation.y = -G.steerVisual * 0.42;
     G.quteSteeringWheelPivot.rotation.z = -G.steerVisual * 0.88;
@@ -211,10 +228,13 @@ export function initLoop() {
   function placePlayer(isQute) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
+    const worldLat = G.laneWorldOffsetAtS
+      ? G.laneWorldOffsetAtS(G.playerS, G.laneOffset)
+      : G.laneOffset;
     G.placeOnRoad(
       G.bikeRoot,
       G.playerS,
-      G.laneOffset,
+      worldLat,
       G.jumpState.height,
       -G.steerVisual * 0.035,
       G.jumpState.pitch,

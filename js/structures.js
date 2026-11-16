@@ -155,6 +155,10 @@ export function initStructures() {
     let s = candidateS;
     for (let attempt = 0; attempt < 6; attempt++) {
       let conflict = false;
+      if (G.splitAmountAtS && G.splitAmountAtS(s) > 0.05) {
+        conflict = true;
+        s += 140;
+      }
       for (const ms of G.megaStructures) {
         if (Math.abs(s - ms.userData.s) < 55) {
           conflict = true;
@@ -170,7 +174,7 @@ export function initStructures() {
 
   for (let i = 0; i < 3; i++) {
     const r = createVoxelRampMesh();
-    const laneIdx = (i % 2 === 0) ? 2 : 3;
+    const laneIdx = G.randomRunLane ? G.randomRunLane() : ((i % 2 === 0) ? 2 : 3);
     const safeS = findSafeRampS(155 + i * 285);
     G.scene.add(r.group);
     G.rampsPool.push({
@@ -187,18 +191,31 @@ export function initStructures() {
 
   function recycleRamps() {
     for (const ramp of G.rampsPool) {
+      const lanes = G.laneCount || 4;
+      const validLane = ramp.laneIdx >= 0 && ramp.laneIdx < lanes
+        && G.oncomingCount != null && ramp.laneIdx >= G.oncomingCount;
+      if (!validLane) {
+        ramp.laneIdx = G.randomRunLane ? G.randomRunLane() : Math.max(0, lanes - 1);
+        ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
+        ramp.placedS = NaN;
+      }
       if (ramp.s < G.playerS - 32) {
         let maxRampS = G.playerS;
         for (const other of G.rampsPool) if (other.s > maxRampS) maxRampS = other.s;
         const nextInterval = 240 + Math.random() * 200;
-        ramp.laneIdx = Math.random() < 0.5 ? 2 : 3;
+        ramp.laneIdx = G.randomRunLane ? G.randomRunLane() : Math.max(0, lanes - 1);
         ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
         ramp.s = findSafeRampS(maxRampS + nextInterval);
+        // На развилке трамплин не ставим — уводим за слияние.
+        if (G.splitAmountAtS && G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
         ramp.triggeredThisPass = false;
         ramp.placedS = NaN;
       }
       ramp.placedS = placeIfMoved(ramp.placedS, ramp.s, () => {
-        G.placeOnRoad(ramp.mesh, ramp.s, ramp.lateralOffset, 0);
+        const lat = G.laneWorldOffsetAtS
+          ? G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset)
+          : ramp.lateralOffset;
+        G.placeOnRoad(ramp.mesh, ramp.s, lat, 0);
       });
     }
   }
@@ -210,24 +227,19 @@ export function initStructures() {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, 0, 0);
+        ms.userData.baseWidth = G.roadWidthAtS ? G.roadWidthAtS(ms.userData.s) : 19;
       });
-      // В городе мосты/тоннели стоят как раньше (каждые 320 м). Вне города
-      // оставляем один объект на участок ~1.6 км — редкая инфраструктура трассы.
-      // Масштаб плавно гаснет на стыке биомов, чтобы мост не исчезал рывком.
-      const roadMeters = G.biomeOffsetM + ms.userData.s;
-      const local = ((roadMeters % 1600) + 1600) % 1600;
-      const cw = G.cityWeightAtS(ms.userData.s);
-      let ct = Math.max(0, Math.min(1, (cw - 0.05) / 0.45));
-      ct = ct * ct * (3 - 2 * ct);
-      let winFade = 0;
-      if (local < 320) {
-        const w = Math.min(1, local / 45, (320 - local) / 45);
-        winFade = w * w * (3 - 2 * w);
-      }
-      const fade = Math.max(ct, winFade);
+      // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
+      // горах их нет; масштаб плавно гаснет на стыке зон.
+      const cw = G.cityWeightAtS ? G.cityWeightAtS(ms.userData.s) : 1;
+      const mw = G.mkadWeightAtS ? G.mkadWeightAtS(ms.userData.s) : 0;
+      const infra = Math.max(cw, mw);
+      let fade = Math.max(0, Math.min(1, (infra - 0.05) / 0.45));
+      fade = fade * fade * (3 - 2 * fade);
       ms.visible = fade > 0.02;
       if (!ms.visible) continue;
-      ms.scale.setScalar(0.05 + 0.95 * fade);
+      const widthFactor = Math.max(1, (ms.userData.baseWidth || 19) / 19);
+      ms.scale.set(widthFactor * (0.05 + 0.95 * fade), 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {
           dc.mesh.position.x += dc.dir * 14 * dt;

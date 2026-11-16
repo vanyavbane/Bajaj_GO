@@ -14,7 +14,7 @@ export function initHighbeam() {
     $('badge-beam').hidden = false;
 
     for (const car of G.trafficPool) {
-      const lane = highbeamYieldLane(car, G.playerS, G.laneOffset);
+      const lane = highbeamYieldLane(car, G.playerS, G.laneOffset, G.oncomingCount || 2, G.laneCount || 4);
       if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;

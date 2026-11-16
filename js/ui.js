@@ -92,7 +92,7 @@ export function initUi() {
         ${field('Режим', option('preset', 'fast', 'Быстро') + option('preset', 'balanced', 'Ровно') + option('preset', 'sharp', 'Чётко'))}
         ${field('Тени', option('shadows', 'off', 'Нет') + option('shadows', 'low', 'Рядом') + option('shadows', 'high', 'Чётче'))}
         ${field('Масштаб кадра', option('scale', 0.75, '0.75') + option('scale', 1, '1') + option('scale', 1.25, '1.25'))}
-        ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4'))}
+        ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4') + option('lamps', 6, '6'))}
         ${note('Отражения перенесены во вкладку «Освещение».')}
       `;
     } else if (tab === 'lighting') {
@@ -610,10 +610,12 @@ export function initUi() {
     G.ended = false;
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
-    resetRun(G, G.START_LANE);
-    // Биом продолжается с сохранённого пробега: мир и профиль дороги
-    // пересобираются до первого кадра заезда.
+    // Биом продолжается с сохранённого пробега: конфиг полос и профиль
+    // дороги пересобираются до старта, чтобы полоса старта и трафик попали
+    // на полосы текущего биома (у горного их две, у МКАД — восемь).
     if (G.resetBiomeRun) G.resetBiomeRun();
+    resetRun(G, G.START_LANE);
+    G.laneAssistTarget = null;
     if (G.updateBiome) G.updateBiome(0);
     if (G.biomeState && G.showBiomeBanner) G.showBiomeBanner(G.biomeState.dominant);
     $('jump-live').hidden = true;
@@ -629,8 +631,14 @@ export function initUi() {
     }
     for (let i = 0; i < G.rampsPool.length; i++) {
       const r = G.rampsPool[i];
-      r.laneIdx = (i % 2 === 0) ? 2 : 3;
-      r.lateralOffset = G.LANE_OFFSETS[r.laneIdx];
+      // Рампа ставится на попутную полосу текущего биома: у горного их
+      // одна, у МКАД — четыре. Индексы 2/3 для двухполосной дороги
+      // выходили за массив смещений.
+      const laneIdx = G.randomRunLane
+        ? G.randomRunLane()
+        : Math.max(0, (G.LANE_OFFSETS ? G.LANE_OFFSETS.length : 1) - 1);
+      r.laneIdx = laneIdx;
+      r.lateralOffset = G.LANE_OFFSETS[laneIdx];
       r.s = G.findSafeRampS(150 + i * 280);
       r.triggeredThisPass = false;
     }
@@ -638,7 +646,9 @@ export function initUi() {
       G.pedestrians[i].s = i * 16;
     }
     for (let i = 0; i < G.trafficPool.length; i++) {
-      G.resetTrafficVehicle(G.trafficPool[i], 38 + i * 24, i % 4);
+      // Полосу выбирает пул под текущий биом; жёсткий i % 4 оставлял
+      // машины вне массива полос на горной дороге и на МКАД.
+      G.resetTrafficVehicle(G.trafficPool[i], 38 + i * 24);
     }
 
     G.prepareRunEconomy();

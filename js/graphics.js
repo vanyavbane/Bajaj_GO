@@ -3,7 +3,7 @@ import { G } from './state.js';
 const PRESETS = {
   fast: { shadows: 'low', scale: 1, lamps: 2, reflections: false, exposure: 1 },
   balanced: { shadows: 'low', scale: 1, lamps: 4, reflections: true, exposure: 1 },
-  sharp: { shadows: 'high', scale: 1.25, lamps: 4, reflections: true, exposure: 1.18 }
+  sharp: { shadows: 'high', scale: 1.25, lamps: 6, reflections: true, exposure: 1.18 }
 };
 
 const LABELS = {
@@ -35,7 +35,7 @@ function sanitize(raw) {
   const shadows = raw && (raw.shadows === 'off' || raw.shadows === 'low' || raw.shadows === 'high')
     ? raw.shadows : 'low';
   const scale = raw && (raw.scale === 0.75 || raw.scale === 1 || raw.scale === 1.25) ? raw.scale : 1;
-  const lamps = raw && (raw.lamps === 0 || raw.lamps === 2 || raw.lamps === 4) ? raw.lamps : 2;
+  const lamps = raw && (raw.lamps === 0 || raw.lamps === 2 || raw.lamps === 4 || raw.lamps === 6) ? raw.lamps : 2;
   const reflections = !!(raw && raw.reflections);
   const exposure = raw && raw.exposure === 1.18 ? 1.18 : 1;
   const graphics = { shadows, scale, lamps, reflections, exposure, preset: 'custom' };

@@ -209,7 +209,32 @@ export interface BiomeState {
   dominant: number;
   weights: number[];
   cityWeight: number;
+  mkadWeight: number;
   id: string;
+}
+
+/** Состояние развилки: выбор ветки в реальном времени. */
+export interface SplitState {
+  active: boolean;
+  zone: number;
+  meters: number;
+  splitMeters: number;
+  s: number;
+  d: number;
+  side: number;
+  previewSide: number;
+  chosen: boolean;
+  chosenSide: number;
+  choices: number[];
+  chosenBiome: number | null;
+  autoAt: number;
+}
+
+export interface BiomeTransition {
+  active: boolean;
+  from: number;
+  to: number;
+  t: number;
 }
 
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
@@ -245,10 +270,34 @@ export interface GameState {
   biomeState: BiomeState | null;
   biomeDominant: number;
   biomeCityWeight: number;
+  biomeMkadWeight: number;
   biomeStoredMeters: number;
   biomeOffsetM: number;
   biomeWeightsAtS: (s: number) => number[];
   cityWeightAtS: (s: number) => number;
+  mkadWeightAtS: (s: number) => number;
+  roadWidthAtS: (s: number) => number;
+  splitAmountAtS: (s: number) => number;
+  laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
+  laneDisplayScaleAtS: (s: number) => number;
+  splitLateralShiftAtS: (s: number, lateralOffset: number) => number;
+  dominantBiomeAtS: (s: number) => number;
+  nearestRunLane: (lateralOffset: number, cfg?: any) => number;
+  biomeProfile: (biomeId: number | string, s: number) => any;
+  getLaneConfig: (biomeId: number | string) => any;
+  getBiomeChoices: (currentBiome: number, visitCounts: number[]) => number[];
+  randomRunLane: () => number;
+  remapTrafficLanes: (cfg: any) => void;
+  currentBiome: number;
+  visitCounts: number[];
+  pendingBiome: number | null;
+  biomeTransition: BiomeTransition | null;
+  splitState: SplitState | null;
+  BIOMES: any[];
+  laneCount: number;
+  oncomingCount: number;
+  LANE_SPEEDS: number[];
+  laneAssistTarget: number | null;
   updateBiome: (dt: number) => void;
   resetBiomeRun: () => void;
   persistBiome: () => void;
@@ -256,6 +305,7 @@ export interface GameState {
   biomePauseValue: () => string;
   showBiomeBanner: (biomeIndex: number) => void;
   hideBiomeBanner: () => void;
+  hideSplitBanner: () => void;
 
   selectedBikeId: string;
   selectedBike: () => BikeStats;
