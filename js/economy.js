@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { clampLaneIndex, readLanes } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
@@ -1165,11 +1166,11 @@ export function initEconomy() {
         pendingAccidentCar.s = G.playerS + 120;
         // Число полос могло измениться на стыке биомов: машину возвращаем
         // на существующую полосу, а не в undefined.
-        const lanes = G.LANE_OFFSETS ? G.LANE_OFFSETS.length : 1;
-        const idx = Math.max(0, Math.min(lanes - 1, Math.round(Number(pendingAccidentCar.laneIdx) || 0)));
+        const lanes = readLanes(G);
+        const idx = clampLaneIndex(pendingAccidentCar.laneIdx, lanes.count);
         pendingAccidentCar.laneIdx = idx;
         pendingAccidentCar.targetLaneIdx = idx;
-        pendingAccidentCar.lateralOffset = G.LANE_OFFSETS[idx];
+        pendingAccidentCar.lateralOffset = lanes.offsets[idx];
         pendingAccidentCar.changingLane = false;
       }
       for (const c of G.trafficPool) {

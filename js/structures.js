@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { readLanes } from './engine/lanes.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -174,7 +175,7 @@ export function initStructures() {
 
   for (let i = 0; i < 3; i++) {
     const r = createVoxelRampMesh();
-    const laneIdx = G.randomRunLane ? G.randomRunLane() : ((i % 2 === 0) ? 2 : 3);
+    const laneIdx = G.randomRunLane();
     const safeS = findSafeRampS(155 + i * 285);
     G.scene.add(r.group);
     G.rampsPool.push({
@@ -191,20 +192,19 @@ export function initStructures() {
 
   function recycleRamps() {
     for (const ramp of G.rampsPool) {
-      const lanes = G.laneCount || 4;
-      const validLane = ramp.laneIdx >= 0 && ramp.laneIdx < lanes
-        && G.oncomingCount != null && ramp.laneIdx >= G.oncomingCount;
+      const lanes = readLanes(G);
+      const validLane = ramp.laneIdx >= lanes.oncoming && ramp.laneIdx < lanes.count;
       if (!validLane) {
-        ramp.laneIdx = G.randomRunLane ? G.randomRunLane() : Math.max(0, lanes - 1);
-        ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
+        ramp.laneIdx = G.randomRunLane();
+        ramp.lateralOffset = lanes.offsets[ramp.laneIdx];
         ramp.placedS = NaN;
       }
       if (ramp.s < G.playerS - 32) {
         let maxRampS = G.playerS;
         for (const other of G.rampsPool) if (other.s > maxRampS) maxRampS = other.s;
         const nextInterval = 240 + Math.random() * 200;
-        ramp.laneIdx = G.randomRunLane ? G.randomRunLane() : Math.max(0, lanes - 1);
-        ramp.lateralOffset = G.LANE_OFFSETS[ramp.laneIdx];
+        ramp.laneIdx = G.randomRunLane();
+        ramp.lateralOffset = lanes.offsets[ramp.laneIdx];
         ramp.s = findSafeRampS(maxRampS + nextInterval);
         // На развилке трамплин не ставим — уводим за слияние.
         if (G.splitAmountAtS && G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;

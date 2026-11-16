@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { readLanes } from './engine/lanes.js';
 import { G } from './state.js';
 
 export function initRoad() {
@@ -6,20 +7,13 @@ export function initRoad() {
   /* =========================================================================
    * 3. ГЕОМЕТРИЯ ДОРОГИ (КРИВЫЕ И ВЫСОТЫ ОТНОСИТЕЛЬНО ОСИ S)
    * -------------------------------------------------------------------------
-   * Ширину и полосы задаёт биом (js/biome.js). initBiome() уже вызван до
-   * initRoad(), поэтому здесь только страхуем пустую конфигурацию: значения
-   * перезаписывать нельзя, иначе городские 4 полосы «съедят» МКАД и горы.
+   * Ширину и полосы задаёт биом (js/biome.js) в initBiome(), который
+   * вызывается раньше. Здесь конфиг только проверяется: подставлять
+   * городские 4 полосы нельзя, иначе горы и МКАД молча станут городом.
    * ========================================================================= */
-  if (!Array.isArray(G.LANE_OFFSETS) || G.LANE_OFFSETS.length === 0) {
-    const cfg = G.getLaneConfig ? G.getLaneConfig(G.currentBiome || 0) : null;
-    G.LANE_OFFSETS = cfg ? cfg.offsets.slice() : [-7.1, -2.35, 2.35, 7.1];
-    G.LANE_SPEEDS = cfg ? cfg.speeds.slice() : [40, 60, 70, 55];
-    G.ROAD_WIDTH = cfg ? cfg.width : 19.0;
-    G.START_LANE = cfg ? cfg.startLane : G.LANE_OFFSETS[3];
-    G.laneCount = cfg ? cfg.count : 4;
-    G.oncomingCount = cfg ? cfg.oncomingCount : 2;
-  }
-  G.ROAD_EDGE = G.ROAD_WIDTH * 0.5 - 0.5;
+  readLanes(G);
+  const width = G.roadWidthAtS ? G.roadWidthAtS(0) : G.ROAD_WIDTH;
+  G.ROAD_EDGE = Math.max(2.2, width * 0.5 - 0.7);
 
   // Профиль дороги принадлежит биому (js/biome.js): позиции и производные
   // смешиваются в одной точке, поэтому при смене локации нет скачков.

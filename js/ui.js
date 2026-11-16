@@ -634,9 +634,7 @@ export function initUi() {
       // Рампа ставится на попутную полосу текущего биома: у горного их
       // одна, у МКАД — четыре. Индексы 2/3 для двухполосной дороги
       // выходили за массив смещений.
-      const laneIdx = G.randomRunLane
-        ? G.randomRunLane()
-        : Math.max(0, (G.LANE_OFFSETS ? G.LANE_OFFSETS.length : 1) - 1);
+      const laneIdx = G.randomRunLane();
       r.laneIdx = laneIdx;
       r.lateralOffset = G.LANE_OFFSETS[laneIdx];
       r.s = G.findSafeRampS(150 + i * 280);

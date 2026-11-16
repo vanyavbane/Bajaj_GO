@@ -117,13 +117,15 @@ export function overflyOverlap(dS, dLat, halfLength, halfWidth) {
   return dS < halfLength + 1.1 && dLat < halfWidth + 0.95;
 }
 
-export const ONCOMING_LANES = 2;
-
 /**
  * Полоса встречная, если её номер меньше числа встречных полос биома.
- * У МКАД их четыре (8 полос), у гор — одна.
+ * Число приходит из конфига: у города и полей их две, у гор одна, у МКАД четыре.
+ * Значение по умолчанию не подставляется — иначе горы и МКАД тихо становятся городом.
  */
-export function isOncomingLane(laneIdx, oncomingCount = ONCOMING_LANES) {
+export function isOncomingLane(laneIdx, oncomingCount) {
+  if (!Number.isInteger(oncomingCount) || oncomingCount < 0) {
+    throw new Error(`oncomingCount должен прийти из биома, получено ${oncomingCount}`);
+  }
   return laneIdx < oncomingCount;
 }
 
@@ -149,7 +151,7 @@ export function classifyCarContact(hit) {
 }
 
 /** Шаг чужой машины: ход, перестроение, затухание реакции на свет. Направление берётся до смены полосы. */
-export function stepTrafficCar(car, dt, laneOffsets, oncomingCount = ONCOMING_LANES) {
+export function stepTrafficCar(car, dt, laneOffsets, oncomingCount) {
   const oncoming = isOncomingLane(car.laneIdx, oncomingCount);
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
@@ -200,7 +202,10 @@ export function menuTrafficNudge(carS, carLat, playerS, playerLat, menuDemo) {
 }
 
 /** Полоса, в которую попутная машина уходит от дальнего света. null — не реагирует. */
-export function highbeamYieldLane(car, playerS, playerLane, oncomingCount = ONCOMING_LANES, laneCount = 4) {
+export function highbeamYieldLane(car, playerS, playerLane, oncomingCount, laneCount) {
+  if (!Number.isInteger(laneCount) || laneCount < 1) {
+    throw new Error(`laneCount должен прийти из биома, получено ${laneCount}`);
+  }
   if (isOncomingLane(car.laneIdx, oncomingCount) || car.changingLane) return null;
   const distAhead = car.s - playerS;
   if (distAhead < 6 || distAhead > 60) return null;

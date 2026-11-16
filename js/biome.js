@@ -86,6 +86,10 @@ const BIOMES = [
   }
 ];
 
+const CITY = BIOMES.findIndex((biome) => biome.id === 'city');
+const MKAD = BIOMES.findIndex((biome) => biome.id === 'mkad');
+if (CITY < 0 || MKAD < 0) throw new Error('В BIOMES нет city или mkad');
+
 /* Разрешённые переходы: из каждого биома всегда два разных направления. */
 const TRANSITIONS = [
   [3, 4], // city → mountain / mkad
@@ -243,7 +247,7 @@ function getBiomeChoices(currentBiome, visitCounts) {
   };
   let pool = allowed.filter((b) => visits(b) < 2);
   if (pool.length === 0) pool = allowed.slice();
-  if (pool.length === 0) pool = [0, 1, 2, 3, 4].filter((b) => b !== cur);
+  if (pool.length === 0) pool = BIOMES.map((_, index) => index).filter((b) => b !== cur);
 
   const choices = [];
   if (pool.length >= 2) {
@@ -267,7 +271,7 @@ let zoneBiomes = Object.create(null);   // zone → biome index
 let splitChoices = Object.create(null); // zone → [left, right]
 const chosenZones = new Set();
 
-const ZERO_VISITS = () => [0, 0, 0, 0, 0];
+const ZERO_VISITS = () => BIOMES.map(() => 0);
 
 function safeParse(raw) {
   try { return JSON.parse(raw); } catch { return null; }
@@ -389,7 +393,7 @@ function persistBiome() {
     const km = Math.max(0, Number.isFinite(G.biomeStoredMeters) ? G.biomeStoredMeters : 0) / 1000;
     localStorage.setItem(STORAGE_KEY, km.toFixed(3));
     localStorage.setItem(CURRENT_KEY, String(biomeIndex(G.currentBiome)));
-    localStorage.setItem(VISITS_KEY, JSON.stringify((G.visitCounts || ZERO_VISITS()).slice(0, 5)));
+    localStorage.setItem(VISITS_KEY, JSON.stringify((G.visitCounts || ZERO_VISITS()).slice(0, BIOMES.length)));
     if (G.pendingBiome == null) localStorage.removeItem(PENDING_KEY);
     else localStorage.setItem(PENDING_KEY, String(biomeIndex(G.pendingBiome)));
 
@@ -584,20 +588,21 @@ function nearestRunLane(lateralOffset, cfg = null) {
 }
 
 /** Доля города/МКАД в точке s. */
+function weightOf(index) {
+  let w = 0;
+  if (blendA === index) w += 1 - blendT;
+  if (blendB === index) w += blendT;
+  return w;
+}
+
 function cityWeightAtS(s) {
   fillBlend(blendMetersAt(s));
-  let w = 0;
-  if (blendA === 0) w += 1 - blendT;
-  if (blendB === 0) w += blendT;
-  return w;
+  return weightOf(CITY);
 }
 
 function mkadWeightAtS(s) {
   fillBlend(blendMetersAt(s));
-  let w = 0;
-  if (blendA === 4) w += 1 - blendT;
-  if (blendB === 4) w += blendT;
-  return w;
+  return weightOf(MKAD);
 }
 
 const _weights = [0, 0, 0, 0, 0];
@@ -1142,8 +1147,8 @@ function updateBiome(dt) {
 
   const dominant = blendT < 0.5 ? blendA : blendB;
   const zone = blendZone;
-  const cityWeight = weights[0];
-  const mkadWeight = weights[4];
+  const cityWeight = weights[CITY];
+  const mkadWeight = weights[MKAD];
 
   if (G.started && !G.ended) updateZoneProgress(meters);
 

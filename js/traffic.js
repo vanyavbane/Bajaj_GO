@@ -1,3 +1,4 @@
+import { clampLaneIndex, readLanes } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -7,8 +8,9 @@ export function initTraffic() {
   /* =========================================================================
    * 9. ТРАФИК
    * -------------------------------------------------------------------------
-   * 20 моделей с весами: легковые, кроссоверы, SUV, Газели, КАМАЗ, фура и
-   * автобус. Тяжёлые машины гарантированно есть в каждом биоме, даже если
+   * 11 типов: легковые, кроссоверы, SUV, Газели, КАМАЗ, фура, автобус и Qute.
+   * Размер пула — максимум из BIOMES[].traffic.count, типы по кругу.
+   * Тяжёлые машины гарантированно есть в каждом биоме, даже если
    * предпочтения биома заняли все слоты.
    * ========================================================================= */
   const QUTE_TRAFFIC_SPEED = 50;
@@ -26,15 +28,18 @@ export function initTraffic() {
     'kamaz', 'truck', 'bus',
     'qute_traffic', 'qute_traffic'
   ];
-  // МКАД — 36 машин (вдвое плотнее города), поэтому пул рассчитан на 8 полос.
-  const POOL_SIZE = 36;
+  const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
+
+  function lanes() {
+    return readLanes(G);
+  }
 
   function laneCount() {
-    return Math.max(2, G.laneCount || 4);
+    return lanes().count;
   }
 
   function oncomingCount() {
-    return Math.max(0, Math.min(laneCount() - 1, G.oncomingCount || 2));
+    return lanes().oncoming;
   }
 
   function runLaneIndices() {
@@ -101,12 +106,11 @@ export function initTraffic() {
   }
 
   function clampedLane(idx) {
-    return Math.max(0, Math.min(laneCount() - 1, Math.round(Number(idx) || 0)));
+    return clampLaneIndex(idx, laneCount());
   }
 
   function laneSpeed(idx) {
-    const speeds = G.LANE_SPEEDS || [];
-    return speeds[Math.max(0, Math.min(speeds.length - 1, idx))] || 55;
+    return lanes().speeds[clampedLane(idx)];
   }
 
   function parkedTraffic(model, laneIdx, s) {
@@ -172,7 +176,8 @@ export function initTraffic() {
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
     const menuDemo = !G.started && !G.ended;
-    const mask = activeMask[G.biomeDominant || 0] || activeMask[0];
+    const dominant = Number.isInteger(G.biomeDominant) ? G.biomeDominant : 0;
+    const mask = activeMask[dominant] || activeMask[0];
     for (let i = 0; i < G.trafficPool.length; i++) {
       const car = G.trafficPool[i];
       const wantActive = mask[i] === 1;
@@ -194,7 +199,7 @@ export function initTraffic() {
       car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
 
       const wasFlashing = car.flashReactTimer > 0;
-      const step = stepTrafficCar(car, dt, G.LANE_OFFSETS, G.oncomingCount || 2);
+      const step = stepTrafficCar(car, dt, lanes().offsets, oncomingCount());
       car.s = step.s;
       car.lateralOffset = step.lateralOffset;
       car.steerAngle = step.steerAngle;
@@ -228,7 +233,7 @@ export function initTraffic() {
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;
 
-      const oncoming = isOncomingLane(car.laneIdx, G.oncomingCount || 2);
+      const oncoming = isOncomingLane(car.laneIdx, oncomingCount());
       const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
       G.placeOnRoad(car.model.root, car.s, carWorldLat, 0, vehicleYaw);
 
