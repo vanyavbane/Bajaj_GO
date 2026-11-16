@@ -231,7 +231,7 @@ export function initStructures() {
       ms.visible = fade > 0.02;
       if (!ms.visible) continue;
       const full = ms.userData.baseWidth + G.forkSpreadAtS(ms.userData.s) * 2;
-      const widthFactor = Math.max(1, full / 19);
+      const widthFactor = Math.max(1, full / G.nominalRoadWidth);
       ms.scale.set(widthFactor * (0.05 + 0.95 * fade), 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {

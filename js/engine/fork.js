@@ -74,3 +74,23 @@ export function shoulderLats(half, spread, cityOuter, shoulder) {
   const far = Math.max(shoulder.far, berm + (shoulder.far - shoulder.berm));
   return { lip, berm, far };
 }
+
+/**
+ * Высота земли на удалении от оси. Те же три точки, что у ленты откоса:
+ * между ними отрезок, за дальней точкой — её высота.
+ */
+export function shoulderHeight(absLat, lats, shoulder) {
+  const a = Math.abs(absLat);
+  if (a <= lats.lip) return shoulder.lipY;
+  if (a <= lats.berm) {
+    const span = lats.berm - lats.lip;
+    const t = span > 0 ? (a - lats.lip) / span : 0;
+    return shoulder.lipY + t * (shoulder.bermY - shoulder.lipY);
+  }
+  if (a <= lats.far) {
+    const span = lats.far - lats.berm;
+    const t = span > 0 ? (a - lats.berm) / span : 0;
+    return shoulder.bermY + t * (shoulder.farY - shoulder.bermY);
+  }
+  return shoulder.farY;
+}

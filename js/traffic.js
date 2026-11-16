@@ -1,4 +1,4 @@
-import { clampLaneIndex } from './engine/lanes.js';
+import { clampLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -145,11 +145,12 @@ export function initTraffic() {
 
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
-    if (!ev || !ev.active || oncoming || car.changingLane || car.laneIdx !== ev.laneIdx) return;
+    if (!ev || !ev.active || oncoming || car.changingLane) return;
+    if (!sameLaneOffset(car.lateralOffset, ev.laneOffset)) return;
     if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
     let rank = 0;
     for (const other of G.trafficPool) {
-      if (other !== car && other.active && other.laneIdx === ev.laneIdx && other.s > car.s && other.s < ev.s) rank++;
+      if (other !== car && other.active && sameLaneOffset(other.lateralOffset, ev.laneOffset) && other.s > car.s && other.s < ev.s) rank++;
     }
     const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
     if (car.s > stop) {

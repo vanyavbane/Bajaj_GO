@@ -119,7 +119,8 @@ export function initAtmosphere() {
 
   function blendBiomeAtmosphere(playerS) {
     const w = G.biomeWeightsAtS(playerS);
-    const w1 = w[1] || 0;
+    const fieldIndex = (G.BIOMES || []).findIndex((b) => b.id === 'field');
+    const w1 = fieldIndex >= 0 ? (w[fieldIndex] || 0) : 0;
     const mix = (target, key) => {
       let r = 0, g = 0, b = 0;
       for (let i = 0; i < biomeAtmos.length; i++) {

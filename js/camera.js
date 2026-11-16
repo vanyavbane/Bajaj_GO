@@ -431,7 +431,8 @@ export function initCamera() {
     let targetRoll = 0;
     if (driving) {
       const wts = G.biomeWeightsAtS(G.playerS);
-      const mountainWeight = wts[3];
+      const mountainIndex = G.BIOMES.findIndex((b) => b.id === 'mountain');
+      const mountainWeight = mountainIndex >= 0 ? wts[mountainIndex] : 0;
       const speedFactor = clamp(G.speed / 55, 0.3, 1.25);
       targetRoll = clamp(-G.roadDDX(G.playerS) * 5.5, -0.055, 0.055)
         * speedFactor * (1 + 0.9 * mountainWeight);

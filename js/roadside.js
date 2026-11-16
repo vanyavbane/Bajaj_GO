@@ -378,7 +378,7 @@ export function initRoadside() {
 
   const widthAt = (s) => G.roadWidthAtS(s);
 
-  /* Доминирующий биом в точке s. Массив весов общий, поэтому забираем только скаляр. */
+  /* Доминирующий биом в точке s. Нужен только индекс, не сам массив весов. */
   function dominantBiomeAt(s) {
     if (G.dominantBiomeAtS) return G.dominantBiomeAtS(s);
     const w = G.biomeWeightsAtS(s);
@@ -397,6 +397,7 @@ export function initRoadside() {
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
       const edge = widthAt(slot.s) * 0.5 + G.forkSpreadAtS(slot.s);
+      const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
       slot.lastDom = dom;
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
@@ -404,18 +405,22 @@ export function initRoadside() {
         G.placeOnRoad(slot.rightGuard, slot.s, edge + 0.55, 0);
         G.placeOnRoad(slot.leftLamp, slot.s, -(edge + 0.8), 0);
         G.placeOnRoad(slot.rightLamp, slot.s, edge + 0.8, 0);
-        G.placeOnRoad(slot.leftProp, slot.s, -(edge + 12), 0);
-        G.placeOnRoad(slot.rightProp, slot.s, edge + 12, 0);
+        const propY = G.groundOffset(edge + 12, slot.s);
+        G.placeOnRoad(slot.leftProp, slot.s, -(edge + 12), propY);
+        G.placeOnRoad(slot.rightProp, slot.s, edge + 12, propY);
         if (slot.billboard) {
           const bb = slot.billboard;
-          G.placeOnRoad(bb.group, slot.s + 6, bb.side * (edge + 4.8), 0, bb.side * -0.18);
+          const boardS = slot.s + 6;
+          const boardEdge = widthAt(boardS) * 0.5 + G.forkSpreadAtS(boardS);
+          const boardLat = boardEdge + 4.8;
+          G.placeOnRoad(bb.group, boardS, bb.side * boardLat, G.groundOffset(boardLat, boardS), bb.side * -0.18);
         }
         if (slot.portal) {
           G.placeOnRoad(slot.portal.group, slot.s, 0, 0);
-          const wf = Math.max(1, (edge * 2) / 19);
+          const wf = Math.max(1, (edge * 2) / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
         }
-      }, Math.round(edge * 50));
+      }, Math.round(edge * 50) + Math.round(city * 20) * 100000);
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.

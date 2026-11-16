@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkCenterShift, forkClose, forkSide, forkSpreadAt } from './engine/fork.js';
+import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkCenterShift, forkClose, forkSide, forkSpreadAt, shoulderHeight, shoulderLats } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
@@ -379,21 +379,13 @@ function persistBiome() {
   }
 }
 
-/* ---------- Смешивание профилей ---------- */
-let blendA = 0;
-let blendB = 0;
-let blendT = 0;
-let blendT1 = 0;
-let blendT2 = 0;
-let blendZone = 0;
-let blendLocal = 0;
-let blendMeters = 0;
-let roadA = 0;
-let roadB = 0;
-let roadT = 1;
-let roadT1 = 0;
-let roadT2 = 0;
-/** Зона → биом уже нарисованной дороги. Пока зона дальше ленты, замок пуст и профиль ещё следует стороне байка. */
+/* ---------- Разбор точки маршрута ----------
+ * Живой биом (декор, небо) и профиль дороги — два индекса одной точки.
+ * Результат возвращается объектом. Глобального «текущего» разбора нет:
+ * вложенный запрос не затирает то, что читает вызывающий.
+ */
+
+/** Зона → биом уже нарисованной дороги. Пока выбор не сделан, замок пуст. */
 const roadLock = Object.create(null);
 
 function blendMetersAt(s) {
@@ -418,18 +410,6 @@ function zoneSample(meters) {
   return { m, zone, local, fade };
 }
 
-function fillBlend(meters) {
-  const sample = zoneSample(meters);
-  blendZone = sample.zone;
-  blendLocal = sample.local;
-  blendMeters = sample.m;
-  blendA = zoneBiomeAt(sample.zone - 1);
-  blendB = zoneBiomeAt(sample.zone);
-  blendT = sample.fade.t;
-  blendT1 = sample.fade.t1;
-  blendT2 = sample.fade.t2;
-}
-
 /** Профиль зоны замирает, когда выбор ветки, которая в неё ведёт, уже сделан. */
 function roadZoneIndex(zone) {
   const z = Math.max(0, zone);
@@ -444,47 +424,75 @@ function roadZoneIndex(zone) {
   return roadLock[z];
 }
 
-function fillRoad(meters) {
+function liveAtMeters(meters) {
   const sample = zoneSample(meters);
-  roadA = roadZoneIndex(sample.zone - 1);
-  roadB = roadZoneIndex(sample.zone);
-  roadT = sample.fade.t;
-  roadT1 = sample.fade.t1;
-  roadT2 = sample.fade.t2;
+  return {
+    zone: sample.zone,
+    meters: sample.m,
+    a: zoneBiomeAt(sample.zone - 1),
+    b: zoneBiomeAt(sample.zone),
+    t: sample.fade.t,
+    t1: sample.fade.t1,
+    t2: sample.fade.t2
+  };
 }
 
-function roadPair(s) {
-  fillRoad(blendMetersAt(s));
-  return { a: PROFILES[roadA], b: PROFILES[roadB], t: roadT, t1: roadT1, t2: roadT2 };
+let roadCacheM = NaN;
+let roadCache = null;
+
+function roadAtMeters(meters) {
+  if (meters === roadCacheM && roadCache) return roadCache;
+  const sample = zoneSample(meters);
+  roadCacheM = sample.m;
+  roadCache = {
+    zone: sample.zone,
+    meters: sample.m,
+    a: roadZoneIndex(sample.zone - 1),
+    b: roadZoneIndex(sample.zone),
+    t: sample.fade.t,
+    t1: sample.fade.t1,
+    t2: sample.fade.t2
+  };
+  return roadCache;
+}
+
+function dropRoadCache() {
+  roadCacheM = NaN;
+  roadCache = null;
+}
+
+function roadProfiles(s) {
+  const r = roadAtMeters(blendMetersAt(s));
+  return { a: PROFILES[r.a], b: PROFILES[r.b], t: r.t, t1: r.t1, t2: r.t2 };
 }
 
 function biomeRoadX(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixValue(r.a.x(s), r.b.x(s), r.t);
 }
 
 function biomeRoadDX(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixDeriv(r.a.x(s), r.b.x(s), r.a.dx(s), r.b.dx(s), r.t, r.t1);
 }
 
 function biomeRoadDDX(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixSecond(r.a.x(s), r.b.x(s), r.a.dx(s), r.b.dx(s), r.a.ddx(s), r.b.ddx(s), r.t, r.t1, r.t2);
 }
 
 function biomeRoadY(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixValue(r.a.y(s), r.b.y(s), r.t);
 }
 
 function biomeRoadDY(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixDeriv(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.t, r.t1);
 }
 
 function biomeRoadDDY(s) {
-  const r = roadPair(s);
+  const r = roadProfiles(s);
   return mixSecond(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.a.ddy(s), r.b.ddy(s), r.t, r.t1, r.t2);
 }
 
@@ -494,10 +502,10 @@ function splitAmountAtMeters(meters) {
 }
 
 function baseRoadWidthAtMeters(meters) {
-  fillRoad(meters);
-  const wa = LANE_CONFIG[roadA].width;
-  const wb = LANE_CONFIG[roadB].width;
-  return wa + (wb - wa) * roadT;
+  const r = roadAtMeters(meters);
+  const wa = LANE_CONFIG[r.a].width;
+  const wb = LANE_CONFIG[r.b].width;
+  return wa + (wb - wa) * r.t;
 }
 
 function forkSpreadAtMeters(meters) {
@@ -526,8 +534,8 @@ function splitCenterS(playerS) {
 }
 
 function roadBiomeAtS(s) {
-  fillRoad(blendMetersAt(s));
-  return roadT < 0.5 ? roadA : roadB;
+  const r = roadAtMeters(blendMetersAt(s));
+  return r.t < 0.5 ? r.a : r.b;
 }
 
 /** Во сколько раз сжать логические полосы, чтобы крайняя осталась на асфальте.
@@ -588,8 +596,8 @@ function laneWorldOffsetAtS(s, lateralOffset) {
 
 /** Доминирующий биом в точке s (без массива весов). */
 function dominantBiomeAtS(s) {
-  fillBlend(blendMetersAt(s));
-  return blendT < 0.5 ? blendA : blendB;
+  const live = liveAtMeters(blendMetersAt(s));
+  return live.t < 0.5 ? live.a : live.b;
 }
 
 /** Ближайшая попутная полоса текущего биома к логическому смещению. */
@@ -605,34 +613,32 @@ function nearestRunLane(lateralOffset, cfg = null) {
   return best;
 }
 
-/** Доля города/МКАД в точке s. */
-function weightOf(index) {
+function weightOf(live, index) {
   let w = 0;
-  if (blendA === index) w += 1 - blendT;
-  if (blendB === index) w += blendT;
+  if (live.a === index) w += 1 - live.t;
+  if (live.b === index) w += live.t;
   return w;
 }
 
 function cityWeightAtS(s) {
-  fillBlend(blendMetersAt(s));
-  return weightOf(CITY);
+  return weightOf(liveAtMeters(blendMetersAt(s)), CITY);
 }
 
 function mkadWeightAtS(s) {
-  fillBlend(blendMetersAt(s));
-  return weightOf(MKAD);
+  return weightOf(liveAtMeters(blendMetersAt(s)), MKAD);
 }
 
-const _weights = [0, 0, 0, 0, 0];
-const _stateWeights = [0, 0, 0, 0, 0];
+/** Свой массив на каждый вызов: вложенный запрос не затирает уже прочитанные веса. */
+function fillWeights(live) {
+  const weights = new Array(BIOMES.length);
+  for (let i = 0; i < BIOMES.length; i++) weights[i] = 0;
+  weights[live.a] += 1 - live.t;
+  weights[live.b] += live.t;
+  return weights;
+}
 
-/** Веса биомов в точке s. Массив общий, его нельзя сохранять надолго. */
 function biomeWeightsAtS(s) {
-  fillBlend(blendMetersAt(s));
-  for (let i = 0; i < BIOMES.length; i++) _weights[i] = 0;
-  _weights[blendA] += 1 - blendT;
-  _weights[blendB] += blendT;
-  return _weights;
+  return fillWeights(liveAtMeters(blendMetersAt(s)));
 }
 
 /* ---------- Материалы декораций ---------- */
@@ -923,29 +929,25 @@ function buildVariant(biome, variant) {
   throw new Error(`Для биома «${id || biome}» нет пула декораций: город собирается в roadside.js`);
 }
 
-/* Профиль откоса. Те же числа рисует лента в roadSurface.js через G.shoulder. */
+/* Профиль откоса. Те же точки рисует лента в roadSurface.js через G.shoulder. */
 const SHOULDER = {
   lip: 12.7,
   berm: 22,
   far: 95,
   lipY: 0.08,
   bermY: 1.8,
-  farY: -4.5
+  farY: -4.5,
+  /** Бордюр 0.35 м + тротуар 3.2 м. Откос начинается за ними, по весу города. */
+  cityEdge: 3.55
 };
 
-/** Высота земли на удалении lat от оси: декорации не висят и не тонут. */
-function groundOffset(lat) {
-  const a = Math.abs(lat);
-  if (a <= SHOULDER.lip) return SHOULDER.lipY;
-  if (a <= SHOULDER.berm) {
-    const t = (a - SHOULDER.lip) / (SHOULDER.berm - SHOULDER.lip);
-    return SHOULDER.lipY + t * (SHOULDER.bermY - SHOULDER.lipY);
-  }
-  if (a <= SHOULDER.far) {
-    const t = (a - SHOULDER.berm) / (SHOULDER.far - SHOULDER.berm);
-    return SHOULDER.bermY + t * (SHOULDER.farY - SHOULDER.bermY);
-  }
-  return SHOULDER.farY;
+/** Высота земли на удалении lat от оси. Линейка та же, что у ленты откоса в этой точке. */
+function groundOffset(lat, s) {
+  const half = roadWidthAtS(s) * 0.5;
+  const spread = forkSpreadAtS(s);
+  const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
+  const lats = shoulderLats(half, spread, cityOuter, SHOULDER);
+  return shoulderHeight(lat, lats, SHOULDER);
 }
 
 /* ---------- Состояние, баннеры и HUD ---------- */
@@ -1139,6 +1141,7 @@ function commitSplit(zone, side) {
   updateBiomeChip(chosen);
   showBiomeBanner(BIOMES[chosen]);
   persistBiome();
+  dropRoadCache();
 }
 
 function updateZoneProgress(meters) {
@@ -1174,6 +1177,7 @@ function updateZoneProgress(meters) {
 
 /* ---------- Публичный апдейт ---------- */
 function updateBiome(dt) {
+  dropRoadCache();
   const meters = G.biomeOffsetM + G.playerS;
   if (G.started && !G.ended) {
     G.biomeStoredMeters = meters;
@@ -1184,14 +1188,11 @@ function updateBiome(dt) {
     }
   }
 
-  fillBlend(meters);
-  const weights = _stateWeights;
-  for (let i = 0; i < BIOMES.length; i++) weights[i] = 0;
-  weights[blendA] += 1 - blendT;
-  weights[blendB] += blendT;
+  const live = liveAtMeters(meters);
+  const weights = fillWeights(live);
 
-  const dominant = blendT < 0.5 ? blendA : blendB;
-  const zone = blendZone;
+  const dominant = live.t < 0.5 ? live.a : live.b;
+  const zone = live.zone;
   const cityWeight = weights[CITY];
   const mkadWeight = weights[MKAD];
 
@@ -1218,6 +1219,7 @@ function updateBiome(dt) {
   // где байк. После закрепления геометрия больше не перескакивает.
   if (!chosen && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD) {
     zoneBiomes[zone + 1] = choices[previewSide];
+    dropRoadCache();
   }
   const forkAhead = splitM - meters;
   G.forkView = forkAhead < 340 && forkAhead > -90 ? 1 : 0;
@@ -1225,9 +1227,9 @@ function updateBiome(dt) {
   G.biomeState = {
     meters,
     zone,
-    current: blendA,
-    next: blendB,
-    t: blendT,
+    current: live.a,
+    next: live.b,
+    t: live.t,
     dominant,
     weights,
     cityWeight,
@@ -1238,10 +1240,10 @@ function updateBiome(dt) {
   G.biomeCityWeight = cityWeight;
   G.biomeMkadWeight = mkadWeight;
   G.biomeTransition = {
-    active: G.started && !G.ended && blendT > 0.001 && blendT < 0.999,
-    from: blendA,
-    to: blendB,
-    t: blendT
+    active: G.started && !G.ended && live.t > 0.001 && live.t < 0.999,
+    from: live.a,
+    to: live.b,
+    t: live.t
   };
 
   const chosenSide = chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1;
@@ -1326,6 +1328,7 @@ function resetBiomeRun() {
   lastSplitZone = -1;
   lastSplitSide = -1;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
+  dropRoadCache();
   G.laneAssistTarget = null;
   saveTimer = 0;
   hideBiomeBanner();
@@ -1393,6 +1396,7 @@ export function initBiome() {
   G.mkadWeightAtS = mkadWeightAtS;
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
+  G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.forkCenterShiftAtS = forkCenterShiftAtS;
   G.forkChosenSideAtS = forkChosenSideAtS;
@@ -1401,6 +1405,7 @@ export function initBiome() {
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;
+  G.groundOffset = groundOffset;
   G.splitLateralShiftAtS = splitLateralShiftAtS;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
@@ -1531,7 +1536,7 @@ export function initBiomeWorld() {
             entry.group,
             s,
             side * lat,
-            groundOffset(lat),
+            groundOffset(lat, s),
             entry.yaw
           );
         }

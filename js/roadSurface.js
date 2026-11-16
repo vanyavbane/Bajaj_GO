@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { branchEdges, shoulderLats } from './engine/fork.js';
+import { laneDashOffsets } from './engine/lanes.js';
 
 export function initRoadSurface() {
 
@@ -164,7 +165,7 @@ export function initRoadSurface() {
       const sh = G.shoulder;
       const half = sampleHalf[r];
       const spread = spreadAt(sampleS[r]);
-      const cityOuter = (0.35 + 3.2) * sampleCity[r];
+      const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const lat = shoulderLats(half, spread, cityOuter, sh);
       write(0, -lat.far, -lat.berm, sh.farY, sh.bermY);
       write(1, -lat.far, -lat.lip, sh.farY, sh.lipY);
@@ -198,13 +199,6 @@ export function initRoadSurface() {
   const dummy = new THREE.Object3D();
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
-  function laneBoundaryRanks(cfg) {
-    const ranks = [];
-    const maxRank = Math.max(cfg.oncomingCount, cfg.count - cfg.oncomingCount) - 1;
-    for (let rank = 1; rank <= maxRank; rank++) ranks.push(rank);
-    return ranks;
-  }
-
   function updateDashes(playerS, dense) {
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
@@ -214,15 +208,12 @@ export function initRoadSurface() {
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       const cfg = G.getLaneConfig(G.roadBiomeAtS(s));
       if (!cfg) continue;
-      for (const rank of laneBoundaryRanks(cfg)) {
-        for (const side of [-1, 1]) {
-          if (used >= MAX_DASHES) break;
-          const worldLat = toWorld(s, side * cfg.laneWidth * rank);
-          dummy.scale.set(1, 1, 1);
-          G.placeOnRoad(dummy, s, worldLat, 0.03);
-          dummy.updateMatrix();
-          dashMesh.setMatrixAt(used++, dummy.matrix);
-        }
+      for (const mark of laneDashOffsets(cfg.offsets, cfg.oncomingCount)) {
+        if (used >= MAX_DASHES) break;
+        dummy.scale.set(1, 1, 1);
+        G.placeOnRoad(dummy, s, toWorld(s, mark), 0.03);
+        dummy.updateMatrix();
+        dashMesh.setMatrixAt(used++, dummy.matrix);
       }
     }
     for (let i = used; i < MAX_DASHES; i++) dashMesh.setMatrixAt(i, hidden);
@@ -350,7 +341,7 @@ export function initRoadSurface() {
       const rx = rightX[r], rz = rightZ[r];
       const half = sampleHalf[r];
       const spread = spreadAt(sampleS[r]);
-      const cityOuter = (0.35 + 3.2) * sampleCity[r];
+      const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
       const lat = shoulderLats(half, spread, cityOuter, sh);
       const idx = r * 3;

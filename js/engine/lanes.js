@@ -29,6 +29,26 @@ export function readLanes(state) {
   return { count, oncoming, offsets, speeds, startLane };
 }
 
+/**
+ * Штрихи между соседними полосами. Граница встречных и попутных сюда не входит:
+ * её рисует жёлтая осевая. Смещения берутся из конфига, а не из «номер × ширина».
+ */
+export function laneDashOffsets(offsets, oncomingCount) {
+  const marks = [];
+  if (!offsets || offsets.length < 2) return marks;
+  const split = oncomingCount | 0;
+  for (let i = 0; i < offsets.length - 1; i++) {
+    if (i + 1 === split) continue;
+    marks.push((offsets[i] + offsets[i + 1]) * 0.5);
+  }
+  return marks;
+}
+
+/** Одна и та же полоса, даже если у соседних биомов разный номер. Шаг полос от 4.3 м. */
+export function sameLaneOffset(a, b) {
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1.6;
+}
+
 /** Индекс полосы внутри текущего конфига. Дробное и пустое значение прижимается к диапазону. */
 export function clampLaneIndex(index, count) {
   const n = Math.round(Number(index));
