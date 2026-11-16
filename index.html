@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>bajaj GO</title>
 <link rel="stylesheet" href="./node_modules/@bajajgo/design/design.css">
 <link rel="stylesheet" href="./css/game.css">
@@ -12,21 +12,55 @@
 
 <!-- ИГРОВОЙ ИНТЕРФЕЙС -->
 <div id="hud" hidden>
-  <div class="brand">bajaj <span>GO</span><small>Game by a fan</small></div>
-  <div id="status-badges">
-    <div class="badge" id="badge-tod">☀ ДЕНЬ</div>
-    <div class="badge cam" id="badge-cam">🎥 КОКПИТ (T/C)</div>
-    <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
-    <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
+  <!-- Верхняя строка: таймер заказа и пауза -->
+  <div id="hud-top">
+    <button id="btn-pause" class="ds-icon-button" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
+
+    <!-- ТАЙМЕР АКТИВНОГО ЗАКАЗА -->
+    <div id="order-hud" hidden>
+      <div class="order-title" id="order-title">🍔 ЗАКАЗ</div>
+      <div class="order-row">
+        <span class="t" id="order-time">2:00</span>
+        <span id="order-dist">— м</span>
+        <span id="order-reward">~0 ₽</span>
+      </div>
+    </div>
   </div>
-  <div id="biome-banner" aria-live="polite">
-    <span class="biome-ico">🏙️</span>
-    <span class="biome-copy">
-      <b class="biome-name">ГОРОД</b>
-      <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
-    </span>
+
+  <!-- Лента сообщений и статусные плашки -->
+  <div id="hud-feedzone">
+    <div id="status-badges">
+      <div class="badge" id="badge-tod">☀ ДЕНЬ</div>
+      <div class="badge cam" id="badge-cam">🎥 КОКПИТ (T/C)</div>
+      <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
+      <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
+    </div>
+    <div id="biome-banner" aria-live="polite">
+      <span class="biome-ico">🏙️</span>
+      <span class="biome-copy">
+        <b class="biome-name">ГОРОД</b>
+        <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
+      </span>
+    </div>
+    <div id="exit-hint">
+      <span id="exit-hint-ico">🍔</span>
+      <span class="exit-copy">
+        <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
+        <small id="exit-hint-how">Сбрось ниже 50 км/ч и заезжай в коробку</small>
+      </span>
+    </div>
+    <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
+    <div id="event-feed"></div>
+
+    <!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
+    <div id="jump-live" hidden>
+      <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
+      <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
+      <div id="slowmo-badge" hidden>⏱ SLOW-MO</div>
+    </div>
+    <div id="eco-toast"></div>
   </div>
-  <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
+
   <div id="bottom">
     <b>W / ↑ / ПРОБЕЛ</b> — ГАЗ &nbsp;·&nbsp; <b>S / ↓</b> — ТОРМОЗ &nbsp;·&nbsp; <b>A / D / ← / →</b> — ПОВОРОТ<br>
     <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА
@@ -43,31 +77,9 @@
     </div>
     <div class="eco-bank"><span>БАЛАНС</span><b id="eco-bank">0 ₽</b></div>
   </div>
-
-  <!-- ТАЙМЕР АКТИВНОГО ЗАКАЗА -->
-  <div id="order-hud" hidden>
-    <div class="order-title" id="order-title">🍔 ЗАКАЗ</div>
-    <div class="order-row">
-      <span class="t" id="order-time">2:00</span>
-      <span id="order-dist">— м</span>
-      <span id="order-reward">~0 ₽</span>
-    </div>
-  </div>
-
-  <!-- ПОДСКАЗКА ПРИ ВЪЕЗДЕ В ЗОНУ СЪЕЗДА -->
-  <div id="exit-hint">
-    <span id="exit-hint-ico">🍔</span>
-    <span class="exit-copy">
-      <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
-      <small id="exit-hint-how">Сбрось ниже 50 км/ч и заезжай в коробку</small>
-    </span>
-  </div>
-
-  <button id="btn-pause" class="ds-icon-button" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
-  <div id="eco-toast"></div>
 </div>
 
-<!-- ПАНЕЛЬ ТРЕТЬЕГО ЛИЦА В ПРАВОМ НИЖНЕМ УГОЛ -->
+<!-- СПИДОМЕТР ТРЕТЬЕГО ЛИЦА (ЛЕВЫЙ НИЖНИЙ УГОЛ) -->
 <div id="tp-hud" hidden>
   <div class="tp-speed-row">
     <div><span class="tp-speed-val" id="tp-speed">0</span><span class="tp-speed-unit">КМ/Ч</span></div>
@@ -86,13 +98,6 @@
   <div class="tp-extra" id="tp-extra"></div>
 </div>
 
-<!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
-<div id="jump-live" hidden>
-  <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
-  <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
-  <div id="slowmo-badge" hidden>⏱ SLOW-MO</div>
-</div>
-<div id="event-feed"></div>
 <div id="slowmo-vignette"></div>
 <div id="lightning-flash"></div>
 

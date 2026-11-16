@@ -90,6 +90,9 @@ export function initCamera() {
     const tpHud = $('tp-hud');
     const badgeCam = $('badge-cam');
     const hintSub = $('hint-sub');
+    // Класс на HUD переставляет блок состояния: в третьем лице он над
+    // спидометром, в кокпите — в левом нижнем углу.
+    $('hud').classList.toggle('third-person', effectiveThirdPerson);
     if (G.started && !G.ended) {
       tpHud.hidden = !effectiveThirdPerson;
       if (badgeCam) {
@@ -97,7 +100,7 @@ export function initCamera() {
       }
       if (hintSub) {
         hintSub.textContent = effectiveThirdPerson
-          ? 'Показатели выведены справа снизу · T / C / V — переключить в кокпит'
+          ? 'Показатели выведены слева снизу · T / C / V — переключить в кокпит'
           : 'Скорость, пробег и рубли на приборной панели · T / C / V — вид от 3-го лица';
       }
     } else {

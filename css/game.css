@@ -1,427 +1,591 @@
 *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--ds-ink);color:var(--ds-text);font-family:var(--ds-font)}
+html,body{
+  margin:0;width:100%;max-width:100vw;height:100%;
+  overflow:hidden;overflow-x:hidden;
+  background:var(--bf-bg-panel);color:var(--bf-text);
+  font-family:var(--ds-font);
+  -webkit-text-size-adjust:100%;
+}
 #view{position:fixed;inset:0}
 canvas{display:block;width:100%;height:100%}
+button{font-family:var(--ds-font)}
+[hidden]{display:none!important}
 
-/* ИГРОВОЙ HUD */
-#hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:8}
-.brand{position:absolute;top:16px;left:20px;font-weight:900;font-style:italic;letter-spacing:2px;font-size:clamp(20px,3vw,32px)}
-.brand span{color:var(--ds-gold)}
-.brand small{display:block;font-size:10px;letter-spacing:3px;color:var(--ds-text-dim);font-style:normal;margin-top:2px}
-#status-badges{position:absolute;top:70px;right:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
-.badge{background:var(--ds-panel);border:1px solid var(--ds-line);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:800;letter-spacing:1px}
-.badge.x2{border-color:var(--ds-danger-line);color:var(--ds-danger);background:rgba(40,16,18,.88)}
-.badge.beam,.badge.cam{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
-#hint{position:absolute;top:15%;left:50%;transform:translateX(-50%);font-weight:900;text-align:center;letter-spacing:2px;white-space:normal;font-size:clamp(13px,2vw,22px);transition:opacity .35s;max-width:min(640px,92vw)}
-#hint small{display:block;font-size:11px;letter-spacing:1px;color:var(--ds-text-dim);margin-top:5px}
-#bottom{position:absolute;left:18px;bottom:16px;background:var(--ds-panel);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:9px 13px;font-size:11px;color:var(--ds-text-soft);line-height:1.45;transition:opacity .35s}
+/* =========================================================================
+ * ИГРОВОЙ HUD
+ * ========================================================================= */
+#hud{
+  position:fixed;inset:0;pointer-events:none;z-index:8;
+  color:var(--bf-text);
+  text-shadow:0 1px 3px rgba(0,0,0,.65);
+}
+#hud-top{display:contents}
+/* Лента и всплывающие сообщения: единый поток сверху вниз,
+ * чтобы плашки не накладывались друг на друга. */
+#hud-feedzone{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  pointer-events:none;z-index:12;
+}
 
-/* БАННЕР ЛОКАЦИИ: появляется на ~2 секунды при смене биома */
+/* Статусные бейджи: под кнопкой паузы */
+#status-badges{
+  position:absolute;top:68px;right:20px;
+  display:flex;flex-direction:column;gap:6px;align-items:flex-end;
+  max-width:min(46vw,340px);
+}
+.badge{
+  max-width:100%;
+  padding:5px 10px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.78);
+  color:var(--bf-text-dim);
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.badge.cam{color:var(--bf-accent);border-color:rgba(111,195,232,.45)}
+.badge.x2{
+  color:var(--bf-danger);border-color:var(--bf-danger);
+  background:rgba(30,14,16,.85);
+}
+.badge.beam{color:var(--bf-signal);border-color:rgba(240,180,41,.55)}
+
+/* Подсказка «смотри на дорогу»: в нижней трети, чтобы не спорить
+ * с баннером локации и подсказкой съезда наверху. */
+#hint{
+  position:absolute;bottom:142px;left:50%;transform:translateX(-50%);
+  max-width:min(640px,calc(100vw - 560px));
+  text-align:center;
+  font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--bf-text);
+  transition:opacity .35s;
+}
+#hint small{
+  display:block;margin-top:6px;
+  font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:none;
+  color:var(--bf-text-dim);line-height:1.4;
+}
+
+/* Клавиатурная памятка (десктоп) */
+#bottom{
+  position:absolute;left:50%;bottom:84px;transform:translateX(-50%);
+  max-width:calc(100vw - 560px);
+  padding:7px 12px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.62);
+  color:var(--bf-text-mute);
+  font:600 10px/1.5 var(--bf-mono);letter-spacing:.02em;
+  text-align:center;
+  transition:opacity .35s;
+}
+#bottom b{color:var(--bf-text-dim);font-weight:700}
+
+/* Баннер локации: ~2 секунды при смене биома */
 #biome-banner{
   position:absolute;top:76px;left:50%;transform:translate(-50%,-10px);
-  display:flex;align-items:center;gap:11px;
-  background:rgba(9,17,29,.92);border:1px solid rgba(255,205,130,.5);
-  border-radius:12px;padding:8px 16px;white-space:nowrap;
+  display:flex;align-items:center;gap:10px;
+  max-width:min(560px,92vw);
+  padding:7px 14px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.82);
   opacity:0;transition:opacity .3s ease,transform .3s ease;
   pointer-events:none;z-index:4;
 }
 #biome-banner.show{opacity:1;transform:translate(-50%,0)}
-#biome-banner .biome-ico{font-size:24px;line-height:1}
+#biome-banner .biome-ico{font-size:22px;line-height:1}
 #biome-banner .biome-copy{display:flex;flex-direction:column;gap:1px;min-width:0}
-#biome-banner .biome-name{display:block;font-size:15px;font-weight:900;letter-spacing:1.6px;color:var(--ds-warm-strong)}
-#biome-banner .biome-sub{display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:var(--ds-text-dim)}
+#biome-banner .biome-name{
+  display:block;font-size:14px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--bf-accent);
+}
+#biome-banner .biome-sub{
+  display:block;font-size:10px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--bf-text-dim);
+  white-space:normal;word-break:break-word;
+}
 
-/* ЭКОНОМИКА В HUD: ТОПЛИВО, ИЗНОС, ЗАКАЗ, ПАУЗА */
+/* ---------- Экономика в HUD ---------- */
 #eco-hud{
-  position:absolute;top:82px;left:20px;width:218px;
-  background:var(--ds-panel);
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:12px;padding:10px 12px;
-  font-size:11px;color:var(--ds-text-soft);
+  position:absolute;left:20px;bottom:20px;width:218px;
+  padding:9px 12px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.78);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  font-size:11px;color:var(--bf-text-dim);
 }
-.eco-row{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;letter-spacing:1px;color:var(--ds-text-dim)}
-.eco-row b{color:#fff;font-size:12px;letter-spacing:0}
-.eco-bar{height:6px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin:4px 0 9px}
-.eco-bar i{display:block;height:100%;width:100%;background:var(--ds-meter);border-radius:4px;transition:width .25s linear,background .25s}
-.eco-bar i.mid{background:var(--ds-meter-mid)}
-.eco-bar i.low{background:var(--ds-danger-line)}
-.eco-wear{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+/* Третье лицо: блок состояния — над спидометром */
+#hud.third-person #eco-hud{left:20px;bottom:174px}
+.eco-row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.eco-row b{
+  color:var(--bf-text);font:700 12px/1.2 var(--bf-mono);
+  font-variant-numeric:tabular-nums;letter-spacing:0;
+}
+.eco-bar{height:4px;background:rgba(120,160,190,.3);border-radius:1px;overflow:hidden;margin:4px 0 8px}
+.eco-bar i{display:block;height:100%;width:100%;background:var(--bf-accent);transition:width .25s linear,background .25s}
+.eco-bar i.mid{background:var(--bf-signal)}
+.eco-bar i.low{background:var(--bf-danger)}
+.eco-wear{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;
+  border-top:1px solid var(--bf-line);padding-top:7px;
+}
 .eco-wear>div{min-width:0}
-.eco-wear span{display:block;font-size:9px;color:var(--ds-text-dim);letter-spacing:.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.eco-wear .wbar{height:4px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-top:3px}
-.eco-wear .wbar i{display:block;height:100%;width:100%;background:var(--ds-meter);transition:width .25s linear,background .25s}
-.eco-wear .wbar i.mid{background:var(--ds-meter-mid)}
-.eco-wear .wbar i.low{background:var(--ds-danger-line)}
-.eco-bank{display:flex;justify-content:space-between;margin-top:8px;border-top:1px solid rgba(255,255,255,.12);padding-top:7px;font-weight:800;letter-spacing:1px;color:var(--ds-text-dim)}
-.eco-bank b{color:var(--ds-warm-strong);letter-spacing:0;font-size:12px}
+.eco-wear span{
+  display:block;font-size:9px;font-weight:700;letter-spacing:.04em;
+  color:var(--bf-text-dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.eco-wear .wbar{height:3px;background:rgba(120,160,190,.3);border-radius:1px;overflow:hidden;margin-top:3px}
+.eco-wear .wbar i{display:block;height:100%;width:100%;background:var(--bf-accent);transition:width .25s linear,background .25s}
+.eco-wear .wbar i.mid{background:var(--bf-signal)}
+.eco-wear .wbar i.low{background:var(--bf-danger)}
+.eco-bank{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  margin-top:7px;border-top:1px solid var(--bf-line);padding-top:6px;
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.eco-bank b{color:var(--bf-signal);font:700 13px/1.2 var(--bf-mono);font-variant-numeric:tabular-nums;letter-spacing:0}
 
+/* ---------- Таймер активного заказа ---------- */
 #order-hud{
-  position:absolute;top:12px;left:50%;transform:translateX(-50%);
-  min-width:250px;max-width:min(360px,44vw);
-  background:var(--ds-panel);border:1px solid rgba(255,205,130,.4);
-  border-radius:12px;padding:7px 14px;text-align:center;
-  z-index:2;
+  position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  min-width:210px;max-width:min(360px,44vw);
+  padding:6px 12px;
+  border:1px solid rgba(240,180,41,.45);border-radius:2px;
+  background:rgba(10,14,20,.78);
+  text-align:center;z-index:2;
 }
-#order-hud[hidden]{display:none!important}
-#order-hud .order-title{font-size:10px;font-weight:900;letter-spacing:1.5px;color:var(--ds-warm-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#order-hud .order-row{display:flex;justify-content:center;gap:14px;margin-top:2px;font-size:12px;font-weight:900;color:#fff}
-#order-hud .order-row .t{color:var(--ds-warm-strong);font-variant-numeric:tabular-nums}
-#order-hud.late{border-color:var(--ds-danger-line);background:rgba(40,16,18,.88)}
-#order-hud.late .t{color:var(--ds-danger)}
+#order-hud .order-title{
+  font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--bf-signal);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#order-hud .order-row{
+  display:flex;justify-content:center;gap:14px;margin-top:2px;
+  font:700 12px/1.3 var(--bf-mono);font-variant-numeric:tabular-nums;
+  color:var(--bf-text);
+}
+#order-hud .order-row .t{color:var(--bf-signal)}
+#order-hud.late{border-color:var(--bf-danger);background:rgba(30,14,16,.85)}
+#order-hud.late .t{color:var(--bf-danger)}
 
-#btn-pause{position:absolute;top:16px;right:20px;pointer-events:auto;z-index:3}
+/* Кнопка паузы */
+#btn-pause{
+  position:absolute;top:16px;right:20px;
+  width:40px;height:40px;font-size:16px;
+  pointer-events:auto;z-index:3;
+}
 
+/* Тост экономики */
 #eco-toast{
-  position:absolute;top:26%;left:50%;transform:translateX(-50%) translateY(-6px);
-  background:var(--ds-panel);border:1px solid rgba(255,205,130,.45);
-  border-radius:11px;padding:8px 16px;font-size:12px;font-weight:900;letter-spacing:.5px;
-  color:var(--ds-warm-strong);white-space:nowrap;opacity:0;transition:opacity .25s,transform .25s;
-  pointer-events:none;z-index:4;max-width:84vw;overflow:hidden;text-overflow:ellipsis;
+  position:static;
+  max-width:84vw;
+  padding:7px 14px;
+  border:1px solid rgba(240,180,41,.5);border-radius:2px;
+  background:rgba(10,14,20,.85);
+  color:var(--bf-signal);
+  font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transition:opacity .25s;
+  pointer-events:none;flex:0 0 auto;
 }
-#eco-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#eco-toast.bad{border-color:var(--ds-danger-line);color:var(--ds-danger)}
+#eco-toast.show{opacity:1}
+#eco-toast.bad{border-color:var(--bf-danger);color:var(--bf-danger)}
 
-/* ПОДСКАЗКА СЪЕЗДА: держится, пока щит впереди */
+/* Подсказка съезда */
 #exit-hint{
-  position:absolute;top:96px;left:50%;
+  position:absolute;top:132px;left:50%;
   transform:translateX(-50%) translateY(-8px);
   display:flex;align-items:center;gap:10px;
-  background:var(--ds-panel);
-  border:1px solid var(--ds-warm);
-  border-radius:11px;padding:8px 14px;
-  font-size:13px;font-weight:900;letter-spacing:.4px;
-  color:var(--ds-warm-strong);
+  max-width:min(92vw,560px);
+  padding:7px 13px;
+  border:1px solid rgba(240,180,41,.6);border-radius:2px;
+  background:rgba(10,14,20,.82);
+  color:var(--bf-signal);
+  font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   opacity:0;pointer-events:none;z-index:3;
   transition:opacity .2s,transform .2s;
-  text-shadow:0 2px 6px rgba(0,0,0,.85);
-  max-width:min(92vw,560px);
 }
 #exit-hint.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#exit-hint.service{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
-#exit-hint.slow{border-color:#3cce78;color:#c8f5d4}
-#exit-hint.fast{border-color:#e15b55;color:#ffd0cb}
-#exit-hint.slow small,#exit-hint.fast small{color:inherit}
+#exit-hint.service{border-color:var(--bf-accent);color:var(--bf-accent)}
+#exit-hint.slow{border-color:var(--bf-ok);color:var(--bf-ok)}
+#exit-hint.fast{border-color:var(--bf-danger);color:var(--bf-danger)}
 #exit-hint .exit-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 #exit-hint small{
-  font-size:11px;font-weight:800;letter-spacing:0;
-  color:var(--ds-text-soft);line-height:1.25;
+  font-size:10px;font-weight:600;letter-spacing:.02em;text-transform:none;
+  color:var(--bf-text-dim);line-height:1.3;
 }
+#exit-hint.slow small,#exit-hint.fast small{color:inherit;opacity:.85}
 
-@media(max-width:700px){
-  #eco-hud{width:172px;top:72px;padding:8px 9px;font-size:10px}
-  #status-badges{top:64px}
-  #hint{white-space:normal;top:200px}
-  #biome-banner{top:64px;max-width:94vw;padding:6px 11px;gap:8px}
-  #biome-banner .biome-ico{font-size:20px}
-  #biome-banner .biome-name{font-size:13px;letter-spacing:1.2px}
-  #biome-banner .biome-sub{font-size:9px;letter-spacing:.6px;white-space:normal}
-  #order-hud{
-    top:8px;left:128px;right:58px;transform:none;
-    width:auto;max-width:none;min-width:0;padding:5px 8px;
-  }
-  #order-hud .order-title{font-size:9px}
-  #order-hud .order-row{font-size:10px;gap:8px}
-  #exit-hint{
-    top:118px;font-size:12px;padding:6px 10px;
-  }
-  #event-feed{top:clamp(190px,26vh,230px);padding:0 2vw;max-height:46vh}
-  .feed-item{max-width:70vw;font-size:13px;padding:7px 11px}
-}
-
-/* HUD ТРЕТЬЕГО ЛИЦА (ПРАВЫЙ НИЖНИЙ УГОЛ) */
+/* ---------- Спидометр третьего лица: слева снизу ---------- */
 #tp-hud{
-  position:fixed;
-  right:20px;
-  bottom:82px;
-  min-width:215px;
-  background:linear-gradient(155deg,rgba(10,19,33,.88),rgba(6,12,22,.94));
-  border:1px solid rgba(72,96,144,.75);
-  border-radius:16px;
-  padding:12px 16px;
-  box-shadow:0 12px 32px rgba(0,0,0,.65);
-  pointer-events:none;
-  z-index:9;
-  transition:opacity .22s ease, transform .22s ease;
+  position:fixed;left:20px;bottom:20px;
+  min-width:218px;max-width:calc(100vw - 40px);
+  padding:10px 14px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.82);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  pointer-events:none;z-index:9;
+  transition:opacity .22s ease;
 }
-#tp-hud[hidden]{display:none!important}
-.tp-speed-row{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.14);padding-bottom:6px;margin-bottom:8px}
-.tp-speed-val{font-size:44px;font-weight:900;line-height:1;color:#fff;letter-spacing:-1px;font-variant-numeric:tabular-nums}
-.tp-speed-unit{font-size:12px;font-weight:900;color:var(--ds-warm);letter-spacing:1.5px;margin-left:6px}
-.tp-gear{font-size:13px;font-weight:900;color:var(--ds-gold);background:rgba(255,245,157,.12);border:1px solid rgba(217,168,120,.45);padding:2px 7px;border-radius:6px}
-.tp-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px}
-.tp-stat-box{background:rgba(255,255,255,.04);border-radius:8px;padding:5px 8px}
-.tp-stat-box span{display:block;color:var(--ds-text-dim);font-size:9px;font-weight:800;letter-spacing:1px}
-.tp-stat-box strong{display:block;color:#fff;font-size:14px;font-weight:900;margin-top:1px;font-variant-numeric:tabular-nums}
-.tp-stat-box.rub strong{color:var(--ds-warm-strong)}
-.tp-extra{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
-.tp-pill{font-size:10px;font-weight:900;padding:3px 7px;border-radius:6px;letter-spacing:.5px}
-.tp-pill.x2{background:rgba(176,96,90,.25);border:1px solid var(--ds-danger-line);color:var(--ds-danger)}
-.tp-pill.jump{background:rgba(0,229,255,.2);border:1px solid #00e5ff;color:#84ffff}
+.tp-speed-row{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  border-bottom:1px solid var(--bf-line);
+  padding-bottom:6px;margin-bottom:8px;
+}
+.tp-speed-val{
+  font:700 40px/1 var(--bf-mono);font-variant-numeric:tabular-nums;
+  color:var(--bf-text);letter-spacing:-1px;
+}
+.tp-speed-unit{
+  margin-left:6px;
+  font:700 10px/1.2 var(--ds-font);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--bf-accent);
+}
+.tp-gear{
+  padding:2px 7px;
+  border:1px solid rgba(240,180,41,.6);border-radius:2px;
+  background:rgba(240,180,41,.16);
+  color:var(--bf-signal);
+  font:700 12px/1.2 var(--bf-mono);
+}
+.tp-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px}
+.tp-stat-box{padding:4px 8px;border:1px solid var(--bf-line);border-radius:2px;min-width:0}
+.tp-stat-box span{
+  display:block;
+  font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.tp-stat-box strong{
+  display:block;margin-top:1px;
+  font:700 14px/1.2 var(--bf-mono);font-variant-numeric:tabular-nums;
+  color:var(--bf-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tp-stat-box.rub strong{color:var(--bf-signal)}
+.tp-extra{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+.tp-pill{
+  padding:2px 6px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.6);
+  font:700 10px/1.3 var(--bf-mono);letter-spacing:.04em;
+  color:var(--bf-text-dim);
+}
+.tp-pill.x2{border-color:var(--bf-danger);color:var(--bf-danger);background:rgba(30,14,16,.7)}
+.tp-pill.jump{border-color:var(--bf-accent);color:var(--bf-accent);background:rgba(111,195,232,.12)}
 
-/* ИНДИКАТОР ПРЫЖКА И ВСПЛЫВАЮЩИЕ БОНУСЫ */
+/* ---------- Прыжок, slow-mo, молния ---------- */
 #jump-live{
-  position:fixed;
-  top:23%;
-  left:50%;
-  transform:translateX(-50%);
-  background:linear-gradient(135deg,rgba(12,28,48,.92),rgba(8,16,30,.95));
-  border:2px solid #00e5ff;
-  border-radius:14px;
-  padding:8px 18px;
+  position:static;
+  padding:7px 16px;
+  border:1px solid var(--bf-accent);border-radius:2px;
+  background:rgba(10,14,20,.85);
   text-align:center;
-  box-shadow:0 10px 30px rgba(0,229,255,.3);
-  pointer-events:none;
-  z-index:10;
+  pointer-events:none;z-index:10;
 }
-#jump-live .jl-title{font-size:11px;font-weight:900;color:#80d8ff;letter-spacing:2px}
-#jump-live .jl-stats{font-size:20px;font-weight:900;color:#fff176;margin-top:2px}
-
-/* SLOW-MO: виньетка и бейдж (не перекрывают HUD) */
+#jump-live .jl-title{
+  font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--bf-accent);
+}
+#jump-live .jl-stats{
+  margin-top:2px;
+  font:700 18px/1.2 var(--bf-mono);font-variant-numeric:tabular-nums;
+  color:var(--bf-signal);
+}
 #slowmo-vignette{
   position:fixed;inset:0;pointer-events:none;z-index:7;
   opacity:0;transition:opacity .28s ease;
-  background:
-    radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(8,22,36,.38) 72%, rgba(3,9,16,.72) 100%);
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0) 40%,rgba(8,22,36,.38) 72%,rgba(3,9,16,.72) 100%);
 }
 #slowmo-vignette.on{opacity:1}
 #slowmo-badge{
-  margin-top:6px;
+  margin-top:5px;
   display:inline-block;
-  font-size:11px;font-weight:900;letter-spacing:2px;
-  color:#9ff5ff;
-  background:rgba(0,180,220,.16);
-  border:1px solid rgba(120,235,255,.65);
-  border-radius:20px;
-  padding:3px 12px;
-  text-shadow:0 0 10px rgba(120,235,255,.8);
+  padding:2px 10px;
+  border:1px solid var(--bf-accent);border-radius:2px;
+  background:rgba(111,195,232,.14);
+  color:var(--bf-accent);
+  font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
   animation:slowmoPulse 1.1s ease-in-out infinite;
 }
 #slowmo-badge[hidden]{display:none!important}
-@keyframes slowmoPulse{0%,100%{opacity:.72}50%{opacity:1}}
-/* МОЛНИЯ: мягкая засветка неба, без пересвета сцены */
+@keyframes slowmoPulse{0%,100%{opacity:.6}50%{opacity:1}}
 #lightning-flash{
   position:fixed;inset:0;pointer-events:none;z-index:6;
-  background:radial-gradient(ellipse at 50% 12%, #e8f2ff 0%, #b9d4ff 38%, rgba(160,195,255,0) 78%);
-  opacity:0;
-  mix-blend-mode:screen;
-  transition:opacity .05s linear;
+  background:radial-gradient(ellipse at 50% 12%,#e8f2ff 0%,#b9d4ff 38%,rgba(160,195,255,0) 78%);
+  opacity:0;mix-blend-mode:screen;transition:opacity .05s linear;
 }
-/* ФИД КОМБО И УЛУЧШЕНИЙ: СЛЕВА, СПРАВА ИЛИ ПО ЦЕНТРУ */
+
+/* ---------- Лента уведомлений ---------- */
 #event-feed{
-  position:fixed;
-  /* Ниже #eco-hud (82…199 px) и #status-badges, чтобы не перекрывать HUD. */
-  top:clamp(200px,24vh,240px);
-  left:0;
-  right:0;
-  width:100vw;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:6px;
-  padding:0 3vw;
-  max-height:42vh;
-  overflow:hidden;
-  z-index:12;
-  pointer-events:none;
+  position:static;
+  margin-top:clamp(186px,23vh,230px);
+  width:100%;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:0 3vw;max-height:42vh;overflow:hidden;
+  flex:0 0 auto;pointer-events:none;
 }
 .feed-item{
-  background:var(--ds-panel);
-  border:1px solid var(--ds-warm);
-  border-radius:12px;
-  padding:8px 14px;
-  font-size:14px;
-  font-weight:900;
-  text-align:center;
-  color:var(--ds-warm-strong);
-  box-shadow:0 10px 28px rgba(0,0,0,.55);
-  animation:feedLife 2.6s ease forwards;
   max-width:min(440px,60vw);
+  padding:6px 12px;
+  border:1px solid var(--bf-accent);border-radius:2px;
+  background:rgba(10,14,20,.82);
+  color:var(--bf-accent);
+  font-size:12px;font-weight:700;line-height:1.25;letter-spacing:.06em;
+  text-transform:uppercase;text-align:center;
+  font-variant-numeric:tabular-nums;
+  word-break:break-word;
+  animation:feedLife 2.6s ease forwards;
 }
 .feed-item.side-left{align-self:flex-start}
 .feed-item.side-right{align-self:flex-end}
 .feed-item.side-center{align-self:center}
 #event-feed.frozen .feed-item{animation-play-state:paused}
-.feed-item.overfly{border-color:var(--ds-gold);color:var(--ds-gold)}
-.feed-item.upgrade{border-color:var(--ds-steel-2);color:var(--ds-text-soft)}
-.feed-item.hard,.feed-item.remove,.feed-item.bad{border-color:var(--ds-danger-line);color:var(--ds-danger)}
+.feed-item.overfly{color:var(--bf-signal);border-color:var(--bf-signal)}
+.feed-item.upgrade,.feed-item.ok{color:var(--bf-ok);border-color:var(--bf-ok)}
+.feed-item.hard,.feed-item.remove,.feed-item.bad{color:var(--bf-danger);border-color:var(--bf-danger)}
+.feed-item.land,.feed-item.combo{color:var(--bf-accent);border-color:var(--bf-accent)}
 @keyframes feedLife{
-  0%{opacity:0;transform:translateY(8px) scale(.96)}
+  0%{opacity:0;transform:translateY(8px)}
   12%{opacity:1;transform:none}
   78%{opacity:1}
-  100%{opacity:0;transform:translateY(-10px)}
+  100%{opacity:0;transform:translateY(-8px)}
 }
 
-/* ЭКРАННЫЕ КНОПКИ УПРАВЛЕНИЯ */
+/* ---------- Экранные кнопки управления ---------- */
 #controls{position:fixed;right:16px;bottom:16px;display:flex;gap:7px;z-index:12}
-#controls[hidden]{display:none!important}
 .ctrl{width:52px;height:52px;font-size:19px;touch-action:none}
+.ctrl:active{background:var(--bf-accent-dim);border-color:var(--bf-accent);color:var(--bf-accent)}
 
-/* ГЛАВНОЕ МЕНЮ И ЭКРАНЫ (БЕЗ ЗАТЕМНЕНИЯ ВСЕЙ СЦЕНЫ) */
+/* =========================================================================
+ * ОВЕРЛЕЙ ЭКРАНОВ
+ * ========================================================================= */
 #overlay{
-  position:fixed;
-  inset:0;
-  pointer-events:auto;
-  z-index:15;
-  transition:background .3s ease, opacity .25s ease;
+  position:fixed;inset:0;
+  pointer-events:auto;z-index:15;
+  transition:background .3s ease,opacity .25s ease;
 }
 #overlay.mode-main{
-  background:linear-gradient(90deg,rgba(6,11,22,.78) 0%,rgba(6,11,22,.38) 42%,rgba(6,11,22,.05) 100%);
+  background:linear-gradient(90deg,rgba(6,11,22,.82) 0%,rgba(6,11,22,.4) 42%,rgba(6,11,22,.05) 100%);
 }
 #overlay.mode-shop{
-  background:radial-gradient(circle at center,rgba(10,20,36,.68),rgba(5,10,18,.88));
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  background:radial-gradient(circle at center,rgba(10,20,36,.62),rgba(5,10,18,.88));
+  display:flex;align-items:center;justify-content:center;
   padding:16px;
 }
 #overlay.mode-crash{
-  background:rgba(215,35,45,.28);
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  background:rgba(180,32,40,.32);
+  display:flex;align-items:center;justify-content:center;
   padding:16px;
 }
 
-/* ПОЛОСКА БИОМА В МЕНЮ И ПАУЗЕ */
-.ds-biome{margin-top:10px;max-width:360px}
+/* ---------- Полоска биома в меню и паузе ---------- */
+.ds-biome{margin-top:8px;max-width:100%}
 .biome-strip{
   display:flex;align-items:center;gap:10px;
-  background:rgba(9,17,29,.6);border:1px solid rgba(255,255,255,.16);
-  border-radius:12px;padding:8px 12px;
+  padding:7px 11px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.62);
 }
-.biome-strip-icon{font-size:20px;line-height:1}
+.biome-strip-icon{font-size:18px;line-height:1}
 .biome-strip-main{flex:1;min-width:0}
-.biome-strip-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:.5px;color:var(--ds-text-dim);font-weight:800}
-.biome-strip-row b{color:var(--ds-text);font-size:12px;letter-spacing:1px;white-space:nowrap}
-.biome-strip-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.biome-strip-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
-.biome-strip-bar i{display:block;height:100%;background:var(--ds-gold);border-radius:3px}
+.biome-strip-row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.biome-strip-row b{
+  color:var(--bf-text);font-size:11px;letter-spacing:.08em;
+  white-space:nowrap;
+}
+.biome-strip-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.biome-strip-bar{height:3px;border-radius:1px;background:rgba(120,160,190,.3);overflow:hidden;margin-top:6px}
+.biome-strip-bar i{display:block;height:100%;background:var(--bf-accent);border-radius:1px}
 
-/* НАСТРОЙКИ КАМЕРЫ: двухколоночный экран с живым предпросмотром */
+/* ---------- Настройки камеры: живой предпросмотр ---------- */
 .cam-settings-card{width:min(940px,100%);text-align:left}
-.cam-settings-body{display:grid;grid-template-columns:1fr 1.15fr;gap:20px;align-items:stretch;margin-top:12px}
-.cam-settings-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cam-settings-body{display:grid;grid-template-columns:1fr 1.15fr;gap:18px;align-items:stretch;margin-top:12px}
+.cam-settings-col{display:flex;flex-direction:column;gap:10px;min-width:0}
 .cam-profile-line{
-  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.14);
-  border-radius:12px;padding:10px 12px;font-size:12px;color:var(--ds-text-soft);line-height:1.45;
+  padding:9px 12px;
+  border:1px solid var(--bf-line);border-left:2px solid var(--bf-accent);border-radius:2px;
+  background:rgba(10,14,20,.62);
+  color:var(--bf-text-dim);
+  font-size:12px;line-height:1.5;
 }
-.cam-profile-line b{color:#fff}
+.cam-profile-line b{color:var(--bf-text)}
 .cam-slider-block{
-  background:rgba(8,15,27,.75);border:1px solid rgba(255,255,255,.14);
-  border-radius:14px;padding:12px 14px;
+  padding:11px 13px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.62);
 }
-.cam-slider-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:800;color:#cfe6fa;letter-spacing:.5px}
-.cam-slider-head b{font-size:16px;color:#7de3ff;font-variant-numeric:tabular-nums}
+.cam-slider-head{
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.cam-slider-head > span{min-width:0}
+.cam-slider-head b{
+  color:var(--bf-signal);
+  font:700 15px/1.2 var(--bf-mono);font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
 .cam-slider-block input[type=range]{
-  -webkit-appearance:none;appearance:none;width:100%;height:26px;margin-top:8px;
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:26px;margin-top:8px;
   background:transparent;cursor:pointer;
+  accent-color:var(--bf-accent);
 }
 .cam-slider-block input[type=range]::-webkit-slider-runnable-track{
-  height:8px;border-radius:6px;background:linear-gradient(90deg,#0b4f6c,#0f7a94 55%,#12a8c4);
-  border:1px solid rgba(120,235,255,.35);
+  height:4px;border-radius:1px;
+  background:rgba(120,160,190,.3);
+  border:1px solid var(--bf-line);
 }
 .cam-slider-block input[type=range]::-webkit-slider-thumb{
-  -webkit-appearance:none;appearance:none;width:20px;height:20px;margin-top:-7px;border-radius:50%;
-  background:#e8fbff;border:3px solid #17b7d6;box-shadow:0 0 12px rgba(70,220,255,.8);
+  -webkit-appearance:none;appearance:none;
+  width:14px;height:14px;margin-top:-6px;
+  border-radius:2px;
+  background:var(--bf-bg-panel);
+  border:1px solid var(--bf-accent);
+  box-shadow:0 0 0 1px rgba(111,195,232,.2);
 }
 .cam-slider-block input[type=range]::-moz-range-track{
-  height:8px;border-radius:6px;background:linear-gradient(90deg,#0b4f6c,#0f7a94 55%,#12a8c4);
-  border:1px solid rgba(120,235,255,.35);
+  height:4px;border-radius:1px;
+  background:rgba(120,160,190,.3);
+  border:1px solid var(--bf-line);
 }
 .cam-slider-block input[type=range]::-moz-range-thumb{
-  width:16px;height:16px;border-radius:50%;background:#e8fbff;border:3px solid #17b7d6;
+  width:14px;height:14px;border-radius:2px;
+  background:var(--bf-bg-panel);
+  border:1px solid var(--bf-accent);
 }
-.cam-slider-hint{font-size:10px;color:#8fb0cc;margin-top:4px;letter-spacing:.4px}
+.cam-slider-hint{font-size:10px;color:var(--bf-text-mute);margin-top:4px;letter-spacing:.02em}
 .cam-preview-wrap{
   position:relative;aspect-ratio:16/10;min-height:190px;
-  border:1px solid rgba(0,229,255,.45);border-radius:16px;overflow:hidden;
-  background:#050b14;box-shadow:inset 0 0 40px rgba(0,80,120,.35);
+  border:1px solid var(--bf-accent);border-radius:2px;overflow:hidden;
+  background:#050b14;
 }
 #cam-preview{position:absolute;inset:0}
 #cam-preview canvas{width:100%!important;height:100%!important;display:block}
 .cam-preview-tag{
-  position:absolute;left:10px;top:8px;z-index:2;
-  font-size:10px;font-weight:900;letter-spacing:1.6px;color:#9ff5ff;
-  background:rgba(4,14,24,.72);border:1px solid rgba(120,235,255,.4);
-  border-radius:7px;padding:3px 8px;pointer-events:none;
+  position:absolute;left:8px;top:8px;z-index:2;
+  padding:2px 7px;
+  border:1px solid var(--bf-line-strong);border-radius:2px;
+  background:rgba(0,0,0,.7);
+  color:var(--bf-accent);
+  font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  pointer-events:none;
 }
 .cam-preview-note{
-  position:absolute;left:10px;right:10px;bottom:8px;z-index:2;
-  font-size:10px;color:#b9d3ea;text-align:center;pointer-events:none;
+  position:absolute;left:8px;right:8px;bottom:7px;z-index:2;
+  font-size:10px;color:var(--bf-text-dim);text-align:center;pointer-events:none;
   text-shadow:0 1px 4px #000;
 }
-.cam-status{min-height:18px;font-size:12px;font-weight:800;letter-spacing:.4px;color:#69f0ae;text-align:center}
-.cam-status.err{color:#ff8a80}
+.cam-status{min-height:18px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--bf-ok);text-align:center}
+.cam-status.err{color:var(--bf-danger)}
 
-/* НАСТРОЙКИ: ВКЛАДКИ И ПЕРЕКЛЮЧАТЕЛИ ЭФФЕКТОВ */
+/* ---------- Вкладки настроек ---------- */
 .ds-tabs{
-  display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;
-  padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.14);
+  display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 14px;
+  padding-bottom:8px;border-bottom:1px solid var(--bf-line);
 }
 .ds-tab{
-  flex:1 1 auto;min-width:92px;padding:8px 10px;border-radius:10px;
-  border:1px solid var(--ds-line);background:rgba(0,0,0,.22);
-  color:var(--ds-text-dim);font:800 12px/1.2 var(--ds-font);
-  letter-spacing:.6px;cursor:pointer;
+  flex:1 1 auto;min-width:92px;min-height:44px;
+  padding:8px 10px;
+  border:1px solid transparent;border-radius:2px;
+  background:transparent;
+  color:var(--bf-text-dim);
+  font:700 12px/1.2 var(--ds-font);letter-spacing:.08em;text-transform:uppercase;
+  cursor:pointer;
+  transition:background .12s,border-color .12s,color .12s;
 }
-.ds-tab:hover{color:var(--ds-text);border-color:var(--ds-text-dim)}
+.ds-tab:hover{color:var(--bf-text);border-color:var(--bf-line)}
 .ds-tab-on{
-  background:var(--ds-steel);color:var(--ds-text);
-  border-color:var(--ds-steel-2);box-shadow:0 4px 0 rgba(0,0,0,.4);
+  background:var(--bf-accent-dim);
+  border-color:var(--bf-accent);
+  color:var(--bf-accent);
+  box-shadow:inset 0 0 0 1px rgba(111,195,232,.15);
 }
 .ds-tab-body{min-height:150px;text-align:left}
 .ds-tab-body .ds-field > span{text-align:left}
 .fx-check{
-  display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;
-  border:1px solid rgba(255,255,255,.14);border-radius:12px;
-  background:rgba(8,15,27,.75);color:var(--ds-text-soft);
-  font-size:13px;font-weight:800;cursor:pointer;
+  display:flex;align-items:center;gap:10px;
+  margin:10px 0;padding:10px 12px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.62);
+  color:var(--bf-text-dim);
+  font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;
 }
-.fx-check input{width:18px;height:18px;accent-color:#17b7d6;cursor:pointer}
+.fx-check input[type=checkbox]{
+  width:18px;height:18px;flex:0 0 18px;margin:0;
+  accent-color:var(--bf-accent);
+  cursor:pointer;
+}
 
-/* УПРАВЛЕНИЕ: ВЫБОР РЕЖИМА И МИНИАТЮРЫ */
+/* ---------- Управление: карточки режима ---------- */
 .ctrl-mode-block{margin:4px 0 12px}
-.ctrl-mode-title{font-size:11px;font-weight:900;letter-spacing:1.4px;color:#cfe6fa;margin-bottom:8px}
-.ctrl-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ctrl-mode-title{
+  margin-bottom:8px;
+  font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--bf-text-dim);
+}
+.ctrl-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ctrl-mode-card{
   display:flex;flex-direction:column;align-items:center;gap:8px;
-  background:rgba(8,15,27,.75);border:1.5px solid rgba(255,255,255,.14);
-  border-radius:14px;padding:12px 10px;color:var(--ds-text-soft);
-  text-align:center;cursor:pointer;transition:border-color .15s,background .15s,transform .1s;
+  padding:12px 10px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.62);
+  color:var(--bf-text-dim);
+  text-align:center;cursor:pointer;
+  transition:border-color .15s,background .15s;
   font:inherit;
+  min-width:0;
 }
-.ctrl-mode-card:hover:not(:disabled){border-color:var(--ds-text-dim);transform:translateY(-1px)}
-.ctrl-mode-card.on{border-color:var(--ds-warm);background:#162033;color:var(--ds-text);box-shadow:inset 0 0 0 1px rgba(255,205,130,.18)}
-.ctrl-mode-card:disabled{opacity:.45;cursor:not-allowed}
+.ctrl-mode-card:hover:not(:disabled){border-color:var(--bf-line-strong);background:#121a24}
+.ctrl-mode-card.on{
+  border-color:var(--bf-accent);
+  background:var(--bf-accent-dim);
+  box-shadow:inset 0 0 0 1px rgba(111,195,232,.15);
+}
+.ctrl-mode-card:disabled{opacity:.4;cursor:not-allowed}
 .ctrl-mode-preview{position:relative;width:60px;height:80px;display:flex;align-items:center;justify-content:center;flex:none}
-.ctrl-mode-label{font-size:13px;font-weight:900;letter-spacing:.6px;color:#fff}
-.ctrl-mode-desc{font-size:10px;line-height:1.35;color:var(--ds-text-dim);font-weight:600}
+.ctrl-mode-label{
+  font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--bf-text);word-break:break-word;
+}
+.ctrl-mode-desc{font-size:10px;line-height:1.4;color:var(--bf-text-dim);font-weight:600;word-break:break-word}
 
-/* Миниатюра «Кнопки»: четыре квадратика как на #controls */
+/* Миниатюра «Кнопки» */
 .ctrl-preview-buttons{display:grid;grid-template-columns:repeat(2,18px);grid-auto-rows:18px;gap:5px}
 .ctrl-preview-buttons span{
-  display:flex;align-items:center;justify-content:center;width:18px;height:18px;
-  border-radius:5px;background:#243656;border:1px solid #9cb8d8;
-  color:#d7e9ff;font-size:10px;font-weight:900;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  width:18px;height:18px;
+  border:1px solid var(--bf-line-strong);border-radius:2px;
+  background:rgba(10,14,20,.8);
+  color:var(--bf-text-dim);
+  font-size:10px;font-weight:700;line-height:1;
 }
-
-/* Миниатюра «Акселерометр»: телефон со стрелками и кнопкой сигнала */
+/* Миниатюра «Акселерометр» */
 .ctrl-preview-phone{
-  position:relative;width:40px;height:70px;border-radius:8px;
-  border:1.5px solid #9cb8d8;background:#0a1321;
-  box-shadow:inset 0 0 12px rgba(40,90,140,.5);
+  position:relative;width:40px;height:70px;
+  border:1px solid var(--bf-line-strong);border-radius:2px;
+  background:#0a1321;
 }
 .cpp-signal{position:absolute;top:3px;right:3px;font-size:9px;line-height:1}
-.cpp-steer{position:absolute;top:17px;right:3px;font-size:8px;font-weight:900;letter-spacing:1px;color:#7de3ff}
-.cpp-pedals{position:absolute;left:5px;bottom:6px;font-size:8px;line-height:1.1;font-weight:900;color:#9cb8d8}
+.cpp-steer{position:absolute;top:17px;right:3px;font-size:8px;font-weight:700;letter-spacing:.08em;color:var(--bf-accent)}
+.cpp-pedals{position:absolute;left:5px;bottom:6px;font-size:8px;line-height:1.1;font-weight:700;color:var(--bf-text-dim)}
 .cpp-center{
   position:absolute;left:50%;top:52%;width:6px;height:6px;margin:-3px 0 0 -3px;
-  border-radius:50%;background:rgba(255,205,130,.85);box-shadow:0 0 8px rgba(255,205,130,.6);
+  border-radius:1px;background:var(--bf-signal);
 }
 
-/* ОВЕРЛЕЙ АКСЕЛЕРОМЕТРА */
+/* ---------- Оверлей акселерометра ---------- */
 #tilt-overlay{position:fixed;inset:0;pointer-events:none;z-index:11}
-#tilt-overlay[hidden]{display:none!important}
 .tilt-zone{
   position:absolute;bottom:0;height:55vh;width:50vw;
   pointer-events:none;display:flex;align-items:flex-end;justify-content:center;
@@ -430,8 +594,8 @@ canvas{display:block;width:100%;height:100%}
 .tilt-zone-gas{right:0}
 .tilt-zone-brake{left:0}
 .tilt-zone-hint{
-  font-size:13px;font-weight:900;letter-spacing:1.5px;
-  color:rgba(255,255,255,.45);
+  font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:rgba(232,238,245,.45);
   text-shadow:0 2px 6px rgba(0,0,0,.8);
   pointer-events:none;transition:opacity .4s ease;
 }
@@ -441,49 +605,249 @@ canvas{display:block;width:100%;height:100%}
   display:flex;flex-direction:column;align-items:center;gap:4px;
   pointer-events:none;
 }
-.tilt-indicator-track{
-  width:120px;height:6px;border-radius:3px;
-  background:rgba(255,255,255,.18);position:relative;
-}
+.tilt-indicator-track{width:120px;height:4px;border-radius:1px;background:rgba(120,160,190,.35);position:relative}
 .tilt-indicator-dot{
-  position:absolute;top:-3px;left:50%;width:12px;height:12px;
-  border-radius:50%;background:#fff;transform:translateX(-50%);
-  box-shadow:0 0 8px rgba(255,255,255,.6);
+  position:absolute;top:-4px;left:50%;
+  width:12px;height:12px;border-radius:1px;
+  background:var(--bf-accent);
+  border:1px solid #0b0f14;
+  transform:translateX(-50%);
   transition:left .08s linear,background .2s;
 }
-.tilt-indicator-label{
-  font-size:10px;font-weight:900;letter-spacing:1.5px;
-  color:rgba(255,255,255,.55);
-}
+.tilt-indicator-label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--bf-text-dim)}
 .tilt-flash-btn{
   position:fixed;right:18px;bottom:130px;
-  width:56px;height:56px;border-radius:50%;
-  background:rgba(10,19,33,.72);
-  border:2px solid rgba(156,184,216,.55);
-  color:#fff;font-size:22px;padding:0;
+  width:48px;height:48px;padding:0;
   display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.78);
+  color:var(--bf-text);font-size:20px;
   pointer-events:auto;cursor:pointer;
-  box-shadow:0 6px 18px rgba(0,0,0,.45);
-  transition:transform .08s,border-color .15s,background .15s;
+  transition:border-color .15s,background .15s;
   z-index:12;
 }
 .tilt-flash-btn:hover,.tilt-flash-btn:active,.tilt-flash-btn.on{
-  border-color:var(--ds-warm);transform:scale(.94);background:rgba(24,38,60,.85);
+  border-color:var(--bf-accent);
+  background:var(--bf-accent-dim);
+  color:var(--bf-accent);
 }
-.tilt-flash-btn:active .tilt-flash-icon,.tilt-flash-btn.on .tilt-flash-icon{filter:brightness(1.6)}
+.tilt-flash-btn:active .tilt-flash-icon,.tilt-flash-btn.on .tilt-flash-icon{filter:brightness(1.4)}
 
+#fatal{display:none;position:fixed;inset:0;background:var(--bf-bg-panel);color:var(--bf-text);padding:25px;z-index:30}
 
-#fatal{display:none;position:fixed;inset:0;background:#101827;color:#fff;padding:25px;z-index:30}
-
-@media(max-width:680px){
-  .brand{top:10px;left:12px}
-  .ctrl{width:45px;height:46px;font-size:16px}
-  #controls{right:10px;bottom:10px;gap:5px}
+/* =========================================================================
+ * ПЛАНШЕТ
+ * ========================================================================= */
+@media (max-width: 900px) {
   #bottom{display:none}
-  #tp-hud{right:10px;bottom:64px;min-width:165px;padding:9px 12px}
-  .tp-speed-val{font-size:32px}
-  .cam-settings-card{padding:16px}
-  .cam-settings-body{grid-template-columns:1fr}
-  .cam-preview-wrap{min-height:170px;order:-1}
-  .cam-slider-head b{font-size:15px}
+}
+
+/* =========================================================================
+ * МОБИЛЬНЫЙ ПОРТРЕТ: всё в собственных непересекающихся зонах
+ * ========================================================================= */
+@media (max-width: 680px) {
+  #hud{text-shadow:0 1px 2px rgba(0,0,0,.6)}
+
+  /* Верхняя строка: таймер и пауза */
+  #hud-top{
+    display:flex;position:absolute;top:8px;left:8px;right:8px;
+    align-items:flex-start;gap:8px;z-index:3;
+  }
+  #btn-pause{position:static;flex:0 0 44px;width:44px;height:44px;font-size:16px}
+  #order-hud{
+    position:static;order:-1;flex:1 1 auto;min-width:0;max-width:none;
+    transform:none;padding:5px 8px;text-align:left;
+  }
+  #order-hud .order-title{font-size:9px;letter-spacing:.1em}
+  #order-hud .order-row{
+    justify-content:space-between;gap:6px;font-size:10px;
+    white-space:nowrap;overflow:hidden;
+  }
+
+  /* Лента сообщений: единый поток под верхней строкой */
+  #hud-feedzone{
+    display:flex;position:absolute;
+    top:62px;left:8px;right:8px;bottom:262px;
+    flex-direction:column;align-items:center;gap:6px;
+    overflow:hidden;z-index:2;
+  }
+  #hud:not(.third-person) #hud-feedzone{bottom:164px}
+  #status-badges{
+    position:static;align-self:flex-end;
+    flex-direction:row;flex-wrap:wrap;justify-content:flex-end;
+    max-width:100%;gap:4px;flex:0 0 auto;
+  }
+  .badge{
+    padding:4px 7px;font-size:10px;letter-spacing:.05em;
+    max-width:100%;
+  }
+  #biome-banner{
+    position:static;transform:none;
+    max-width:100%;width:100%;
+    padding:5px 9px;gap:8px;
+    flex:0 0 auto;
+  }
+  #biome-banner.show{transform:none}
+  #biome-banner .biome-ico{font-size:18px}
+  #biome-banner .biome-name{font-size:12px;letter-spacing:.08em}
+  #biome-banner .biome-sub{font-size:9px;letter-spacing:.04em;white-space:normal;word-break:break-word}
+  #exit-hint{
+    position:static;transform:none;
+    max-width:100%;width:100%;
+    padding:6px 9px;font-size:11px;gap:8px;
+    flex-wrap:wrap;flex:0 0 auto;
+  }
+  #exit-hint.show{transform:none}
+  #exit-hint small{font-size:10px}
+  #hint{
+    position:static;transform:none;max-width:100%;
+    font-size:11px;letter-spacing:.08em;flex:0 0 auto;
+  }
+  #hint small{font-size:9px;letter-spacing:.02em}
+  #event-feed{
+    position:static;width:100%;max-width:none;
+    max-height:none;flex:1 1 auto;min-height:0;
+    margin:0;padding:0;gap:5px;
+    order:10;
+  }
+  .feed-item{max-width:100%;font-size:12px;padding:6px 10px;word-break:break-word}
+  #jump-live{
+    position:static;transform:none;
+    max-width:100%;padding:4px 8px;flex:0 0 auto;order:11;
+  }
+  #jump-live .jl-title{font-size:9px;letter-spacing:.12em}
+  #jump-live .jl-stats{font-size:13px}
+  #slowmo-badge{margin:2px 0 0 6px;padding:1px 6px;font-size:8px;letter-spacing:.12em}
+  #eco-toast{
+    position:static;transform:none;
+    max-width:100%;white-space:normal;word-break:break-word;
+    padding:5px 8px;font-size:10px;flex:0 0 auto;order:12;
+  }
+  #eco-toast.show{transform:none}
+  #slowmo-badge{font-size:9px;padding:2px 8px}
+
+  /* Спидометр третьего лица слева снизу, над кнопками управления */
+  #tp-hud{
+    left:10px;bottom:70px;
+    min-width:150px;max-width:calc(100vw - 20px);
+    padding:7px 9px;
+  }
+  .tp-speed-row{padding-bottom:4px;margin-bottom:6px}
+  .tp-speed-val{font-size:26px}
+  .tp-speed-unit{font-size:9px;margin-left:4px}
+  .tp-gear{font-size:11px;padding:1px 5px}
+  .tp-stats-grid{gap:4px}
+  .tp-stat-box{padding:3px 5px}
+  .tp-stat-box span{font-size:8px;letter-spacing:.08em}
+  .tp-stat-box strong{font-size:12px}
+  .tp-extra{display:none}
+
+  /* Состояние мотоцикла: над спидометром, ширина как у него */
+  #eco-hud{
+    left:10px;bottom:70px;width:172px;
+    padding:6px 8px;font-size:10px;
+  }
+  #hud.third-person #eco-hud{left:10px;bottom:164px}
+  .eco-row{font-size:9px;letter-spacing:.06em;gap:5px}
+  .eco-row b{font-size:10px}
+  .eco-bar{margin:3px 0 5px}
+  .eco-wear{gap:4px;padding-top:5px}
+  .eco-wear span{font-size:8px}
+  .eco-bank{margin-top:5px;padding-top:4px;font-size:9px;letter-spacing:.06em}
+  .eco-bank b{font-size:11px}
+
+  /* Кнопки управления справа снизу */
+  #controls{right:10px;bottom:10px;gap:5px}
+  .ctrl{width:42px;height:42px;font-size:15px}
+  .tilt-flash-btn{right:10px;bottom:64px;width:44px;height:44px;font-size:18px}
+  .tilt-indicator{top:64px}
+  .tilt-indicator-track{width:96px}
+
+  /* Оверлеи: панели на всю ширину */
+  #overlay.mode-shop,#overlay.mode-crash{padding:10px}
+  #overlay.mode-main{
+    background:linear-gradient(0deg,rgba(6,11,22,.86) 0%,rgba(6,11,22,.6) 45%,rgba(6,11,22,.06) 100%);
+  }
+  .ds-panel{max-height:calc(100vh - 20px)}
+  .cam-settings-card{padding:14px}
+  .cam-settings-body{grid-template-columns:1fr;gap:12px}
+  .cam-preview-wrap{min-height:160px;order:-1}
+  .cam-slider-head{
+    flex-direction:column;align-items:flex-start;gap:2px;
+  }
+  .cam-slider-head b{font-size:14px}
+  .cam-slider-block{padding:10px 11px}
+  .cam-slider-block input[type=range]{height:34px}
+  .cam-slider-block input[type=range]::-webkit-slider-thumb{
+    width:20px;height:20px;margin-top:-9px;
+  }
+  .cam-slider-block input[type=range]::-moz-range-thumb{width:20px;height:20px}
+
+  .ds-tabs{flex-wrap:wrap;gap:4px}
+  .ds-tab{
+    flex:1 1 calc(50% - 4px);min-width:0;min-height:44px;
+    font-size:11px;letter-spacing:.04em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .ds-tab-body{min-height:0}
+  .ds-inline,.ds-field{min-width:0}
+  .ds-inline > span{word-break:break-word}
+
+  .ctrl-mode-options{grid-template-columns:1fr 1fr;gap:8px}
+  .ctrl-mode-preview{width:48px;height:64px}
+  .ctrl-preview-phone{width:36px;height:60px}
+  .ctrl-mode-label{font-size:11px}
+  .ctrl-mode-desc{font-size:10px}
+
+  /* Статистика и опасные окна: одна колонка, кнопки на всю ширину */
+  .ds-stats{grid-template-columns:1fr}
+  .ds-panel-danger,.ds-panel-narrow{width:100%}
+
+  #fatal{padding:18px}
+}
+
+/* Очень узкие экраны */
+@media (max-width: 380px) {
+  .ctrl-mode-options{grid-template-columns:1fr}
+  .ds-tab{flex:1 1 100%}
+  #order-hud .order-row{font-size:9px}
+  .tp-speed-val{font-size:26px}
+  .ds-stack .ds-button{min-height:46px;font-size:12px}
+  .ds-currency{font-size:14px}
+}
+
+/* Горизонтальный телефон: компактная раскладка, левая колонка не пересекается */
+@media (max-width: 680px) and (orientation: landscape) {
+  #hud #hud-feedzone{top:52px;left:8px;right:8px;bottom:196px;max-height:none}
+  #event-feed{margin-top:0;max-height:none}
+  /* Два широких баннера не помещаются над левой колонкой — оставляем ленту */
+  #biome-banner,#exit-hint{display:none!important}
+  #hint{display:none}
+  #tp-hud{bottom:10px}
+  #eco-hud{bottom:106px}
+  #hud.third-person #eco-hud{bottom:106px}
+  #tilt-overlay .tilt-indicator{top:56px}
+}
+
+/* Планшет/малый ноутбук горизонтально: лента уходит правее левой колонки */
+@media (min-width: 681px) and (max-width: 900px) and (orientation: landscape) {
+  #hud-feedzone{padding-left:260px}
+  #event-feed{margin-top:186px;max-height:36vh}
+  #hint{display:none}
+  #eco-toast{max-width:50vw}
+  #tp-hud{bottom:12px}
+  #eco-hud{bottom:20px}
+  #hud.third-person #eco-hud{bottom:164px}
+}
+
+/* Низкий горизонт: оставляем только главную ленту, без пересечений */
+@media (orientation: landscape) and (max-height: 480px) {
+  #hint,#bottom{display:none}
+  #jump-live,#eco-toast{display:none!important}
+  #event-feed{margin-top:186px;max-height:calc(100vh - 270px)}
+}
+
+/* Короткий десктоп: подсказка внизу мешала бы тосту */
+@media (min-width: 901px) and (max-height: 640px) {
+  #hint{display:none}
 }
