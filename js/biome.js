@@ -522,7 +522,9 @@ function splitCenterS(playerS) {
   return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
 }
 
-/** Во сколько раз надо сжать логические смещения полос, чтобы они влезли. */
+/** Во сколько раз сжать логические полосы, чтобы крайняя осталась на асфальте.
+ *  Ширина — из замка профиля, смещения — из живого биома. Нижнего порога нет:
+ *  иначе широкие полосы МКАД торчат с узкой закреплённой дороги. */
 function laneDisplayScaleAtS(s) {
   fillBlend(blendMetersAt(s));
   const dominant = blendT < 0.5 ? blendA : blendB;
@@ -530,8 +532,8 @@ function laneDisplayScaleAtS(s) {
   let maxAbs = 0;
   for (const off of cfg.offsets) maxAbs = Math.max(maxAbs, Math.abs(off));
   const half = roadWidthAtS(s) * 0.5 - 0.9;
-  if (maxAbs <= 0.001) return 1;
-  return Math.max(0.35, Math.min(1, half / (maxAbs + 1.15)));
+  if (maxAbs <= 0.001 || half <= 0.5) return 1;
+  return Math.min(1, half / (maxAbs + 1.15));
 }
 
 function splitLateralShiftAtS(s, lateralOffset) {
@@ -1060,9 +1062,9 @@ function applyLaneConfig(dominant, playerS) {
   }
   // Кромка в тех же логических метрах, что и laneOffset. Если полосы
   // сжаты, чтобы влезть в закреплённую ширину, порог шире половины полотна.
-  const scale = Math.max(0.35, laneDisplayScaleAtS(playerS));
+  const scale = laneDisplayScaleAtS(playerS);
   const visualHalf = Math.max(0, roadWidthAtS(playerS) * 0.5 - 0.7);
-  G.ROAD_EDGE = Math.max(2.2, visualHalf / scale);
+  G.ROAD_EDGE = Math.max(2.2, visualHalf / Math.max(scale, 0.05));
 }
 
 function updateScenery() {
@@ -1279,6 +1281,7 @@ function resetBiomeRun() {
   lastLaneBiome = -1;
   lastSplitZone = -1;
   lastSplitSide = -1;
+  for (const key of Object.keys(roadLock)) delete roadLock[key];
   G.laneAssistTarget = null;
   saveTimer = 0;
   hideBiomeBanner();

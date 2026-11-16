@@ -7,9 +7,8 @@ export function initRoadSurface() {
   /* =========================================================================
    * 5. ДОРОЖНОЕ ПОЛОТНО, РАЗМЕТКА, РАЗВИЛКА, ТРОТУАРЫ И ОТКОСЫ
    * -------------------------------------------------------------------------
-   * Ширина полотна зависит от биома и расширяется на развилке. Все ленты
-   * строятся от фактической кромки roadWidthAtS(), а полосы и островок —
-   * от laneWorldOffsetAtS(), поэтому 4, 2 и 8 полос стыкуются бесшовно.
+   * Ширина полотна — ширина одной ветки. Разъезд в неё не входит:
+   * две ленты и трава между ними считаются в js/engine/fork.js.
    * ========================================================================= */
   const RIBBON_LEN = 350;
   const RIBBON_SEGS = 112;
@@ -22,13 +21,12 @@ export function initRoadSurface() {
   const sampleY = new Float32Array(ROW);
   const sampleZ = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
-  const sampleMkad = new Float32Array(ROW);
   const sampleHalf = new Float32Array(ROW);
   const rightX = new Float32Array(ROW);
   const rightZ = new Float32Array(ROW);
 
-  const toWorld = (s, lat) => (G.laneWorldOffsetAtS ? G.laneWorldOffsetAtS(s, lat) : lat);
-  const widthAt = (s) => (G.roadWidthAtS ? G.roadWidthAtS(s) : G.ROAD_WIDTH || 19);
+  const toWorld = (s, lat) => G.laneWorldOffsetAtS(s, lat);
+  const widthAt = (s) => G.roadWidthAtS(s);
 
   function sampleCenterline(playerS) {
     for (let r = 0; r < ROW; r++) {
@@ -40,8 +38,7 @@ export function initRoadSurface() {
       sampleX[r] = G.roadX(s);
       sampleY[r] = G.roadY(s);
       sampleZ[r] = -s;
-      sampleCity[r] = G.cityWeightAtS ? G.cityWeightAtS(s) : 1;
-      sampleMkad[r] = G.mkadWeightAtS ? G.mkadWeightAtS(s) : 0;
+      sampleCity[r] = G.cityWeightAtS(s);
       sampleHalf[r] = widthAt(s) * 0.5;
       rightX[r] = 1 / lh;
       rightZ[r] = dx / lh;
@@ -271,7 +268,7 @@ export function initRoadSurface() {
 
   /* ---------------- Ленты с переменной шириной ---------------- */
   function spreadAt(s) {
-    return G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
+    return G.forkSpreadAtS(s);
   }
 
   function updateRoadRibbon() {
