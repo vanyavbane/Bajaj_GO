@@ -1,0 +1,63 @@
+/**
+ * Одна кривая развилки. Её читают и полотно, и выталкивание байка:
+ * отдельные «островок» и «разъезд» больше не расходятся.
+ *
+ * Ноль на оси — левая ветка, как и авто-выбор (laneOffset <= 0).
+ */
+
+export const FORK_LEAD = 120;
+export const FORK_SPREAD = 26;
+/** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
+export const FORK_SEAM = 0.16;
+
+function smooth01(v) {
+  const t = Math.max(0, Math.min(1, v));
+  return t * t * (3 - 2 * t);
+}
+
+/** Метры до центра развилки текущей зоны. Отрицательные — ещё не доехали. */
+export function forkOffset(meters, zoneLength, lead = FORK_LEAD) {
+  const m = Number.isFinite(meters) ? meters : 0;
+  const zone = Math.floor(m / zoneLength);
+  const splitM = (zone + 1) * zoneLength - lead;
+  return m - splitM;
+}
+
+/** Боковой уход одной ветки, метры. Ноль на концах, пик в центре, без излома. */
+export function forkSpreadAt(meters, zoneLength, lead = FORK_LEAD, peak = FORK_SPREAD) {
+  const d = forkOffset(meters, zoneLength, lead);
+  if (d <= -lead || d >= lead) return 0;
+  const u = 1 - Math.abs(d) / lead;
+  return peak * smooth01(u);
+}
+
+/** 0…1 той же кривой. Пороги геймплея больше не живут на другой форме. */
+export function forkAmountAt(meters, zoneLength, lead = FORK_LEAD) {
+  return forkSpreadAt(meters, zoneLength, lead, 1);
+}
+
+/** -1 слева, включая ровно ноль. */
+export function forkSide(lateralOffset) {
+  return lateralOffset <= 0 ? -1 : 1;
+}
+
+/**
+ * Кромки двух лент. seam заводит их друг на друга, когда разъезда ещё нет,
+ * и накрывает край травы, когда разъезд уже есть.
+ */
+export function branchEdges(half, spread, seam = FORK_SEAM) {
+  return {
+    leftOuter: -(half + spread),
+    leftInner: -spread + seam,
+    rightInner: spread - seam,
+    rightOuter: half + spread
+  };
+}
+
+/** Откос начинается снаружи асфальта и не складывается внутрь ветки. */
+export function shoulderLats(half, spread, cityOuter, shoulder) {
+  const lip = half + spread + cityOuter;
+  const berm = Math.max(shoulder.berm, lip + 1.5);
+  const far = Math.max(shoulder.far, berm + (shoulder.far - shoulder.berm));
+  return { lip, berm, far };
+}

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
+import { branchEdges, shoulderLats } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -162,14 +163,12 @@ export function initRoadSurface() {
       };
       const sh = G.shoulder;
       const half = sampleHalf[r];
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const spread = spreadAt(sampleS[r]);
       const cityOuter = (0.35 + 3.2) * sampleCity[r];
-      const lipLat = half + spread + cityOuter;
-      const bermLat = Math.max(sh.berm, lipLat + 1.5);
-      const farLat = Math.max(sh.far, bermLat + (sh.far - sh.berm));
-      write(0, -farLat, -bermLat, sh.farY, sh.bermY);
-      write(1, -farLat, -lipLat, sh.farY, sh.lipY);
-      write(2, -bermLat, -lipLat, sh.bermY, sh.lipY);
+      const lat = shoulderLats(half, spread, cityOuter, sh);
+      write(0, -lat.far, -lat.berm, sh.farY, sh.bermY);
+      write(1, -lat.far, -lat.lip, sh.farY, sh.lipY);
+      write(2, -lat.berm, -lat.lip, sh.bermY, sh.lipY);
     }
     geo.attributes.normal.needsUpdate = true;
   }
@@ -271,6 +270,10 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Ленты с переменной шириной ---------------- */
+  function spreadAt(s) {
+    return G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
+  }
+
   function updateRoadRibbon() {
     roadRightMat.envMapIntensity = G.M.road.envMapIntensity;
     gapMat.color.copy(G.M.grass.color);
@@ -279,29 +282,23 @@ export function initRoadSurface() {
     const posG = forkGapMesh.geometry.attributes.position;
     let opened = 0;
     for (let r = 0; r < ROW; r++) {
-      const half = sampleHalf[r];
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const spread = spreadAt(sampleS[r]);
       if (spread > opened) opened = spread;
+      const edge = branchEdges(sampleHalf[r], spread);
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
-      // Половины встречаются на оси без ступеньки. Разъезд разводит их в стороны.
-      posL.setXYZ(idx, cx - rx * (half + spread), cy, cz - rz * (half + spread));
-      posL.setXYZ(idx + 1, cx - rx * spread, cy, cz - rz * spread);
-      posR.setXYZ(idx, cx + rx * spread, cy, cz + rz * spread);
-      posR.setXYZ(idx + 1, cx + rx * (half + spread), cy, cz + rz * (half + spread));
-      if (spread > 0.4) {
-        posG.setXYZ(idx, cx - rx * spread, cy, cz - rz * spread);
-        posG.setXYZ(idx + 1, cx + rx * spread, cy, cz + rz * spread);
-      } else {
-        posG.setXYZ(idx, cx, cy, cz);
-        posG.setXYZ(idx + 1, cx, cy, cz);
-      }
+      posL.setXYZ(idx, cx + rx * edge.leftOuter, cy, cz + rz * edge.leftOuter);
+      posL.setXYZ(idx + 1, cx + rx * edge.leftInner, cy, cz + rz * edge.leftInner);
+      posR.setXYZ(idx, cx + rx * edge.rightInner, cy, cz + rz * edge.rightInner);
+      posR.setXYZ(idx + 1, cx + rx * edge.rightOuter, cy, cz + rz * edge.rightOuter);
+      posG.setXYZ(idx, cx - rx * spread, cy, cz - rz * spread);
+      posG.setXYZ(idx + 1, cx + rx * spread, cy, cz + rz * spread);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
     posG.needsUpdate = true;
-    forkGapMesh.visible = opened > 0.4;
+    forkGapMesh.visible = opened > 0.02;
   }
 
   /** Лента, у которой центр и ширина в мировых метрах зависят от точки s. */
@@ -327,7 +324,7 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const half = sampleHalf[r];
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const spread = spreadAt(sampleS[r]);
       const inner = half + spread + baseWidth * cw;
       const halfW = width * 0.5 * cw;
       const center = side * (inner + halfW);
@@ -348,20 +345,18 @@ export function initRoadSurface() {
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const half = sampleHalf[r];
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
+      const spread = spreadAt(sampleS[r]);
       const cityOuter = (0.35 + 3.2) * sampleCity[r];
       const sh = G.shoulder;
-      const lipLat = half + spread + cityOuter;
-      const bermLat = Math.max(sh.berm, lipLat + 1.5);
-      const farLat = Math.max(sh.far, bermLat + (sh.far - sh.berm));
+      const lat = shoulderLats(half, spread, cityOuter, sh);
       const idx = r * 3;
-      posL.setXYZ(idx,     cx + rx * -farLat, cy + sh.farY, cz + rz * -farLat);
-      posL.setXYZ(idx + 1, cx + rx * -bermLat, cy + sh.bermY, cz + rz * -bermLat);
-      posL.setXYZ(idx + 2, cx + rx * -lipLat, cy + sh.lipY, cz + rz * -lipLat);
+      posL.setXYZ(idx,     cx + rx * -lat.far, cy + sh.farY, cz + rz * -lat.far);
+      posL.setXYZ(idx + 1, cx + rx * -lat.berm, cy + sh.bermY, cz + rz * -lat.berm);
+      posL.setXYZ(idx + 2, cx + rx * -lat.lip, cy + sh.lipY, cz + rz * -lat.lip);
 
-      posR.setXYZ(idx,     cx + rx * lipLat, cy + sh.lipY, cz + rz * lipLat);
-      posR.setXYZ(idx + 1, cx + rx * bermLat, cy + sh.bermY, cz + rz * bermLat);
-      posR.setXYZ(idx + 2, cx + rx * farLat, cy + sh.farY, cz + rz * farLat);
+      posR.setXYZ(idx,     cx + rx * lat.lip, cy + sh.lipY, cz + rz * lat.lip);
+      posR.setXYZ(idx + 1, cx + rx * lat.berm, cy + sh.bermY, cz + rz * lat.berm);
+      posR.setXYZ(idx + 2, cx + rx * lat.far, cy + sh.farY, cz + rz * lat.far);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -576,14 +571,8 @@ export function initRoadSurface() {
     // Осевая разметка уходит на кромки островка во время развилки.
     updateLateralStrip(centerDoubleLine1, (r) => toWorld(sampleS[r], -0.22), 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, (r) => toWorld(sampleS[r], 0.22), 0.13, 0.08);
-    updateLateralStrip(edgeLineLeft, (r) => {
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
-      return -(sampleHalf[r] + spread - 0.32);
-    }, 0.16, 0.025);
-    updateLateralStrip(edgeLineRight, (r) => {
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(sampleS[r]) : 0;
-      return sampleHalf[r] + spread - 0.32;
-    }, 0.16, 0.025);
+    updateLateralStrip(edgeLineLeft, (r) => -(sampleHalf[r] + spreadAt(sampleS[r]) - 0.32), 0.16, 0.025);
+    updateLateralStrip(edgeLineRight, (r) => sampleHalf[r] + spreadAt(sampleS[r]) - 0.32, 0.16, 0.025);
 
     shareRoadNormals();
     updateSlopeRibbons();

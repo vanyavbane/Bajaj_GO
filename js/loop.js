@@ -140,11 +140,11 @@ export function initLoop() {
     G.jumpState.wobbleTimer = steered.wobbleTimer;
     if (steered.scraped) G.speed = scrapeSpeed(G.speed, dt);
 
-    // Островок развилки нельзя переехать: до выбора байк мягко выталкивается
-    // на свою половину (при нуле — влево, как и авто-выбор).
-    const splitAmount = G.splitAmountAtS ? G.splitAmountAtS(G.playerS) : 0;
-    if (splitAmount > 0.45 && Math.abs(G.laneOffset) < 1.1) {
-      const dir = G.laneOffset < 0 ? -1 : 1;
+    // Ноль — левая ветка, как и авто-выбор. Выталкивание начинается вместе
+    // с видимым зазором, а не по отдельной кривой «островка».
+    const spreadNow = G.forkSpreadAtS ? G.forkSpreadAtS(G.playerS) : 0;
+    if (spreadNow > 1.5 && Math.abs(G.laneOffset) < 1.1) {
+      const dir = G.laneOffset <= 0 ? -1 : 1;
       G.laneOffset = dir * Math.min(1.1, Math.abs(G.laneOffset) + dt * 8);
       G.lateralVelocity *= 0.6;
     }

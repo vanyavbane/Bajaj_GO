@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { keepInWindow } from './engine/stream.js';
+import { FORK_LEAD, FORK_SPREAD, forkAmountAt, forkSide, forkSpreadAt } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -14,8 +15,7 @@ import { G } from './state.js';
 
 const ZONE_M = 1500;              // длина одной локации
 const FADE_M = 150;              // кросс-фейд после границы зоны, метров
-const SPLIT_LEAD = 120;          // центр развилки до конца зоны, метров
-const FORK_SPREAD = 26;          // на сколько метров каждая ветка уходит вбок в точке выбора
+const SPLIT_LEAD = FORK_LEAD;
 const SPLIT_AUTO_D = 30;         // авто-выбор после центра развилки
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
 const STORAGE_KEY = 'bajajGO_biomeKm';
@@ -437,39 +437,36 @@ let roadB = 0;
 let roadT = 1;
 let roadT1 = 0;
 let roadT2 = 0;
-/** Зона → биом, чьим профилем уже нарисована видимая дорога. Пока зона далеко, запись обновляется. */
+/** Зона → биом уже нарисованной дороги. Пока зона дальше ленты, замок пуст и профиль ещё следует стороне байка. */
 const roadLock = Object.create(null);
-
-function smooth01(v) {
-  const t = Math.max(0, Math.min(1, v));
-  return t * t * (3 - 2 * t);
-}
 
 function blendMetersAt(s) {
   return G.biomeOffsetM + s;
+}
+
+function fadeWeights(local) {
+  if (!(local < FADE_M)) return { t: 1, t1: 0, t2: 0 };
+  const u = Math.max(0, Math.min(1, local / FADE_M));
+  return {
+    t: u * u * (3 - 2 * u),
+    t1: (6 * u * (1 - u)) / FADE_M,
+    t2: (6 - 12 * u) / (FADE_M * FADE_M)
+  };
 }
 
 function fillBlend(meters) {
   const m = Number.isFinite(meters) ? Math.max(0, meters) : 0;
   const zone = Math.floor(m / ZONE_M);
   const local = m - zone * ZONE_M;
-  let t = 1;
-  let t1 = 0;
-  let t2 = 0;
-  if (zone > 0 && local < FADE_M) {
-    const u = Math.max(0, Math.min(1, local / FADE_M));
-    t = u * u * (3 - 2 * u);
-    t1 = (6 * u * (1 - u)) / FADE_M;
-    t2 = (6 - 12 * u) / (FADE_M * FADE_M);
-  }
+  const fade = zone > 0 ? fadeWeights(local) : { t: 1, t1: 0, t2: 0 };
   blendZone = zone;
   blendLocal = local;
   blendMeters = m;
   blendA = zoneBiomeAt(zone - 1);
   blendB = zoneBiomeAt(zone);
-  blendT = t;
-  blendT1 = t1;
-  blendT2 = t2;
+  blendT = fade.t;
+  blendT1 = fade.t1;
+  blendT2 = fade.t2;
 }
 
 /** Профиль дороги не должен прыгать, когда выбор ветки меняет ещё не закреплённую зону. */
@@ -488,20 +485,12 @@ function fillRoad(meters) {
   const m = Number.isFinite(meters) ? Math.max(0, meters) : 0;
   const zone = Math.floor(m / ZONE_M);
   const local = m - zone * ZONE_M;
-  let t = 1;
-  let t1 = 0;
-  let t2 = 0;
-  if (zone > 0 && local < FADE_M) {
-    const u = Math.max(0, Math.min(1, local / FADE_M));
-    t = u * u * (3 - 2 * u);
-    t1 = (6 * u * (1 - u)) / FADE_M;
-    t2 = (6 - 12 * u) / (FADE_M * FADE_M);
-  }
+  const fade = zone > 0 ? fadeWeights(local) : { t: 1, t1: 0, t2: 0 };
   roadA = roadZoneIndex(zone - 1);
   roadB = roadZoneIndex(zone);
-  roadT = t;
-  roadT1 = t1;
-  roadT2 = t2;
+  roadT = fade.t;
+  roadT1 = fade.t1;
+  roadT2 = fade.t2;
 }
 
 /* -------------------------------------------------------------------------
@@ -569,14 +558,7 @@ function biomeRoadDDY(s) {
 
 /* ---------- Ширина дороги и развилка ---------- */
 function splitAmountAtMeters(meters) {
-  const m = Number.isFinite(meters) ? meters : 0;
-  const zone = Math.floor(m / ZONE_M);
-  const splitM = (zone + 1) * ZONE_M - SPLIT_LEAD;
-  const d = m - splitM;
-  if (d <= -SPLIT_LEAD || d >= SPLIT_LEAD) return 0;
-  if (d < -15) return smooth01((d + SPLIT_LEAD) / (SPLIT_LEAD - 15));
-  if (d <= 48) return 1;
-  return 1 - smooth01((d - 48) / (SPLIT_LEAD - 48));
+  return forkAmountAt(meters, ZONE_M, SPLIT_LEAD);
 }
 
 function baseRoadWidthAtMeters(meters) {
@@ -586,18 +568,8 @@ function baseRoadWidthAtMeters(meters) {
   return wa + (wb - wa) * roadT;
 }
 
-/**
- * На сколько метров ветка ушла в сторону от оси.
- * На концах развилки ноль и нулевая производная, в центре — FORK_SPREAD.
- */
 function forkSpreadAtMeters(meters) {
-  const m = Number.isFinite(meters) ? meters : 0;
-  const zone = Math.floor(m / ZONE_M);
-  const splitM = (zone + 1) * ZONE_M - SPLIT_LEAD;
-  const d = m - splitM;
-  if (d <= -SPLIT_LEAD || d >= SPLIT_LEAD) return 0;
-  const u = 1 - Math.abs(d) / SPLIT_LEAD;
-  return FORK_SPREAD * smooth01(u);
+  return forkSpreadAt(meters, ZONE_M, SPLIT_LEAD, FORK_SPREAD);
 }
 
 function forkSpreadAtS(s) {
@@ -636,8 +608,7 @@ function laneDisplayScaleAtS(s) {
 function splitLateralShiftAtS(s, lateralOffset) {
   const spread = forkSpreadAtS(s);
   if (spread <= 0.001) return 0;
-  const side = lateralOffset < 0 ? -1 : 1;
-  return side * spread;
+  return forkSide(lateralOffset) * spread;
 }
 
 /** Логическое смещение полосы → позиция на дороге с учётом ширины и развилки. */
