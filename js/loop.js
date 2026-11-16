@@ -163,7 +163,7 @@ export function initLoop() {
     G.tickOrder(dt);
 
     // 4. ФИЗИКА ТРАМПЛИНОВ И ПРЫЖКОВ
-    const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+    const toWorld = G.laneWorldOffsetAtS;
     let surfaceRampHeight = 0;
     for (const ramp of G.rampsPool) {
       const bikeLat = toWorld(G.playerS, G.laneOffset);
@@ -243,7 +243,7 @@ export function initLoop() {
 
   function stopAtMedian(prevS, halfPlayer) {
     if (!G.medianBlocksBike || G.jumpState.airborne) return;
-    const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+    const toWorld = G.laneWorldOffsetAtS;
     let reach = 0;
     for (let i = 0; i <= 4; i++) {
       const s = prevS + (G.playerS - prevS) * (i / 4);
@@ -264,9 +264,7 @@ export function initLoop() {
   function placePlayer(isQute) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
-    const worldLat = G.laneWorldOffsetAtS
-      ? G.laneWorldOffsetAtS(G.playerS, G.laneOffset)
-      : G.laneOffset;
+    const worldLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
     G.placeOnRoad(
       G.bikeRoot,
       G.playerS,

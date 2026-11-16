@@ -260,9 +260,8 @@ export function initTraffic() {
       const oncoming = isOncomingLane(car.laneIdx, oncomingCount());
       holdForRepair(car, oncoming);
 
-      // Ширина полотна и островок развилки сжимают полосы: все смещения
-      // переводим в мировые метры от оси дороги.
-      const toWorld = G.laneWorldOffsetAtS || ((_, lat) => lat);
+      // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
+      const toWorld = G.laneWorldOffsetAtS;
       const carWorldLat = toWorld(car.s, car.lateralOffset);
       const playerWorldLat = toWorld(G.playerS, G.laneOffset);
 

@@ -204,7 +204,7 @@ export function initRoadSurface() {
 
   function updateDashes(playerS, dense) {
     const dominant = Number.isInteger(G.biomeDominant) ? G.biomeDominant : 0;
-    const cfg = G.getLaneConfig ? G.getLaneConfig(dominant) : null;
+    const cfg = G.getLaneConfig(dominant);
     if (!cfg) { dashMesh.count = 0; return; }
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
@@ -237,8 +237,8 @@ export function initRoadSurface() {
   }
 
   G.medianBlocksBike = (s, worldLat, halfPlayer) => {
-    const weight = G.mkadWeightAtS ? G.mkadWeightAtS(s) : 0;
-    const split = G.splitAmountAtS ? G.splitAmountAtS(s) : 0;
+    const weight = G.mkadWeightAtS(s);
+    const split = G.splitAmountAtS(s);
     if (weight < 0.55 || split > 0.05 || barrierGapAt(s)) return 0;
     const reach = BARRIER_HALF_W + halfPlayer;
     return Math.abs(worldLat) < reach ? reach : 0;
@@ -252,8 +252,8 @@ export function initRoadSurface() {
       if (used >= MAX_BLOCKS || !dense) break;
       const s = startS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
-      const weight = G.mkadWeightAtS ? G.mkadWeightAtS(s) : 0;
-      const split = G.splitAmountAtS ? G.splitAmountAtS(s) : 0;
+      const weight = G.mkadWeightAtS(s);
+      const split = G.splitAmountAtS(s);
       const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) ? weight : 0;
       if (vis <= 0.02) continue;
       dummy.scale.set(1, vis, 1);
@@ -381,12 +381,6 @@ export function initRoadSurface() {
     return geo;
   }
 
-  const islandMat = new THREE.MeshLambertMaterial({ color: 0x9aa1a9 });
-  const islandMesh = new THREE.Mesh(makeIslandGeometryBase(), islandMat);
-  islandMesh.receiveShadow = true;
-  islandMesh.frustumCulled = false;
-  G.scene.add(islandMesh);
-
   const signTex = G.createCanvasTexture(256, 256, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#c62828';
@@ -460,11 +454,12 @@ export function initRoadSurface() {
     return G.splitCenterS(playerS);
   }
 
-  function islandHalfAt(s) {
-    return G.splitLateralShiftAtS(s, 1);
+  function innerLineLat(s, side, inset) {
+    const edge = branchEdges(widthAt(s) * 0.5, spreadAt(s));
+    return side < 0 ? edge.leftInner - inset : edge.rightInner + inset;
   }
 
-  /** Цветная линия вдоль кромки островка (своя 49-рядная геометрия). */
+  /** Цветная линия вдоль внутренней кромки ветки. inset 0.38 на прямой даёт ±0.22. */
   function updateIslandStrip(mesh, side) {
     const splitS = splitCenterS(G.playerS);
     const from = splitS - 120;
@@ -477,7 +472,7 @@ export function initRoadSurface() {
       const lh = Math.hypot(dx, 1) || 1;
       const rx = 1 / lh;
       const rz = dx / lh;
-      const lat = side * Math.max(0.2, islandHalfAt(s) - 0.45);
+      const lat = innerLineLat(s, side, 0.2);
       const cx = G.roadX(s), cy = G.roadY(s) + 0.09, cz = -s;
       const idx = r * 2;
       pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));
@@ -488,9 +483,8 @@ export function initRoadSurface() {
 
   function updateIsland(playerS) {
     const splitS = splitCenterS(playerS);
-    const amount = G.splitAmountAtS ? G.splitAmountAtS(splitS) : 0;
+    const amount = G.splitAmountAtS(splitS);
     const active = amount > 0.01;
-    islandMesh.visible = false;
     signGroup.visible = active;
 
     const choices = G.splitState && G.splitState.choices ? G.splitState.choices : null;
@@ -503,8 +497,7 @@ export function initRoadSurface() {
     arrowRightA.material.color.setHex(rightBiome ? rightBiome.accent : 0xff7043);
     arrowRightB.material.color.copy(arrowRightA.material.color);
 
-    // Серый островок выключен: зазор между ветками рисует травяная лента.
-    // Цветные линии вдоль внутренней кромки каждой ветки.
+    // Цветные линии вдоль внутренней кромки каждой ветки, на асфальте.
     accentLineL.visible = active;
     accentLineR.visible = active;
     if (active) {
@@ -516,7 +509,7 @@ export function initRoadSurface() {
     // ширины в точке стрелки, иначе на узкой горной дороге они уезжают за
     // кромку (ширина развилки там заметно больше обычной).
     const hintLatAt = (s) => {
-      const spread = G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
+      const spread = G.forkSpreadAtS(s);
       const half = widthAt(s) * 0.5;
       return spread + Math.max(1.6, Math.min(half * 0.45, half - 0.8));
     };
@@ -565,9 +558,10 @@ export function initRoadSurface() {
     updateCityStrip(sidewalkLeftMesh, -1, 0.35, 3.2, 0.11);
     updateCityStrip(sidewalkRightMesh, 1, 0.35, 3.2, 0.11);
 
-    // Осевая разметка уходит на кромки островка во время развилки.
-    updateLateralStrip(centerDoubleLine1, (r) => toWorld(sampleS[r], -0.22), 0.13, 0.08);
-    updateLateralStrip(centerDoubleLine2, (r) => toWorld(sampleS[r], 0.22), 0.13, 0.08);
+    // Осевая на прямой — пара жёлтых у оси. На развилке каждая уходит
+    // на внутренний край своей ветки и остаётся на асфальте, не в траве.
+    updateLateralStrip(centerDoubleLine1, (r) => innerLineLat(sampleS[r], -1, 0.38), 0.13, 0.08);
+    updateLateralStrip(centerDoubleLine2, (r) => innerLineLat(sampleS[r], 1, 0.38), 0.13, 0.08);
     updateLateralStrip(edgeLineLeft, (r) => -(sampleHalf[r] + spreadAt(sampleS[r]) - 0.32), 0.16, 0.025);
     updateLateralStrip(edgeLineRight, (r) => sampleHalf[r] + spreadAt(sampleS[r]) - 0.32, 0.16, 0.025);
 
