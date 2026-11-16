@@ -149,9 +149,10 @@ export function initRoadSurface() {
         const o = (r * 3 + slot) * 3;
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
       };
-      write(0, -95, -22, -4.5, 1.8);
-      write(1, -95, -12.7, -4.5, 0.08);
-      write(2, -22, -12.7, 1.8, 0.08);
+      const sh = G.shoulder;
+      write(0, -sh.far, -sh.berm, sh.farY, sh.bermY);
+      write(1, -sh.far, -sh.lip, sh.farY, sh.lipY);
+      write(2, -sh.berm, -sh.lip, sh.bermY, sh.lipY);
     }
     geo.attributes.normal.needsUpdate = true;
   }
@@ -185,7 +186,8 @@ export function initRoadSurface() {
   }
 
   function updateDashes(playerS, dense) {
-    const cfg = G.getLaneConfig ? G.getLaneConfig(G.biomeDominant || 0) : null;
+    const dominant = Number.isInteger(G.biomeDominant) ? G.biomeDominant : 0;
+    const cfg = G.getLaneConfig ? G.getLaneConfig(dominant) : null;
     if (!cfg) { dashMesh.count = 0; return; }
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
@@ -294,13 +296,14 @@ export function initRoadSurface() {
       const l2 = -(half + cityOuter);
       const r0 = half + cityOuter;
       const idx = r * 3;
-      posL.setXYZ(idx,     cx + rx * -95, cy - 4.5, cz + rz * -95);
-      posL.setXYZ(idx + 1, cx + rx * -22, cy + 1.8, cz + rz * -22);
-      posL.setXYZ(idx + 2, cx + rx * l2, cy + 0.08, cz + rz * l2);
+      const sh = G.shoulder;
+      posL.setXYZ(idx,     cx + rx * -sh.far, cy + sh.farY, cz + rz * -sh.far);
+      posL.setXYZ(idx + 1, cx + rx * -sh.berm, cy + sh.bermY, cz + rz * -sh.berm);
+      posL.setXYZ(idx + 2, cx + rx * l2, cy + sh.lipY, cz + rz * l2);
 
-      posR.setXYZ(idx,     cx + rx * r0, cy + 0.08, cz + rz * r0);
-      posR.setXYZ(idx + 1, cx + rx * 22, cy + 1.8, cz + rz * 22);
-      posR.setXYZ(idx + 2, cx + rx * 95, cy - 4.5, cz + rz * 95);
+      posR.setXYZ(idx,     cx + rx * r0, cy + sh.lipY, cz + rz * r0);
+      posR.setXYZ(idx + 1, cx + rx * sh.berm, cy + sh.bermY, cz + rz * sh.berm);
+      posR.setXYZ(idx + 2, cx + rx * sh.far, cy + sh.farY, cz + rz * sh.far);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -404,16 +407,11 @@ export function initRoadSurface() {
   const arrowRightB = makeArrow(0xff7043);
 
   function splitCenterS(playerS) {
-    if (G.splitState) return G.splitState.s;
-    const zoneM = G.ZONE_M || 1500;
-    const meters = (G.biomeOffsetM || 0) + playerS;
-    const zone = Math.floor(meters / zoneM);
-    return (zone + 1) * zoneM - 60 - (G.biomeOffsetM || 0);
+    return G.splitCenterS(playerS);
   }
 
   function islandHalfAt(s) {
-    const amount = G.splitAmountAtS ? G.splitAmountAtS(s) : 0;
-    return (G.SPLIT_ISLAND_W || 6.4) * 0.5 * amount;
+    return G.splitLateralShiftAtS(s, 1);
   }
 
   /** Цветная линия вдоль кромки островка (своя 49-рядная геометрия). */

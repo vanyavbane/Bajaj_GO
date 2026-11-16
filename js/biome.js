@@ -544,6 +544,14 @@ function splitAmountAtS(s) {
   return splitAmountAtMeters(blendMetersAt(s));
 }
 
+/** Центр развилки в координате s игрока. Единственная формула, её читает и полотно. */
+function splitCenterS(playerS) {
+  const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
+  const meters = Math.max(0, offset + playerS);
+  const zone = Math.floor(meters / ZONE_M);
+  return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
+}
+
 /** Во сколько раз надо сжать логические смещения полос, чтобы они влезли. */
 function laneDisplayScaleAtS(s) {
   fillBlend(blendMetersAt(s));
@@ -897,19 +905,37 @@ function buildMkadVariant(variant) {
 }
 
 function buildVariant(biome, variant) {
-  if (biome === 1) return buildFieldVariant(variant);
-  if (biome === 2) return buildForestVariant(variant);
-  if (biome === 3) return buildMountainVariant(variant);
-  return buildMkadVariant(variant);
+  const id = BIOMES[biome] && BIOMES[biome].id;
+  if (id === 'field') return buildFieldVariant(variant);
+  if (id === 'forest') return buildForestVariant(variant);
+  if (id === 'mountain') return buildMountainVariant(variant);
+  if (id === 'mkad') return buildMkadVariant(variant);
+  throw new Error(`Для биома «${id || biome}» нет пула декораций: город собирается в roadside.js`);
 }
 
-/** Приблизительная высота откоса: объекты не висят в воздухе и не тонут. */
+/* Профиль откоса. Те же числа рисует лента в roadSurface.js через G.shoulder. */
+const SHOULDER = {
+  lip: 12.7,
+  berm: 22,
+  far: 95,
+  lipY: 0.08,
+  bermY: 1.8,
+  farY: -4.5
+};
+
+/** Высота земли на удалении lat от оси: декорации не висят и не тонут. */
 function groundOffset(lat) {
   const a = Math.abs(lat);
-  if (a <= 12.7) return 0.08;
-  if (a <= 22) return 0.08 + ((a - 12.7) / 9.3) * (1.8 - 0.08);
-  if (a <= 95) return 1.8 + ((a - 22) / 73) * (-4.5 - 1.8);
-  return -4.5;
+  if (a <= SHOULDER.lip) return SHOULDER.lipY;
+  if (a <= SHOULDER.berm) {
+    const t = (a - SHOULDER.lip) / (SHOULDER.berm - SHOULDER.lip);
+    return SHOULDER.lipY + t * (SHOULDER.bermY - SHOULDER.lipY);
+  }
+  if (a <= SHOULDER.far) {
+    const t = (a - SHOULDER.berm) / (SHOULDER.far - SHOULDER.berm);
+    return SHOULDER.bermY + t * (SHOULDER.farY - SHOULDER.bermY);
+  }
+  return SHOULDER.farY;
 }
 
 /* ---------- Состояние, баннеры и HUD ---------- */
@@ -1342,8 +1368,8 @@ export function initBiome() {
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
   G.splitAmountAtS = splitAmountAtS;
-  G.SPLIT_ISLAND_W = SPLIT_ISLAND_W;
-  G.ZONE_M = ZONE_M;
+  G.splitCenterS = splitCenterS;
+  G.shoulder = SHOULDER;
   G.splitLateralShiftAtS = splitLateralShiftAtS;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
@@ -1355,7 +1381,7 @@ export function initBiome() {
   G.biomeState = null;
   G.biomeTransition = { active: false, from: 0, to: 0, t: 0 };
   G.splitState = null;
-  G.biomeTraffic = BIOMES[0].traffic;
+  G.biomeTraffic = BIOMES[CITY].traffic;
 
   G.visitCounts = ZERO_VISITS();
   G.pendingBiome = null;
@@ -1396,10 +1422,6 @@ export function initBiome() {
   G.hideBiomeBanner = hideBiomeBanner;
   G.hideSplitBanner = hideSplitBanner;
   G.showBiomeBanner = (biomeIndexValue) => showBiomeBanner(BIOMES[biomeIndexValue] || BIOMES[0]);
-  G.biomeZoneLength = ZONE_M;
-  G.biomeFadeLength = FADE_M;
-  G.splitLead = SPLIT_LEAD;
-  G.splitIslandWidth = SPLIT_ISLAND_W;
   G.BIOMES = BIOMES;
 
   addEventListener('pagehide', persistBiome);
