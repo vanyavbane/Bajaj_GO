@@ -602,7 +602,7 @@ export function initEconomy() {
 
   let exitPrevS = null;
 
-  const widthAtS = (s) => (G.roadWidthAtS ? G.roadWidthAtS(s) : G.ROAD_WIDTH || 19);
+  const widthAtS = (s) => G.roadWidthAtS(s);
 
   function syncExitTrack() {
     exitPrevS = G.playerS;
@@ -635,14 +635,10 @@ export function initEconomy() {
         e.placedS = NaN;
       }
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
-        G.placeOnRoad(e.group, e.s, e.side * (widthAtS(e.s) * 0.5 + 3.1), 0);
+        const edge = widthAtS(e.s) * 0.5 + G.forkSpreadAtS(e.s);
+        G.placeOnRoad(e.group, e.s, e.side * (edge + 3.1), 0);
         const markerLat = e.side * G.START_LANE;
-        G.placeOnRoad(
-          e.marker,
-          zoneS,
-          G.laneWorldOffsetAtS ? G.laneWorldOffsetAtS(zoneS, markerLat) : markerLat,
-          0.07
-        );
+        G.placeOnRoad(e.marker, zoneS, G.laneWorldOffsetAtS(zoneS, markerLat), 0.07);
       });
 
       // Маркерная зона в полосе съезда: пульсирует, к ночи светится ярче
@@ -755,7 +751,7 @@ export function initEconomy() {
         G.placeOnRoad(
           deliveryMarker,
           s,
-          G.laneWorldOffsetAtS ? G.laneWorldOffsetAtS(s, G.START_LANE) : G.START_LANE,
+          G.laneWorldOffsetAtS(s, G.START_LANE),
           0
         );
       });

@@ -7,8 +7,7 @@ export function initRoadside() {
    * 6. БИЛБОРДЫ, ЗДАНИЯ И ПРИДОРОЖНЫЕ СЛОТЫ
    * -------------------------------------------------------------------------
    * Инфраструктура (отбойники, фонари, здания, порталы) принадлежит городу и
-   * МКАД. Ширина полос у них разная, поэтому все позиции считаются от
-   * фактической кромки roadWidthAtS(), а не от старых фиксированных метров.
+   * МКАД. Позиция — от кромки ветки: половина ширины плюс разъезд развилки.
    * ========================================================================= */
   const billboardTextures = [];
   function buildBillboardTextures() {
@@ -377,7 +376,7 @@ export function initRoadside() {
     G.roadsideSlots.push(slot);
   }
 
-  const widthAt = (s) => (G.roadWidthAtS ? G.roadWidthAtS(s) : G.ROAD_WIDTH || 19);
+  const widthAt = (s) => G.roadWidthAtS(s);
 
   /* Доминирующий биом в точке s. Массив весов общий, поэтому забираем только скаляр. */
   function dominantBiomeAt(s) {
@@ -405,29 +404,28 @@ export function initRoadside() {
         slot.placedS = NaN;
       }
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        const half = widthAt(slot.s) * 0.5;
-        G.placeOnRoad(slot.leftGuard, slot.s, -(half + 0.55), 0);
-        G.placeOnRoad(slot.rightGuard, slot.s, half + 0.55, 0);
-        G.placeOnRoad(slot.leftLamp, slot.s, -(half + 0.8), 0);
-        G.placeOnRoad(slot.rightLamp, slot.s, half + 0.8, 0);
-        G.placeOnRoad(slot.leftProp, slot.s, -(half + 12), 0);
-        G.placeOnRoad(slot.rightProp, slot.s, half + 12, 0);
+        const edge = widthAt(slot.s) * 0.5 + G.forkSpreadAtS(slot.s);
+        G.placeOnRoad(slot.leftGuard, slot.s, -(edge + 0.55), 0);
+        G.placeOnRoad(slot.rightGuard, slot.s, edge + 0.55, 0);
+        G.placeOnRoad(slot.leftLamp, slot.s, -(edge + 0.8), 0);
+        G.placeOnRoad(slot.rightLamp, slot.s, edge + 0.8, 0);
+        G.placeOnRoad(slot.leftProp, slot.s, -(edge + 12), 0);
+        G.placeOnRoad(slot.rightProp, slot.s, edge + 12, 0);
         if (slot.billboard) {
           const bb = slot.billboard;
-          G.placeOnRoad(bb.group, slot.s + 6, bb.side * (half + 4.8), 0, bb.side * -0.18);
+          G.placeOnRoad(bb.group, slot.s + 6, bb.side * (edge + 4.8), 0, bb.side * -0.18);
         }
         if (slot.portal) {
           G.placeOnRoad(slot.portal.group, slot.s, 0, 0);
-          // Гантри тянется по фактической ширине: на МКАД она вдвое шире.
-          const wf = Math.max(1, widthAt(slot.s) / 19);
+          const wf = Math.max(1, (edge * 2) / 19);
           slot.portal.group.scale.set(wf, 1, 1);
         }
       });
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.
-      const cw = G.cityWeightAtS ? G.cityWeightAtS(slot.s) : 1;
-      const mw = G.mkadWeightAtS ? G.mkadWeightAtS(slot.s) : 0;
+      const cw = G.cityWeightAtS(slot.s);
+      const mw = G.mkadWeightAtS(slot.s);
       const infra = Math.max(cw, mw);
       const infraVisible = infra > 0.02;
       const infraScale = infraVisible ? infra : 0;
@@ -535,7 +533,7 @@ export function initRoadside() {
 
     const setting = G.graphics ? G.graphics.lamps : G.lampLights.length;
     // Бюджет: 4 источника вне МКАД, до 6 на МКАД, но не больше настройки.
-    const mwNow = G.mkadWeightAtS ? G.mkadWeightAtS(G.playerS) : 0;
+    const mwNow = G.mkadWeightAtS(G.playerS);
     const cap = mwNow > 0.5 ? 6 : 4;
     const lampBudget = Math.min(G.MAX_ACTIVE_LAMPS || 6, setting, cap);
     const wetGlow = 1 + 0.55 * (G.weather ? G.weather.wet : 0);

@@ -55,10 +55,10 @@ export function initPedestrians() {
       // Пешеходы существуют только в городе: вместе с тротуаром они
       // подтягиваются к кромке дороги и уменьшаются при переходе.
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
-      const side = Math.sign(ped.lateralOffset);
-      const half = G.roadWidthAtS ? G.roadWidthAtS(ped.s) * 0.5 : 9.5;
+      const side = Math.sign(ped.lateralOffset) || 1;
+      const half = G.roadWidthAtS(ped.s) * 0.5;
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
-      const lat = side * (half + 1.15 + jitter * cw);
+      const lat = side * (half + G.forkSpreadAtS(ped.s) + 1.15 + jitter * cw);
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
       G.placeOnRoad(ped.group, ped.s, lat, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);

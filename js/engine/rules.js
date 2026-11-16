@@ -1,6 +1,11 @@
 /** Правила заезда без Three.js и без DOM. Новые механики берут числа отсюда. */
 
-export const ONCOMING_EDGE = -0.15;
+/** Середина между последней встречной и первой попутной. null — встречных нет. */
+export function laneSplitEdge(offsets, oncomingCount) {
+  const n = oncomingCount | 0;
+  if (n <= 0 || !offsets || n >= offsets.length) return null;
+  return (offsets[n - 1] + offsets[n]) * 0.5;
+}
 
 /** Светящаяся коробка на полосе. Меню открывается внутри неё только медленнее этого порога. */
 export const EXIT_ENTER_SPEED = 50;
@@ -23,8 +28,8 @@ export function crossedExitBox(fromS, toS, lane, exitS, side, laneCenter) {
   return along && across;
 }
 
-export function oncomingMultiplier(lane) {
-  return lane < ONCOMING_EDGE ? 2 : 1;
+export function oncomingMultiplier(lane, edge) {
+  return edge != null && lane < edge ? 2 : 1;
 }
 
 export function comboDistanceMultiplier(comboCount) {
@@ -53,14 +58,14 @@ export function jumpBonus(count, jumpDist, softLanding) {
   return total;
 }
 
-export function distancePoints(speed, dt, lane, comboCount) {
-  return (speed * dt / 6) * oncomingMultiplier(lane) * comboDistanceMultiplier(comboCount);
+export function distancePoints(speed, dt, lane, comboCount, edge) {
+  return (speed * dt / 6) * oncomingMultiplier(lane, edge) * comboDistanceMultiplier(comboCount);
 }
 
 export const COMBO_WINDOW = 4;
 
-export function nearMissPoints(comboCount, lane) {
-  return 25 * comboCount * oncomingMultiplier(lane);
+export function nearMissPoints(comboCount, lane, edge) {
+  return 25 * comboCount * oncomingMultiplier(lane, edge);
 }
 
 export function scrapeSpeed(speed, dt) {

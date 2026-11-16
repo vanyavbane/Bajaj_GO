@@ -220,18 +220,19 @@ export function initStructures() {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, 0, 0);
-        ms.userData.baseWidth = G.roadWidthAtS ? G.roadWidthAtS(ms.userData.s) : 19;
+        ms.userData.baseWidth = G.roadWidthAtS(ms.userData.s);
       });
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
-      const cw = G.cityWeightAtS ? G.cityWeightAtS(ms.userData.s) : 1;
-      const mw = G.mkadWeightAtS ? G.mkadWeightAtS(ms.userData.s) : 0;
+      const cw = G.cityWeightAtS(ms.userData.s);
+      const mw = G.mkadWeightAtS(ms.userData.s);
       const infra = Math.max(cw, mw);
       let fade = Math.max(0, Math.min(1, (infra - 0.05) / 0.45));
       fade = fade * fade * (3 - 2 * fade);
       ms.visible = fade > 0.02;
       if (!ms.visible) continue;
-      const widthFactor = Math.max(1, (ms.userData.baseWidth || 19) / 19);
+      const full = ms.userData.baseWidth + G.forkSpreadAtS(ms.userData.s) * 2;
+      const widthFactor = Math.max(1, full / 19);
       ms.scale.set(widthFactor * (0.05 + 0.95 * fade), 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {

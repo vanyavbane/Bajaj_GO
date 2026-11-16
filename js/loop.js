@@ -1,7 +1,8 @@
 import { readLanes } from './engine/lanes.js';
+import { forkSide } from './engine/fork.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
-import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
+import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, laneSplitEdge, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
 import { G } from './state.js';
 
 export function initLoop() {
@@ -142,9 +143,9 @@ export function initLoop() {
 
     // Ноль — левая ветка, как и авто-выбор. Выталкивание начинается вместе
     // с видимым зазором, а не по отдельной кривой «островка».
-    const spreadNow = G.forkSpreadAtS ? G.forkSpreadAtS(G.playerS) : 0;
+    const spreadNow = G.forkSpreadAtS(G.playerS);
     if (spreadNow > 1.5 && Math.abs(G.laneOffset) < 1.1) {
-      const dir = G.laneOffset <= 0 ? -1 : 1;
+      const dir = forkSide(G.laneOffset);
       G.laneOffset = dir * Math.min(1.1, Math.abs(G.laneOffset) + dt * 8);
       G.lateralVelocity *= 0.6;
     }
@@ -227,8 +228,9 @@ export function initLoop() {
       G.comboTimer -= dt;
       if (G.comboTimer <= 0) G.comboCount = 0;
     }
-    const oncomingMult = oncomingMultiplier(G.laneOffset);
-    G.score += distancePoints(G.speed, dt, G.laneOffset, G.comboCount);
+    const edge = laneSplitEdge(G.LANE_OFFSETS, G.oncomingCount);
+    const oncomingMult = oncomingMultiplier(G.laneOffset, edge);
+    G.score += distancePoints(G.speed, dt, G.laneOffset, G.comboCount, edge);
 
     const oncomingOn = oncomingMult !== 1;
     if (oncomingOn !== oncomingShown) {
@@ -254,8 +256,8 @@ export function initLoop() {
     if (!reach) return;
     G.speed = 0;
     G.lateralVelocity = 0;
-    const scale = G.laneDisplayScaleAtS ? G.laneDisplayScaleAtS(G.playerS) : 1;
-    const sign = G.laneOffset < 0 ? -1 : 1;
+    const scale = G.laneDisplayScaleAtS(G.playerS);
+    const sign = forkSide(G.laneOffset);
     G.laneOffset = sign * (reach + 0.12) / (Math.abs(scale) < 0.2 ? 1 : scale);
   }
 
@@ -277,7 +279,7 @@ export function initLoop() {
   }
 
   function updateHud(now) {
-    const activeMult = oncomingMultiplier(G.laneOffset);
+    const activeMult = oncomingMultiplier(G.laneOffset, laneSplitEdge(G.LANE_OFFSETS, G.oncomingCount));
     G.updateCockpitDashboard(now, G.speed, G.distance, G.score, activeMult, G.highBeamTimer > 0);
     G.updateEcoHud(now);
   }

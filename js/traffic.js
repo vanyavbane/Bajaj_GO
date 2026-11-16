@@ -1,6 +1,6 @@
 import { clampLaneIndex, readLanes } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
-import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
+import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
 import { G } from './state.js';
 
@@ -324,7 +324,7 @@ export function initTraffic() {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
-        const pts = nearMissPoints(G.comboCount, G.laneOffset);
+        const pts = nearMissPoints(G.comboCount, G.laneOffset, laneSplitEdge(G.LANE_OFFSETS, oncomingCount()));
         G.score += pts;
         const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);

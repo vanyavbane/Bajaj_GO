@@ -1470,8 +1470,8 @@ export function initBiomeWorld() {
           const s = slot.s + entry.ds;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
-          const half = (G.roadWidthAtS ? G.roadWidthAtS(s) : 19) * 0.5;
-          const fork = Math.abs(G.splitLateralShiftAtS ? G.splitLateralShiftAtS(s, side) : 0);
+          const half = G.roadWidthAtS(s) * 0.5;
+          const fork = Math.abs(G.splitLateralShiftAtS(s, side));
           const lat = Math.max(entry.lat, half + fork + 8);
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {

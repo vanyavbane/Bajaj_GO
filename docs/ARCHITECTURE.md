@@ -27,7 +27,7 @@
 |   | `js/graphics.js` | настройки графики: режим, тени, масштаб, фонари, отражения, `applyGraphics`; экран — вкладка «Графика» в настройках |
 | 1 | `js/catalog.js` | `bikeCatalog` (14 моделей, поля `variant` и `hudStyle`), `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
-| 3 | `js/road.js` | `ROAD_WIDTH`, `ROAD_EDGE`, `LANE_OFFSETS`, `START_LANE`, `roadX/roadY/roadDX/roadDY/roadDDX` (делегируют биомному профилю), `placeOnRoad` |
+| 3 | `js/road.js` | `roadX/roadY/roadDX/roadDY/roadDDX` (делегируют биомному профилю), `placeOnRoad`. Кромку `ROAD_EDGE` считает биом |
 |   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money`, `lanes` (`readLanes` — единственное чтение полос, без городской подстановки) |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары и бордюры по весу города, откосы |
@@ -176,7 +176,9 @@ z = -s
   165 м включается LOD. Горные хребты увеличены ×2.15. Городская
   инфраструктура остаётся в `js/roadside.js`.
 - **Инфраструктура.** Фонари, отбойники, тротуары и пешеходы живут по весу
-  города и МКАД (`cityWeightAtS`, `mkadWeightAtS`). Билборды и мосты
+  города и МКАД (`cityWeightAtS`, `mkadWeightAtS`) и стоят снаружи ветки:
+  половина ширины плюс разъезд. Двойные очки за встречную — левее границы
+  между встречными и попутными полосами текущего биома. Билборды и мосты
   разрешены везде, но реже вне города и МКАД. Указатели МКАД —
   «САДОВОД», «ТРК VEGAS», «КРОКУС СИТИ», «ЛОСИНЫЙ ОСТРОВ», «ЩЁЛКОВСКОЕ Ш.»,
   «ХИМКИ»; у остальных биомов — зелёные таблички локации.
