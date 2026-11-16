@@ -1,4 +1,3 @@
-import { readLanes } from './engine/lanes.js';
 import { highbeamYieldLane } from './engine/motion.js';
 import { G } from './state.js';
 
@@ -14,13 +13,13 @@ export function initHighbeam() {
     G.highBeamCooldown = 0.85;
     $('badge-beam').hidden = false;
 
-    const roadLanes = readLanes(G);
     for (const car of G.trafficPool) {
-      const lane = highbeamYieldLane(car, G.playerS, G.laneOffset, roadLanes.oncoming, roadLanes.count);
+      const carLanes = G.getLaneConfig(G.dominantBiomeAtS(car.s));
+      const lane = highbeamYieldLane(car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count);
       if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;
-      car.speedKmh = roadLanes.speeds[lane];
+      car.speedKmh = carLanes.speeds[lane];
       car.flashReactTimer = 1.6;
       car.model.alertSprite.visible = true;
     }

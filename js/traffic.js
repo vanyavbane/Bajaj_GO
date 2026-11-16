@@ -1,4 +1,4 @@
-import { clampLaneIndex, readLanes } from './engine/lanes.js';
+import { clampLaneIndex } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -30,32 +30,19 @@ export function initTraffic() {
   ];
   const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
 
-  function lanes() {
-    return readLanes(G);
+  function lanesAt(s) {
+    return G.getLaneConfig(G.dominantBiomeAtS(s));
   }
 
-  function laneCount() {
-    return lanes().count;
+  function quteLane(cfg) {
+    const same = Math.max(1, cfg.count - cfg.oncomingCount);
+    return cfg.oncomingCount + Math.min(same - 1, Math.max(0, same - 2));
   }
 
-  function oncomingCount() {
-    return lanes().oncoming;
-  }
-
-  function runLaneIndices() {
-    const first = oncomingCount();
-    const list = [];
-    for (let i = first; i < laneCount(); i++) list.push(i);
-    return list;
-  }
-
-  function randomLaneIndex() {
-    return Math.floor(Math.random() * laneCount());
-  }
-
-  function quteLaneIndex() {
-    const run = runLaneIndices();
-    return run[Math.min(run.length - 1, Math.max(0, run.length - 2))];
+  function pickLane(cfg, model, forcedLane) {
+    if (model.type === 'qute_traffic') return quteLane(cfg);
+    if (forcedLane == null) return Math.floor(Math.random() * cfg.count);
+    return clampLaneIndex(forcedLane, cfg.count);
   }
 
   for (let i = 0; i < POOL_SIZE; i++) {
@@ -63,7 +50,8 @@ export function initTraffic() {
     const model = createVehicleModel(vType, vehicleColors[i % vehicleColors.length], i);
     G.scene.add(model.root);
 
-    G.trafficPool.push(parkedTraffic(model, trafficLane(vType, i % laneCount()), 35 + i * 26));
+    const s0 = 35 + i * 26;
+    G.trafficPool.push(parkedTraffic(model, s0, i));
   }
 
   const heavyIndices = [];
@@ -101,27 +89,16 @@ export function initTraffic() {
     activeMask.push(mask);
   }
 
-  function trafficLane(type, fallbackLane) {
-    return type === 'qute_traffic' ? quteLaneIndex() : fallbackLane;
-  }
-
-  function clampedLane(idx) {
-    return clampLaneIndex(idx, laneCount());
-  }
-
-  function laneSpeed(idx) {
-    return lanes().speeds[clampedLane(idx)];
-  }
-
-  function parkedTraffic(model, laneIdx, s) {
-    const idx = clampedLane(laneIdx);
+  function parkedTraffic(model, s, forcedLane = null) {
+    const cfg = lanesAt(s);
+    const idx = pickLane(cfg, model, forcedLane);
     return {
       model,
       laneIdx: idx,
       targetLaneIdx: idx,
-      lateralOffset: G.LANE_OFFSETS[idx],
+      lateralOffset: cfg.offsets[idx],
       s,
-      speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : laneSpeed(idx),
+      speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
       flashReactTimer: 0,
       steerAngle: 0,
@@ -133,11 +110,7 @@ export function initTraffic() {
   }
 
   function resetTrafficVehicle(car, newS, forcedLane = null) {
-    const laneIdx = trafficLane(
-      car.model.type,
-      forcedLane !== null ? forcedLane : randomLaneIndex()
-    );
-    Object.assign(car, parkedTraffic(car.model, laneIdx, newS));
+    Object.assign(car, parkedTraffic(car.model, newS, forcedLane));
     car.model.alertSprite.visible = false;
     if (car.model.blinkers) {
       for (const blinker of car.model.blinkers) blinker.visible = false;
@@ -146,22 +119,19 @@ export function initTraffic() {
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
 
-  /** Смена числа полос: машины переезжают на валидные индексы без телепорта. */
-  G.remapTrafficLanes = (cfg) => {
-    if (!cfg || !Array.isArray(cfg.offsets)) return;
+  /** Полосы машины — биом в её точке, не биом байка. */
+  G.remapTrafficLanes = () => {
     for (const car of G.trafficPool) {
-      let idx = car.laneIdx;
-      if (car.model.type === 'qute_traffic') {
-        idx = Math.max(cfg.oncomingCount, cfg.count - 2);
+      const cfg = lanesAt(car.s);
+      let idx = car.model.type === 'qute_traffic' ? quteLane(cfg) : car.laneIdx;
+      if (idx >= cfg.count || idx < 0) {
+        const same = Math.max(1, cfg.count - cfg.oncomingCount);
+        idx = cfg.oncomingCount + Math.floor(Math.random() * same);
       }
-      if (idx >= cfg.count) {
-        idx = cfg.oncomingCount + Math.floor(Math.random() * Math.max(1, cfg.count - cfg.oncomingCount));
-      }
-      idx = Math.max(0, Math.min(cfg.count - 1, idx));
+      idx = clampLaneIndex(idx, cfg.count);
       const target = cfg.offsets[idx];
       const jump = Math.abs((car.lateralOffset || 0) - target);
       if (jump > 1.2 && Math.abs(car.s - G.playerS) < 130) {
-        // Близкую машину уводим вперёд: иначе она «прыгнет» поперёк дороги в кадре.
         car.s = G.playerS + 170 + Math.random() * 110;
       }
       car.laneIdx = idx;
@@ -169,7 +139,7 @@ export function initTraffic() {
       car.lateralOffset = target;
       car.changingLane = false;
       car.steerAngle = 0;
-      car.speedKmh = car.model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : laneSpeed(idx);
+      car.speedKmh = car.model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx];
     }
   };
 
@@ -189,7 +159,7 @@ export function initTraffic() {
       car.speedKmh = Math.min(car.speedKmh, 14);
     }
     if (G.playerS > ev.s + ev.length && car.speedKmh < 2) {
-      const lanesNow = readLanes(G);
+      const lanesNow = lanesAt(car.s);
       const last = lanesNow.count - 1;
       const alt = car.laneIdx < last ? car.laneIdx + 1 : Math.max(lanesNow.oncomingCount, car.laneIdx - 1);
       if (alt !== car.laneIdx && alt >= lanesNow.oncomingCount) {
@@ -220,13 +190,14 @@ export function initTraffic() {
       }
 
       // Плавно подтягиваем скорость к лимиту текущего биома.
+      const road = lanesAt(car.s);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
-        : laneSpeed(car.laneIdx);
+        : road.speeds[clampLaneIndex(car.laneIdx, road.count)];
       car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
 
       const wasFlashing = car.flashReactTimer > 0;
-      const step = stepTrafficCar(car, dt, lanes().offsets, oncomingCount());
+      const step = stepTrafficCar(car, dt, road.offsets, road.oncomingCount);
       car.s = step.s;
       car.lateralOffset = step.lateralOffset;
       car.steerAngle = step.steerAngle;
@@ -257,7 +228,7 @@ export function initTraffic() {
         car.s = G.playerS + 240 + Math.random() * 70;
       }
 
-      const oncoming = isOncomingLane(car.laneIdx, oncomingCount());
+      const oncoming = isOncomingLane(car.laneIdx, road.oncomingCount);
       holdForRepair(car, oncoming);
 
       // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
@@ -323,7 +294,7 @@ export function initTraffic() {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
-        const pts = nearMissPoints(G.comboCount, G.laneOffset, laneSplitEdge(G.LANE_OFFSETS, oncomingCount()));
+        const pts = nearMissPoints(G.comboCount, G.laneOffset, laneSplitEdge(G.LANE_OFFSETS, G.oncomingCount));
         G.score += pts;
         const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);
