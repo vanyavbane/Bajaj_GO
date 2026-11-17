@@ -213,6 +213,9 @@ export function initShopPreview() {
     }
 
     root.visible = true;
+    // Постобработка заезда переводит всю технику на слой 1 (см. postfx.js),
+    // а камера витрины по умолчанию видит только слой 0 — возвращаем модель на него.
+    root.traverse(obj => obj.layers.set(0));
     return root;
   }
 
