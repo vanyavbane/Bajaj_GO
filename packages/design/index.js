@@ -77,12 +77,13 @@ export function stats(rows) {
 
 /**
  * @param {string} inner
- * @param {{ size?: 'default'|'narrow', tone?: 'default'|'danger' }} [options]
+ * @param {{ size?: 'default'|'narrow', tone?: 'default'|'danger', className?: string }} [options]
  */
 export function panel(inner, options = {}) {
   const size = options.size === 'narrow' ? ' ds-panel-narrow' : '';
   const tone = options.tone === 'danger' ? ' ds-panel-danger' : '';
-  return `<div class="ds-panel${size}${tone}">${inner}</div>`;
+  const extra = options.className ? ` ${options.className}` : '';
+  return `<div class="ds-panel${size}${tone}${extra}">${inner}</div>`;
 }
 
 /** @param {{ left?: string, right?: string, compact?: boolean }} [options] */

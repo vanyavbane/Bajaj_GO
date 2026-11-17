@@ -12,6 +12,7 @@ import { initGraphics } from './graphics.js';
 import { initHighbeam } from './highbeam.js';
 import { initInput } from './input.js';
 import { initLoop } from './loop.js';
+import { initMileage } from './mileage.js';
 import { initPedestrians } from './pedestrians.js';
 import { initPostFx } from './postfx.js';
 import { initRepair } from './repair.js';
@@ -19,6 +20,7 @@ import { initRoad } from './road.js';
 import { initRoadside } from './roadside.js';
 import { initRoadSurface } from './roadSurface.js';
 import { initScene } from './scene.js';
+import { initShopPreview } from './shopPreview.js';
 import { initSky } from './sky.js';
 import { initStructures } from './structures.js';
 import { initTraffic } from './traffic.js';
@@ -27,6 +29,7 @@ import { initWeather } from './weather.js';
 
 initGraphics();
 initCatalog();
+initMileage();
 
 // Биом задаёт профиль дороги до того, как его прочитают road/roadSurface.
 initBiome();
@@ -46,6 +49,7 @@ initPedestrians();
 
 initTraffic();
 initBike();
+initShopPreview();
 initCamera();
 initPostFx();
 initAtmosphere();

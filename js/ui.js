@@ -1,5 +1,5 @@
-import { balance, button, callout, card, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, rows, stats, swatch, swatchRow, tag } from '@bajajgo/design';
-import { creditRun, grouped, rubles, runDistance } from './engine/money.js';
+import { button, callout, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, stats, swatch, swatchRow } from '@bajajgo/design';
+import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
@@ -441,6 +441,10 @@ export function initUi() {
   G.renderGraphics = (from) => renderSettings('graphics', from === 'pause' ? 'pause' : 'menu');
 
   function renderMainMenu() {
+    // Пробег заезда дописывается в счётчик выбранного мотоцикла и на выходе
+    // в меню, и в аварии: оба пути ведут сюда.
+    if (G.creditRunMileage) G.creditRunMileage();
+    if (G.closeShopPreview) G.closeShopPreview();
     G.currentScreen = 'main';
     G.started = false;
     G.ended = false;
@@ -517,64 +521,148 @@ export function initUi() {
       a.maxSpeed - b.maxSpeed || a.price - b.price || a.name.localeCompare(b.name, 'ru')
     );
 
-    const cards = shopBikes.map(b => {
+    // Просматриваемый мотоцикл живёт отдельно от выбранного для заезда.
+    // При входе в магазин показываем текущий, при клике по строке — только он.
+    const remembered = shopBikes.find(b => b.id === G.shopPreviewId);
+    const previewBike = remembered
+      || shopBikes.find(b => b.id === G.selectedBikeId)
+      || shopBikes[0];
+    G.shopPreviewId = previewBike.id;
+
+    const previewOwned = G.ownedBikes.includes(previewBike.id);
+    const previewSelected = G.selectedBikeId === previewBike.id;
+    const previewEff = G.getBikeEffectiveStats(previewBike.id);
+    const previewColor = bikePaint(previewBike, G.customColors);
+    const previewMissing = shortfall(previewBike.price, G.bankPoints);
+
+    /* ---------- левая колонка: компактные строки ---------- */
+
+    const rows = shopBikes.map(b => {
       const owned = G.ownedBikes.includes(b.id);
       const selected = G.selectedBikeId === b.id;
-      const activeColor = bikePaint(b, G.customColors);
-      const eff = G.getBikeEffectiveStats(b.id);
-      let btn = '';
-      if (selected) {
-        btn = button({ variant: 'primary', label: '✓ ВЫБРАН', disabled: true });
-      } else if (owned) {
-        btn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { select: b.id } });
+      const previewing = b.id === previewBike.id;
+      const missing = shortfall(b.price, G.bankPoints);
+
+      let side = '';
+      if (owned) {
+        side = '<b class="shop-row-owned">В гараже</b>';
+      } else if (b.price === 0) {
+        side = '<b class="shop-row-price">Бесплатно</b>';
+      } else if (missing <= 0) {
+        side = `<b class="shop-row-price">${rubles(b.price)}</b>`;
       } else {
-        const canBuy = G.bankPoints >= b.price;
-        const price = grouped(b.price);
-        btn = button({
-          variant: 'primary',
-          label: canBuy ? `КУПИТЬ ЗА ${price} ₽` : `НУЖНО ${price} ₽`,
-          disabled: !canBuy,
-          data: { buy: b.id }
-        });
+        side = `<b class="shop-row-missing">не хватает ${rubles(missing)}</b>`;
       }
+      const mark = selected ? '<em class="shop-row-badge">✓ Выбран</em>' : '';
 
-      let paint = '';
-      if (b.swatches && b.swatches.length) {
-        paint = swatchRow('Окраска', b.swatches.map(s => swatch({
-          color: '#' + s.hex.toString(16).padStart(6, '0'),
-          title: s.name,
-          on: activeColor === s.hex,
-          data: { 'swatch-bike': b.id, 'swatch-hex': s.hex }
-        })).join(''));
-      }
-
-      const speedBadgeText = eff.speedDelta !== 0
-        ? `${b.maxSpeed} км/ч (с тюнингом ${eff.maxSpeed} км/ч)`
-        : `${b.maxSpeed} км/ч`;
-      const hudBadgeText = b.hudStyle === 'round' ? 'Круглая приборка' : 'Цифровая приборка';
-      const hudBadgeTone = b.hudStyle === 'round' ? 'warm' : 'plain';
-      const priceLine = b.price === 0
-        ? (owned ? 'Стартовый мотоцикл · Бесплатно (уже в гараже)' : 'Стартовый мотоцикл · Бесплатно')
-        : `Цена: ${rubles(b.price)}`;
-
-      return card({
-        on: selected,
-        title: b.name,
-        meta: tag(b.typeLabel, b.vType === 'qute' ? 'warm' : 'plain') + tag(speedBadgeText, 'warm') + tag(hudBadgeText, hudBadgeTone),
-        detail: `${priceLine} · Тюнинг: ${eff.installedCount}/${G.tuningCatalog.length}`,
-        extra: paint,
-        footer: btn
-      });
+      return `<button type="button" class="shop-row${previewing ? ' shop-row-on' : ''}" data-preview="${b.id}"${previewing ? ' aria-current="true"' : ''}>
+        <span class="shop-row-main"><b>${b.name}</b><small>${b.typeLabel}</small></span>
+        <span class="shop-row-side">${side}${mark}</span>
+      </button>`;
     }).join('');
 
-    overlay.innerHTML = panel(`
-        ${logo({ left: 'ГАРАЖ', right: 'GO', compact: true })}
-        ${heading('МАГАЗИН', 'МОТОЦИКЛЫ И КВАДРИЦИКЛЫ BAJAJ')}
-        ${balance('Накоплено', rubles(G.bankPoints))}
-        ${rows(cards)}
-        ${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}
-    `);
+    /* ---------- правая колонка: характеристики и действие ---------- */
 
+    const speedValue = previewEff.speedDelta > 0
+      ? `${previewBike.maxSpeed} → ${previewEff.maxSpeed} км/ч`
+      : `${previewEff.maxSpeed} км/ч`;
+    const accelValue = `${Math.round(previewEff.accel)}${previewEff.accelBonusPct > 0 ? ` (+${previewEff.accelBonusPct}%)` : ''}`;
+    const mileage = previewOwned && G.getBikeMileage ? G.getBikeMileage(previewBike.id) : 0;
+    const mileageRow = previewOwned
+      ? `<div class="shop-mileage${mileage > 0 ? '' : ' shop-mileage-empty'}">
+          <span>Пробег</span>
+          <b>${mileage > 0 ? runDistance(mileage / 1000) : 'ещё не ездили'}</b>
+        </div>`
+      : '';
+
+    let actionBtn = '';
+    let missingLine = '';
+    let statusLine = '';
+    if (previewSelected) {
+      actionBtn = button({ variant: 'primary', label: '✓ ВЫБРАН', disabled: true, data: { state: 'selected' } });
+      statusLine = `Выбран для заезда · тюнинг ${previewEff.installedCount}/${G.tuningCatalog.length}`;
+    } else if (previewOwned) {
+      actionBtn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { state: 'select', select: previewBike.id } });
+      statusLine = `В гараже · тюнинг ${previewEff.installedCount}/${G.tuningCatalog.length}`;
+    } else if (previewBike.price === 0) {
+      actionBtn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { state: 'select', buy: previewBike.id } });
+      statusLine = 'Стартовый мотоцикл · бесплатно';    } else if (previewMissing <= 0) {
+      actionBtn = button({
+        variant: 'primary',
+        label: `КУПИТЬ ЗА ${rubles(previewBike.price)}`,
+        data: { state: 'buy', buy: previewBike.id }
+      });
+      statusLine = `После покупки останется ${rubles(G.bankPoints - previewBike.price)}`;
+    } else {
+      actionBtn = button({
+        variant: 'primary',
+        label: `НУЖНО ${rubles(previewBike.price)}`,
+        disabled: true,
+        data: { state: 'missing' }
+      });
+      missingLine = `<div class="shop-missing">Не хватает ${rubles(previewMissing)}</div>`;
+      statusLine = `Заработайте ещё ${rubles(previewMissing)} в заезде`;
+    }
+
+    let paint = '';
+    if (previewBike.swatches && previewBike.swatches.length) {
+      paint = `<div class="shop-paint">${swatchRow('Окраска', previewBike.swatches.map(s => swatch({
+        color: '#' + s.hex.toString(16).padStart(6, '0'),
+        title: s.name,
+        on: previewColor === s.hex,
+        data: { 'swatch-bike': previewBike.id, 'swatch-hex': s.hex }
+      })).join(''))}</div>`;
+    }
+
+    overlay.innerHTML = panel(`
+      <div class="shop-head">
+        <div class="shop-brand">
+          ${logo({ left: 'ГАРАЖ', right: 'GO', compact: true })}
+          <span class="shop-brand-sub">Магазин мотоциклов</span>
+        </div>
+        ${currency({ id: 'shop-balance', label: 'Баланс', value: rubles(G.bankPoints) })}
+      </div>
+      <div class="shop-grid">
+        <div class="shop-list-col">
+          <div class="shop-col-title">Список мотоциклов</div>
+          <div class="shop-list">${rows}</div>
+        </div>
+        <div class="shop-side">
+          <div class="shop-preview-wrap">
+            <div id="shop-preview" class="shop-preview" role="img" aria-label="3D-модель ${previewBike.name}"></div>
+            <span class="shop-preview-tag">Просмотр</span>
+            <div class="shop-preview-bar"></div>
+          </div>
+          <div class="shop-model">
+            <b>${previewBike.name}</b>
+            <span>${previewBike.typeLabel}</span>
+          </div>
+          ${stats([
+            { label: 'Макс. скорость', value: speedValue, tone: 'signal' },
+            { label: 'Разгон', value: accelValue },
+            { label: 'Тюнинг', value: `${previewEff.installedCount}/${G.tuningCatalog.length}` },
+            { label: 'Тип', value: previewBike.typeLabel }
+          ])}
+          ${mileageRow}
+          <div class="shop-action">
+            ${actionBtn}
+            ${missingLine}
+            <div class="shop-status">${statusLine}</div>
+          </div>
+          ${paint}
+        </div>
+      </div>
+      <div class="shop-foot">${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}</div>
+    `, { className: 'shop-panel' });
+
+    // Клик по строке только меняет витрину: selectedBikeId не трогаем.
+    overlay.querySelectorAll('[data-preview]').forEach(btn => {
+      if (!(btn instanceof HTMLElement)) return;
+      btn.addEventListener('click', () => {
+        G.shopPreviewId = btn.dataset.preview;
+        renderShop();
+      });
+    });
     overlay.querySelectorAll('[data-buy]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
@@ -583,6 +671,7 @@ export function initUi() {
         G.bankPoints -= bike.price;
         G.ownedBikes.push(bike.id);
         G.selectedBikeId = bike.id;
+        G.shopPreviewId = bike.id;
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
@@ -592,6 +681,7 @@ export function initUi() {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         G.selectedBikeId = btn.dataset.select;
+        G.shopPreviewId = btn.dataset.select;
         G.saveGarage();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
@@ -609,9 +699,12 @@ export function initUi() {
       });
     });
     $('shop-back').addEventListener('click', renderMainMenu);
+
+    if (G.openShopPreview) G.openShopPreview(previewBike.id);
   }
 
   function startGame() {
+    if (G.closeShopPreview) G.closeShopPreview();
     G.currentScreen = 'playing';
     G.started = true;
     G.ended = false;
@@ -621,6 +714,9 @@ export function initUi() {
     // дороги пересобираются до старта, чтобы полоса старта и трафик попали
     // на полосы текущего биома (у горного их две, у МКАД — восемь).
     if (G.resetBiomeRun) G.resetBiomeRun();
+    // Кусок, не дописанный до аварии/выхода, зачисляем до обнуления заезда.
+    if (G.creditRunMileage) G.creditRunMileage();
+    if (G.resetRunMileage) G.resetRunMileage();
     resetRun(G, G.START_LANE);
     G.laneAssistTarget = null;
     if (G.updateBiome) G.updateBiome(0);
@@ -697,6 +793,7 @@ export function initUi() {
     if (G.stopTilt) G.stopTilt();
     if (navigator.vibrate) navigator.vibrate(40);
 
+    if (G.creditRunMileage) G.creditRunMileage();
     const earned = creditRun(G.score, G.bankedOrderRun);
     G.bankPoints += earned;
     G.bankedOrderRun = 0;

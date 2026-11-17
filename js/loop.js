@@ -353,6 +353,7 @@ export function initLoop() {
 
     // Живой предпросмотр камеры в настройках (лёгкий рендер ~30 fps)
     if (G.camPreviewActive) G.renderCameraPreview(now);
+    if (G.shopPreviewActive) G.renderShopPreview(now);
 
     if (G.tickFeed) G.tickFeed(dt);
 
