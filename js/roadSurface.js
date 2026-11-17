@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { shoulderLats } from './engine/fork.js';
-import { laneDashOffsets } from './engine/lanes.js';
 
 export function initRoadSurface() {
 
@@ -174,7 +173,7 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Разметка полос (инстансы) ---------------- */
-  const MAX_DASHES = 240;
+  const MAX_DASHES = 384;
   const dashGeo = new THREE.BoxGeometry(0.15, 0.035, 4.2);
   const dashMesh = new THREE.InstancedMesh(dashGeo, G.M.lineWhite, MAX_DASHES);
   dashMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -205,12 +204,12 @@ export function initRoadSurface() {
     for (let k = 0; k < 32 && dense; k++) {
       const s = startDashS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
-      const cfg = G.getLaneConfig(G.roadBiomeAtS(s));
-      if (!cfg) continue;
-      for (const mark of laneDashOffsets(cfg.offsets, cfg.oncomingCount)) {
+      // На стыке биомов наборы штрихов перетекают: штрих укорачивается
+      // по весу и растворяется, вместо мгновенной смены числа полос.
+      for (const mark of G.laneMarksAtS(s)) {
         if (used >= MAX_DASHES) break;
-        dummy.scale.set(1, 1, 1);
-        G.placeOnRoad(dummy, s, toWorld(s, mark), 0.03);
+        dummy.scale.set(1, 1, mark.w);
+        G.placeOnRoad(dummy, s, toWorld(s, mark.lat), 0.03);
         dummy.updateMatrix();
         dashMesh.setMatrixAt(used++, dummy.matrix);
       }
@@ -254,6 +253,108 @@ export function initRoadSurface() {
     for (let i = used; i < MAX_BLOCKS; i++) blockMesh.setMatrixAt(i, hidden);
     blockMesh.count = used;
     blockMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /* ---------------- Отбойники вдоль кромки асфальта ----------------
+     Балка тянется по фактической кромке полосы (включая разъезд развилки),
+     поэтому силуэт дороги повторяется без изломов. Прямые 20-метровые секции
+     слотов давали ступеньки на поворотах и на разъезде. Отбойник живёт только
+     в городе и на МКАД: толщина и высота гаснут вместе с весом биома. */
+  const GUARD_OFFSET = 0.55;
+  const GUARD_HALF = 0.09;
+  const GUARD_MID = 0.52;
+  const GUARD_LOW = 0.40;
+  const GUARD_HIGH = 0.64;
+
+  const guardMat = G.M.chrome.clone();
+  guardMat.side = THREE.DoubleSide;
+
+  function makeGuardRibbon() {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ROW * 4 * 3), 3));
+    const idx = [];
+    for (let r = 0; r < ROW - 1; r++) {
+      const a = r * 4;
+      const b = (r + 1) * 4;
+      for (let k = 0; k < 4; k++) {
+        const k2 = (k + 1) % 4;
+        idx.push(a + k, a + k2, b + k2, a + k, b + k2, b + k);
+      }
+    }
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, guardMat);
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    G.scene.add(mesh);
+    return mesh;
+  }
+
+  const guardLeftMesh = makeGuardRibbon();
+  const guardRightMesh = makeGuardRibbon();
+
+  function updateGuardRibbon(mesh, side) {
+    const pos = mesh.geometry.attributes.position;
+    const arr = pos.array;
+    let maxWeight = 0;
+    for (let r = 0; r < ROW; r++) {
+      const s = sampleS[r];
+      const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
+      if (weight > maxWeight) maxWeight = weight;
+      const vis = weight > 0.02 ? weight : 0;
+      const lat = G.roadOuterLat(s, side) + side * GUARD_OFFSET;
+      const half = GUARD_HALF * vis;
+      const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
+      const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
+      const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
+      const rx = rightX[r], rz = rightZ[r];
+      const o = r * 12;
+      const put = (slot, l, h) => {
+        const p = o + slot * 3;
+        arr[p] = cx + rx * l;
+        arr[p + 1] = cy + h;
+        arr[p + 2] = cz + rz * l;
+      };
+      put(0, lat - half, low);
+      put(1, lat + half, low);
+      put(2, lat + half, high);
+      put(3, lat - half, high);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.visible = maxWeight > 0.02;
+  }
+
+  const GUARD_POST_STEP = 8;
+  const MAX_GUARD_POSTS = 128;
+  const guardPostMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.22, 0.62, 0.22), guardMat, MAX_GUARD_POSTS
+  );
+  guardPostMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  guardPostMesh.frustumCulled = false;
+  guardPostMesh.castShadow = true;
+  G.scene.add(guardPostMesh);
+
+  function updateGuardPosts(playerS) {
+    const start = Math.floor((playerS - RIBBON_BEHIND) / GUARD_POST_STEP) * GUARD_POST_STEP;
+    const end = playerS - RIBBON_BEHIND + RIBBON_LEN;
+    let used = 0;
+    for (let s = start; s <= end && used + 2 <= MAX_GUARD_POSTS; s += GUARD_POST_STEP) {
+      const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
+      if (weight <= 0.02) continue;
+      for (const side of [-1, 1]) {
+        if (used >= MAX_GUARD_POSTS) break;
+        const lat = G.roadOuterLat(s, side) + side * GUARD_OFFSET;
+        dummy.scale.set(weight, weight, weight);
+        G.placeOnRoad(dummy, s, lat, 0.31 * weight);
+        dummy.updateMatrix();
+        guardPostMesh.setMatrixAt(used++, dummy.matrix);
+      }
+    }
+    for (let i = used; i < MAX_GUARD_POSTS; i++) guardPostMesh.setMatrixAt(i, hidden);
+    guardPostMesh.count = used;
+    guardPostMesh.instanceMatrix.needsUpdate = true;
+    guardPostMesh.visible = used > 0;
   }
 
   /* ---------------- Ленты с переменной шириной ---------------- */
@@ -562,6 +663,9 @@ export function initRoadSurface() {
     updateIsland(playerS);
     updateDashes(playerS, true);
     updateBarrier(playerS, true);
+    updateGuardRibbon(guardLeftMesh, -1);
+    updateGuardRibbon(guardRightMesh, 1);
+    updateGuardPosts(playerS);
   }
   let lastSlopeShadeS = NaN;
   G.updateRoadSurface = updateRoadSurface;

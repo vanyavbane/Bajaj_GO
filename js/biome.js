@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
+import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
 import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkCenterShift, forkClose, forkHandoff, forkSide, forkSpreadAt, logicalRoadLimits, shoulderHeight, shoulderLats } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
@@ -538,16 +539,49 @@ function roadBiomeAtS(s) {
   return r.t < 0.5 ? r.a : r.b;
 }
 
-/** Во сколько раз сжать логические полосы, чтобы крайняя осталась на асфальте.
- *  И ширина, и смещения берутся из профиля дороги, а не из живого декора. */
-function laneDisplayScaleAtS(s) {
-  const biome = roadBiomeAtS(s);
-  const cfg = LANE_CONFIG[biome];
+/** Наибольшее |смещение| полос биома. Нужно для масштаба разметки. */
+function maxLaneOffset(cfg) {
   let maxAbs = 0;
   for (const off of cfg.offsets) maxAbs = Math.max(maxAbs, Math.abs(off));
-  const half = roadWidthAtS(s) * 0.5 - 0.9;
+  return maxAbs;
+}
+
+/** Во сколько раз сжать логические полосы, чтобы крайняя осталась на асфальте.
+ *  И ширина, и смещения берутся из профиля дороги, а не из живого декора.
+ *  Оба биома перехода смешиваются по тому же весу, что и ширина полотна:
+ *  иначе на стыке масштаб скачет и вся разметка с машинами дёргается вбок. */
+function laneDisplayScaleAtS(s) {
+  const r = roadAtMeters(blendMetersAt(s));
+  const maxAbs = mixValue(maxLaneOffset(LANE_CONFIG[r.a]), maxLaneOffset(LANE_CONFIG[r.b]), r.t);
+  const half = mixValue(LANE_CONFIG[r.a].width, LANE_CONFIG[r.b].width, r.t) * 0.5 - 0.9;
   if (maxAbs <= 0.001 || half <= 0.5) return 1;
   return Math.min(1, half / (maxAbs + 1.15));
+}
+
+/** Штрихи между полосами в точке s. На стыке биомов оба набора живут
+ *  одновременно и плавно перетекают: вес 1 — полный штрих, 0 — растворяется.
+ *  Совпавшие штрихи сливаются, чтобы общая линия не укорачивалась. */
+function laneMarksAtS(s) {
+  const r = roadAtMeters(blendMetersAt(s));
+  const ca = LANE_CONFIG[r.a];
+  const cb = LANE_CONFIG[r.b];
+  const list = [];
+  const add = (lat, w) => {
+    if (w <= 0) return;
+    for (const m of list) {
+      if (Math.abs(m.lat - lat) < 0.6) {
+        const total = m.w + w;
+        m.lat = (m.lat * m.w + lat * w) / total;
+        m.w = total;
+        return;
+      }
+    }
+    list.push({ lat, w });
+  };
+  for (const lat of laneDashOffsets(ca.offsets, ca.oncomingCount)) add(lat, 1 - r.t);
+  for (const lat of laneDashOffsets(cb.offsets, cb.oncomingCount)) add(lat, r.t);
+  for (const m of list) if (m.w > 1) m.w = 1;
+  return list;
 }
 
 /** -1 слева, +1 справа, 0 пока развилка этой зоны не выбрана. */
@@ -1435,6 +1469,7 @@ export function initBiome() {
   G.groundOffset = groundOffset;
   G.splitLateralShiftAtS = splitLateralShiftAtS;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
+  G.laneMarksAtS = laneMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
   G.dominantBiomeAtS = dominantBiomeAtS;
   G.nearestRunLane = nearestRunLane;

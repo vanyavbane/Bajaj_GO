@@ -280,6 +280,7 @@ export interface GameState {
   splitAmountAtS: (s: number) => number;
   laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
   laneDisplayScaleAtS: (s: number) => number;
+  laneMarksAtS: (s: number) => { lat: number; w: number }[];
   splitLateralShiftAtS: (s: number, lateralOffset: number) => number;
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: any) => number;

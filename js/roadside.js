@@ -6,8 +6,9 @@ export function initRoadside() {
   /* =========================================================================
    * 6. БИЛБОРДЫ, ЗДАНИЯ И ПРИДОРОЖНЫЕ СЛОТЫ
    * -------------------------------------------------------------------------
-   * Инфраструктура (отбойники, фонари, здания, порталы) принадлежит городу и
-   * МКАД. Позиция — от кромки ветки: половина ширины плюс разъезд развилки.
+   * Инфраструктура (фонари, здания, порталы) принадлежит городу и МКАД.
+   * Позиция — от кромки ветки: половина ширины плюс разъезд развилки.
+   * Отбойники вдоль кромки теперь строит js/roadSurface.js непрерывной лентой.
    * ========================================================================= */
   const billboardTextures = [];
   function buildBillboardTextures() {
@@ -294,8 +295,6 @@ export function initRoadside() {
     const slot = {
       idx: i,
       s: i * G.SLOT_STEP,
-      leftGuard: new THREE.Group(),
-      rightGuard: new THREE.Group(),
       leftLamp: new THREE.Group(),
       rightLamp: new THREE.Group(),
       leftProp: new THREE.Group(),
@@ -303,15 +302,6 @@ export function initRoadside() {
       billboard: null,
       portal: null
     };
-
-    for (const [, grp] of [[-1, slot.leftGuard], [1, slot.rightGuard]]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), G.M.chrome);
-      post.position.y = 0.31;
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, G.SLOT_STEP + 0.2), G.M.chrome);
-      rail.position.y = 0.52;
-      grp.add(post, rail);
-      G.scene.add(grp);
-    }
 
     for (const [side, lgrp] of [[-1, slot.leftLamp], [1, slot.rightLamp]]) {
       addLampPart(lgrp, side);
@@ -400,8 +390,6 @@ export function initRoadside() {
       const dom = dominantBiomeAt(slot.s);
       slot.lastDom = dom;
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        G.placeOnRoad(slot.leftGuard, slot.s, G.roadOuterLat(slot.s, -1) - 0.55, 0);
-        G.placeOnRoad(slot.rightGuard, slot.s, rightEdge + 0.55, 0);
         G.placeOnRoad(slot.leftLamp, slot.s, G.roadOuterLat(slot.s, -1) - 0.8, 0);
         G.placeOnRoad(slot.rightLamp, slot.s, rightEdge + 0.8, 0);
         const leftProp = Math.abs(G.roadOuterLat(slot.s, -1)) + 12;
@@ -433,12 +421,10 @@ export function initRoadside() {
       const inMkad = mw > 0.5;
       const inMetro = inCity || inMkad;
 
-      for (const grp of [slot.leftGuard, slot.rightGuard, slot.leftLamp, slot.rightLamp, slot.leftProp, slot.rightProp]) {
+      for (const grp of [slot.leftLamp, slot.rightLamp, slot.leftProp, slot.rightProp]) {
         grp.visible = infraVisible;
       }
       if (infraVisible) {
-        slot.leftGuard.scale.setScalar(infraScale);
-        slot.rightGuard.scale.setScalar(infraScale);
         // На МКАД мачты выше и с двумя головами.
         const lampScale = infraScale * (1 + 0.18 * mw);
         slot.leftLamp.scale.setScalar(lampScale);
