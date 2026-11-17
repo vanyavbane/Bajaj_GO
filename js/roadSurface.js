@@ -28,6 +28,49 @@ export function initRoadSurface() {
   const toWorld = (s, lat) => G.laneWorldOffsetAtS(s, lat);
   const widthAt = (s) => G.roadWidthAtS(s);
 
+  /* Точка на дороге со сдвигом оси развилки — как placeOnRoad, но без поворота. */
+  const _laneA = new THREE.Vector3();
+  const _laneB = new THREE.Vector3();
+  const _laneDir = new THREE.Vector3();
+  const _laneRight = new THREE.Vector3();
+  const _laneUp = new THREE.Vector3();
+  const _laneZ = new THREE.Vector3();
+  const _laneBasis = new THREE.Matrix4();
+  const _laneQuat = new THREE.Quaternion();
+
+  function roadPointAt(out, s, lat, yOffset) {
+    const dx = G.roadDX(s);
+    const lh = Math.hypot(dx, 1) || 1;
+    const total = lat + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
+    out.set(G.roadX(s) + total / lh, G.roadY(s) + yOffset, -s + total * dx / lh);
+    return out;
+  }
+
+  /* Кладёт плоский объект вдоль линии между двумя точками ветки (s ∓ halfLen).
+   * Касательная берётся по самой линии полосы, а не по оси дороги: на
+   * разъезде ветка уходит вбок, и штрих, повёрнутый по оси, стоял бы поперёк
+   * своей полосы (до ~33° и ~2 м ошибки на концах). */
+  function placeAlongLane(obj, s, latA, latB, halfLen, yOffset) {
+    roadPointAt(_laneA, s - halfLen, latA, 0);
+    roadPointAt(_laneB, s + halfLen, latB, 0);
+    _laneDir.subVectors(_laneB, _laneA);
+    if (_laneDir.lengthSq() < 1e-8) _laneDir.set(0, 0, -1);
+    else _laneDir.normalize();
+    _laneRight.set(-_laneDir.z, 0, _laneDir.x);
+    if (_laneRight.lengthSq() < 1e-8) _laneRight.set(1, 0, 0);
+    else _laneRight.normalize();
+    _laneUp.crossVectors(_laneRight, _laneDir).normalize();
+    _laneZ.copy(_laneDir).negate();
+    _laneBasis.makeBasis(_laneRight, _laneUp, _laneZ);
+    _laneQuat.setFromRotationMatrix(_laneBasis);
+    obj.quaternion.copy(_laneQuat);
+    obj.position.set(
+      (_laneA.x + _laneB.x) * 0.5,
+      (_laneA.y + _laneB.y) * 0.5 + yOffset,
+      (_laneA.z + _laneB.z) * 0.5
+    );
+  }
+
   function sampleCenterline(playerS) {
     for (let r = 0; r < ROW; r++) {
       const frac = r / RIBBON_SEGS;
@@ -174,7 +217,9 @@ export function initRoadSurface() {
 
   /* ---------------- Разметка полос (инстансы) ---------------- */
   const MAX_DASHES = 384;
-  const dashGeo = new THREE.BoxGeometry(0.15, 0.035, 4.2);
+  const DASH_LEN = 4.2;
+  const DASH_HALF = DASH_LEN * 0.5;
+  const dashGeo = new THREE.BoxGeometry(0.15, 0.035, DASH_LEN);
   const dashMesh = new THREE.InstancedMesh(dashGeo, G.M.lineWhite, MAX_DASHES);
   dashMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   dashMesh.frustumCulled = false;
@@ -209,7 +254,12 @@ export function initRoadSurface() {
       for (const mark of G.laneMarksAtS(s)) {
         if (used >= MAX_DASHES) break;
         dummy.scale.set(1, 1, mark.w);
-        G.placeOnRoad(dummy, s, toWorld(s, mark.lat), 0.03);
+        placeAlongLane(
+          dummy, s,
+          toWorld(s - DASH_HALF, mark.lat),
+          toWorld(s + DASH_HALF, mark.lat),
+          DASH_HALF, 0.03
+        );
         dummy.updateMatrix();
         dashMesh.setMatrixAt(used++, dummy.matrix);
       }
@@ -611,7 +661,12 @@ export function initRoadSurface() {
     for (const a of arrows) {
       a.mesh.visible = active;
       if (!active) continue;
-      G.placeOnRoad(a.mesh, a.s, a.side * hintLatAt(a.s), 0.055);
+      placeAlongLane(
+        a.mesh, a.s,
+        a.side * hintLatAt(a.s - 2.4),
+        a.side * hintLatAt(a.s + 2.4),
+        2.4, 0.055
+      );
     }
 
     if (active) {

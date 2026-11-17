@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkCenterShift, forkClose, forkHandoff, forkSide, forkSpreadAt, logicalRoadLimits, shoulderHeight, shoulderLats } from './engine/fork.js';
+import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkClose, forkHandoff, forkSide, forkSpreadAt, logicalRoadLimits, shoulderHeight, shoulderLats } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { G } from './state.js';
 
@@ -240,6 +240,10 @@ function getBiomeChoices(currentBiome, visitCounts) {
 let zoneBiomes = Object.create(null);   // zone → biome index
 let splitChoices = Object.create(null); // zone → [left, right]
 const chosenZones = new Set();
+/** Метр, на котором выбор развилки зоны был зафиксирован. Нужен, чтобы
+ *  схлопывание чужой ветки и сдвиг оси вводились плавно, а не рывком. */
+const splitCommitMeters = Object.create(null);
+const SPLIT_RAMP_M = 60;
 
 const ZERO_VISITS = () => BIOMES.map(() => 0);
 
@@ -615,17 +619,32 @@ function forkChosenSideAtS(s) {
   return prev.close > 0 ? prev.side : 0;
 }
 
+/** 0…1 — насколько выбор развилки уже введён в геометрию. В момент
+ *  авто-выбора вес 0, дальше растёт за SPLIT_RAMP_M метров. Иначе ось
+ *  дороги и схлопывание ветки прыгали на ~4 м в одном кадре. */
+function splitDecisionWeight(zone, meters) {
+  const c = splitCommitMeters[zone];
+  if (!Number.isFinite(c)) return 1; // выбор был в прошлой сессии — он уже в силе
+  const u = Math.max(0, Math.min(1, (meters - c) / SPLIT_RAMP_M));
+  return u * u * (3 - 2 * u);
+}
+
 function forkCenterShiftAtS(s) {
   const route = routeAt(s);
   const prev = previousChoice(route);
-  return forkCenterShift(route.meters, ZONE_M, forkChosenSideForZone(route.zone), SPLIT_LEAD, FORK_SPREAD)
-    + prev.side * FORK_SPREAD * prev.close;
+  const own = forkChosenSideForZone(route.zone);
+  const ownShift = own === 0 ? 0
+    : own * FORK_SPREAD * forkClose(route.meters, ZONE_M, SPLIT_LEAD)
+      * splitDecisionWeight(route.zone, route.meters);
+  return ownShift + prev.side * FORK_SPREAD * prev.close;
 }
 
 function forkCloseAtS(s) {
   const route = routeAt(s);
   const own = forkChosenSideForZone(route.zone);
-  const ownClose = own === 0 ? 0 : forkClose(route.meters, ZONE_M, SPLIT_LEAD);
+  const ownClose = own === 0 ? 0
+    : forkClose(route.meters, ZONE_M, SPLIT_LEAD)
+      * splitDecisionWeight(route.zone, route.meters);
   return Math.max(ownClose, previousChoice(route).close);
 }
 
@@ -1185,11 +1204,12 @@ function randomRunLane(s) {
   return cfg.oncomingCount + Math.floor(Math.random() * same);
 }
 
-function commitSplit(zone, side) {
+function commitSplit(zone, side, commitMeters) {
   if (chosenZones.has(zone)) return;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts);
   const chosen = choices[side === 1 ? 1 : 0];
   chosenZones.add(zone);
+  if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
   lastSplitZone = zone;
   lastSplitSide = side === 1 ? 1 : 0;
   zoneBiomes[zone + 1] = chosen;
@@ -1269,7 +1289,7 @@ function updateBiome(dt) {
 
   // Авто-выбор, если игрок не ушёл на ветку до sSplit + 30.
   if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
-    commitSplit(zone, previewSide);
+    commitSplit(zone, previewSide, meters);
   }
   // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
   // увидеть решение сразу, а не следующим кадром.
@@ -1387,6 +1407,7 @@ function resetBiomeRun() {
   lastSplitZone = -1;
   lastSplitSide = -1;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
+  for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
   G.laneAssistTarget = null;
   saveTimer = 0;
