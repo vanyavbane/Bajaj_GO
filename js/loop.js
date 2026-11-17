@@ -70,14 +70,69 @@ export function initLoop() {
     for (const qw of G.quteWheels) qw.rotation.x -= spin;
   }
 
+  // Меню едет медленнее всех попутных полос (минимум 50–55 км/ч в биомах),
+  // поэтому байк не догоняет машины в своём ряду и не накладывается на них.
+  const MENU_DEMO_SPEED = 48;
+
   function advanceMenuDemo(dt, now) {
-    const forwardMeters = worldMeters(78, dt);
+    const forwardMeters = worldMeters(MENU_DEMO_SPEED, dt);
+    const prevS = G.playerS;
     G.playerS += forwardMeters;
-    const demoLanes = G.lanesAtS(G.playerS);
-    const demoTarget = demoLanes.offsets[demoLanes.oncomingCount];
-    G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
+
+    // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
+    if (!G.jumpState.airborne) {
+      const demoLanes = G.lanesAtS(G.playerS);
+      const demoTarget = demoLanes.offsets[demoLanes.oncomingCount];
+      G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
+    }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
     spinOwnWheels(forwardMeters);
+
+    // Прыжок в меню: только визуальный. Бонусы, перелёты и HUD заезда не трогаем.
+    if (G.jumpState.airborne) {
+      const air = stepJump(G.jumpState, dt, false, false);
+      G.jumpState.vy = air.vy;
+      G.jumpState.height = air.height;
+      G.jumpState.pitch = air.pitch;
+      if (air.landed) {
+        G.jumpState.airborne = false;
+        G.jumpState.height = 0;
+        G.jumpState.vy = 0;
+        G.jumpState.pitch = 0;
+      }
+      return;
+    }
+
+    const toWorld = G.laneWorldOffsetAtS;
+    const bikeLat = toWorld(G.playerS, G.laneOffset);
+    let deckHeight = 0;
+    for (const ramp of G.rampsPool) {
+      // Флаг мог остаться с прошлого заезда: пока трамплин впереди, сбрасываем.
+      if (G.playerS < ramp.s - ramp.length * 0.5) ramp.triggeredThisPass = false;
+      const rampLat = toWorld(ramp.s, ramp.lateralOffset);
+      const contact = rampUnderBike(G.playerS, prevS, bikeLat, {
+        s: ramp.s,
+        length: ramp.length,
+        width: ramp.width,
+        height: ramp.height,
+        lateralOffset: rampLat
+      });
+      if (!contact) continue;
+      deckHeight = contact.height;
+      if (contact.launch && !ramp.triggeredThisPass) {
+        ramp.triggeredThisPass = true;
+        G.jumpState.airborne = true;
+        G.jumpState.height = contact.height + 0.08;
+        G.jumpState.vy = jumpLaunchVy(MENU_DEMO_SPEED, G.selectedBike().massFactor);
+        G.jumpState.pitch = 0.20;
+        G.jumpState.startS = G.playerS;
+        G.jumpState.carsJumped = 0;
+        G.jumpState.liveBonus = 0;
+        return;
+      }
+    }
+    G.jumpState.height = deckHeight;
+    G.jumpState.pitch = deckHeight > 0.05 ? 0.15 : 0;
   }
 
   function simulateRun(dt, now, bike, effStats) {

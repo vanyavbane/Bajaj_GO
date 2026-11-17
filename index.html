@@ -35,13 +35,6 @@
       <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
       <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
     </div>
-    <div id="biome-banner" aria-live="polite">
-      <span class="biome-ico">🏙️</span>
-      <span class="biome-copy">
-        <b class="biome-name">ГОРОД</b>
-        <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
-      </span>
-    </div>
 
     <!-- ВЫБОР ПУТИ НА РАЗВИЛКЕ -->
     <div id="split-banner" hidden aria-live="polite">
@@ -60,22 +53,33 @@
       </div>
       <div class="split-hint">A / ← — влево · D / → — вправо</div>
     </div>
-    <div id="exit-hint">
-      <span id="exit-hint-ico">🍔</span>
-      <span class="exit-copy">
-        <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
-        <small id="exit-hint-how">Сбрось ниже 50 км/ч и заезжай в коробку</small>
-      </span>
-    </div>
-    <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
-    <div id="event-feed"></div>
 
-    <!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
-    <div id="jump-live" hidden>
-      <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
-      <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
-      <div id="slowmo-badge" hidden>⏱ SLOW-MO</div>
+    <!-- УВЕДОМЛЕНИЯ: ЛЕВЫЙ ВЕРХНИЙ УГОЛ, СТЕК С ОГРАНИЧЕНИЕМ ВЫСОТЫ -->
+    <div id="notice-stack" aria-live="polite">
+      <div id="biome-banner">
+        <span class="biome-ico">🏙️</span>
+        <span class="biome-copy">
+          <b class="biome-name">ГОРОД</b>
+          <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
+        </span>
+      </div>
+      <div id="exit-hint">
+        <span id="exit-hint-ico">🍔</span>
+        <span class="exit-copy">
+          <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
+          <small id="exit-hint-how">Сбрось ниже 50 км/ч и заезжай в коробку</small>
+        </span>
+      </div>
+      <!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
+      <div id="jump-live" hidden>
+        <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
+        <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
+        <div id="slowmo-badge" hidden>⏱ SLOW-MO</div>
+      </div>
+      <div id="event-feed"></div>
     </div>
+
+    <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
     <div id="eco-toast"></div>
   </div>
 
@@ -141,13 +145,10 @@
   <div class="tilt-zone tilt-zone-brake" id="tilt-zone-brake">
     <span class="tilt-zone-hint">▼ ТОРМОЗ</span>
   </div>
-  <div class="tilt-indicator">
-    <div class="tilt-indicator-track"><div class="tilt-indicator-dot" id="tilt-indicator-dot"></div></div>
-    <span class="tilt-indicator-label">НАКЛОН</span>
-  </div>
   <button type="button" id="btn-flash-tilt" class="tilt-flash-btn" title="Дальний свет (сигнал)" aria-label="Дальний свет">
     <span class="tilt-flash-icon">💡</span>
   </button>
+  <button type="button" id="btn-camera-tilt" class="ctrl ds-icon-button tilt-camera-btn" title="Камера (1-е лицо ↔ 3-е лицо)" aria-label="Переключить камеру">🎥</button>
 </div>
 
 <!-- ОВЕРЛЕЙ МЕНЮ, МАГАЗИНА И АВАРИИ -->

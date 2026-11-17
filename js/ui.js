@@ -97,10 +97,15 @@ export function initUi() {
       `;
     } else if (tab === 'lighting') {
       body = `
-        ${field('Отражения', option('reflections', false, 'Тише') + option('reflections', true, 'Есть'))}
+        ${inline('🪞 Отражения', button({
+          id: 'fx-toggle-reflections',
+          variant: 'compact',
+          label: fxState(g.reflections),
+          pressed: !!g.reflections
+        }))}
         ${inline('💨 Motion Blur', button({ id: 'fx-open-mb', variant: 'compact', label: fxState(v.motionBlur) }))}
         ${inline('☀️ Лучи от солнца', button({ id: 'fx-open-gr', variant: 'compact', label: fxState(v.godRays) }))}
-        ${note('Оба эффекта применяются мгновенно и сохраняются в браузере.')}
+        ${note('Эффекты применяются мгновенно и сохраняются в браузере.')}
       `;
     } else if (tab === 'camera') {
       body = `
@@ -202,6 +207,13 @@ export function initUi() {
     if (openGr) {
       openGr.addEventListener('click', () => {
         fxOpenModal(() => renderGodRaysSettings(() => renderSettings('lighting', from), from === 'pause'));
+      });
+    }
+    const toggleReflections = document.getElementById('fx-toggle-reflections');
+    if (toggleReflections) {
+      toggleReflections.addEventListener('click', () => {
+        G.chooseGraphics('reflections', g.reflections ? 'false' : 'true');
+        renderSettings('lighting', from);
       });
     }
     const cam = document.getElementById('settings-cam');
@@ -470,8 +482,7 @@ export function initUi() {
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
       footer: 'bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan',
       tools: [
-        iconButton({ id: 'mm-cam-settings', icon: '⚙', title: 'Настройки камеры от первого лица (FOV, высота)' }),
-        iconButton({ id: 'mm-cam-btn', icon: '🎥', title: `Камера: ${G.cameraMode === 'cockpit' ? 'кокпит' : '3-е лицо'}` }),
+        iconButton({ id: 'mm-cam-settings', icon: '🎥', title: 'Настройки камеры от первого лица (FOV, высота)' }),
         iconButton({ id: 'mm-fs-btn', icon: '⛶', title: 'Полный экран' })
       ].join('')
     });
@@ -481,10 +492,6 @@ export function initUi() {
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
     $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
-    $('mm-cam-btn').addEventListener('click', () => {
-      G.toggleCameraMode();
-      renderMainMenu();
-    });
     $('mm-cam-settings').addEventListener('click', () => {
       G.renderCameraSettings(renderMainMenu);
     });

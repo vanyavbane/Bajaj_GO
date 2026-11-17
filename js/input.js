@@ -102,6 +102,10 @@ export function initInput() {
     e.preventDefault();
     G.toggleCameraMode();
   });
+  $('btn-camera-tilt').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    G.toggleCameraMode();
+  });
 
   const view = $('view');
   let swipeId = null;

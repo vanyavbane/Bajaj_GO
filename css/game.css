@@ -244,7 +244,7 @@ button{font-family:var(--ds-font)}
 
 /* Тост экономики */
 #eco-toast{
-  position:static;
+  position:absolute;left:50%;bottom:190px;transform:translateX(-50%);
   max-width:84vw;
   padding:7px 14px;
   border:1px solid rgba(240,180,41,.5);border-radius:2px;
@@ -253,7 +253,7 @@ button{font-family:var(--ds-font)}
   font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   opacity:0;transition:opacity .25s;
-  pointer-events:none;flex:0 0 auto;
+  pointer-events:none;flex:0 0 auto;z-index:11;
 }
 #eco-toast.show{opacity:1}
 #eco-toast.bad{border-color:var(--bf-danger);color:var(--bf-danger)}
@@ -416,6 +416,40 @@ button{font-family:var(--ds-font)}
   12%{opacity:1;transform:none}
   78%{opacity:1}
   100%{opacity:0;transform:translateY(-8px)}
+}
+
+/* ---------- Стек уведомлений: левый верхний угол ---------- */
+/* Внутри стека плашки идут колонкой, высота ограничена, чтобы не залезать
+ * на HUD мотоцикла слева снизу. Лишние сообщения обрезаются, а не растягивают
+ * экран; у самих элементов ленты остаётся плавный feedLife fade-out. */
+#notice-stack{
+  position:absolute;top:64px;left:20px;
+  width:min(360px,calc(100vw - 40px));
+  max-height:min(42vh,calc(100vh - 380px));
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+  overflow:hidden;pointer-events:none;z-index:12;
+}
+#notice-stack > #biome-banner,
+#notice-stack > #exit-hint{
+  position:static;transform:none;max-width:100%;width:100%;
+  max-height:0;padding-top:0;padding-bottom:0;border-width:0;
+  opacity:0;overflow:hidden;flex:0 0 auto;
+  transition:opacity .25s ease,max-height .25s ease,padding .25s ease;
+}
+#notice-stack > #biome-banner.show,
+#notice-stack > #exit-hint.show{
+  transform:none;opacity:1;max-height:96px;
+  padding-top:7px;padding-bottom:7px;border-width:1px;
+}
+#notice-stack > #jump-live{
+  position:static;width:100%;max-width:100%;flex:0 0 auto;
+}
+#notice-stack > #event-feed{
+  position:static;margin:0;padding:0;width:100%;max-height:none;
+  align-items:stretch;overflow:visible;flex:0 1 auto;
+}
+#notice-stack .feed-item{
+  align-self:stretch;max-width:100%;text-align:left;
 }
 
 /* ---------- Экранные кнопки управления ---------- */
@@ -667,21 +701,12 @@ button{font-family:var(--ds-font)}
   pointer-events:none;transition:opacity .4s ease;
 }
 .tilt-zone.hint-hidden .tilt-zone-hint{opacity:0}
-.tilt-indicator{
-  position:absolute;top:84px;left:50%;transform:translateX(-50%);
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  pointer-events:none;
+/* Камера в режиме акселерометра: та же позиция и вид, что в кнопочном режиме */
+.tilt-camera-btn{
+  position:fixed;right:16px;bottom:16px;
+  pointer-events:auto;z-index:12;
 }
-.tilt-indicator-track{width:120px;height:4px;border-radius:1px;background:rgba(120,160,190,.35);position:relative}
-.tilt-indicator-dot{
-  position:absolute;top:-4px;left:50%;
-  width:12px;height:12px;border-radius:1px;
-  background:var(--bf-accent);
-  border:1px solid #0b0f14;
-  transform:translateX(-50%);
-  transition:left .08s linear,background .2s;
-}
-.tilt-indicator-label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--bf-text-dim)}
+.tilt-camera-btn:active{border-color:var(--bf-accent);background:var(--bf-accent-dim);color:var(--bf-accent)}
 .tilt-flash-btn{
   position:fixed;right:18px;bottom:130px;
   width:48px;height:48px;padding:0;
@@ -739,6 +764,12 @@ button{font-family:var(--ds-font)}
     overflow:hidden;z-index:2;
   }
   #hud:not(.third-person) #hud-feedzone{bottom:164px}
+  #notice-stack{
+    position:static;order:2;align-self:stretch;
+    width:100%;max-height:calc(100vh - 260px);
+    flex:0 1 auto;min-height:0;gap:5px;
+  }
+  #hud.third-person #notice-stack{max-height:calc(100vh - 360px)}
   #status-badges{
     position:static;align-self:flex-end;
     flex-direction:row;flex-wrap:wrap;justify-content:flex-end;
@@ -779,19 +810,18 @@ button{font-family:var(--ds-font)}
   #exit-hint small{font-size:10px}
   #hint{
     position:static;transform:none;max-width:100%;
-    font-size:11px;letter-spacing:.08em;flex:0 0 auto;
+    font-size:11px;letter-spacing:.08em;flex:0 0 auto;order:3;
   }
   #hint small{font-size:9px;letter-spacing:.02em}
   #event-feed{
     position:static;width:100%;max-width:none;
-    max-height:none;flex:1 1 auto;min-height:0;
+    max-height:none;flex:0 1 auto;min-height:0;
     margin:0;padding:0;gap:5px;
-    order:10;
   }
   .feed-item{max-width:100%;font-size:12px;padding:6px 10px;word-break:break-word}
   #jump-live{
     position:static;transform:none;
-    max-width:100%;padding:4px 8px;flex:0 0 auto;order:11;
+    max-width:100%;padding:4px 8px;flex:0 0 auto;
   }
   #jump-live .jl-title{font-size:9px;letter-spacing:.12em}
   #jump-live .jl-stats{font-size:13px}
@@ -838,8 +868,7 @@ button{font-family:var(--ds-font)}
   #controls{right:10px;bottom:10px;gap:5px}
   .ctrl{width:42px;height:42px;font-size:15px}
   .tilt-flash-btn{right:10px;bottom:64px;width:44px;height:44px;font-size:18px}
-  .tilt-indicator{top:64px}
-  .tilt-indicator-track{width:96px}
+  .tilt-camera-btn{right:10px;bottom:10px}
 
   /* Оверлеи: панели на всю ширину */
   #overlay.mode-shop,#overlay.mode-crash{padding:10px}
@@ -849,6 +878,7 @@ button{font-family:var(--ds-font)}
   .ds-panel{max-height:calc(100vh - 20px)}
   .cam-settings-card{padding:14px}
   .cam-settings-body{grid-template-columns:1fr;gap:12px}
+  .cam-preview-col{order:-1}
   .cam-preview-wrap{min-height:160px;order:-1}
   .cam-slider-head{
     flex-direction:column;align-items:flex-start;gap:2px;
@@ -909,13 +939,12 @@ button{font-family:var(--ds-font)}
   #tp-hud{bottom:10px}
   #eco-hud{bottom:106px}
   #hud.third-person #eco-hud{bottom:106px}
-  #tilt-overlay .tilt-indicator{top:56px}
 }
 
 /* Планшет/малый ноутбук горизонтально: лента уходит правее левой колонки */
 @media (min-width: 681px) and (max-width: 900px) and (orientation: landscape) {
   #hud-feedzone{padding-left:260px}
-  #event-feed{margin-top:186px;max-height:36vh}
+  #event-feed{margin-top:0;max-height:none}
   #hint{display:none}
   #eco-toast{max-width:50vw}
   #tp-hud{bottom:12px}
@@ -927,7 +956,7 @@ button{font-family:var(--ds-font)}
 @media (orientation: landscape) and (max-height: 480px) {
   #hint,#bottom{display:none}
   #jump-live,#eco-toast{display:none!important}
-  #event-feed{margin-top:186px;max-height:calc(100vh - 270px)}
+  #event-feed{margin-top:0;max-height:none}
 }
 
 /* Короткий десктоп: подсказка внизу мешала бы тосту */

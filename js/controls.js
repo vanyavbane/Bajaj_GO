@@ -73,7 +73,6 @@ export function initControls() {
   const overlay = $('tilt-overlay');
   const zoneGas = $('tilt-zone-gas');
   const zoneBrake = $('tilt-zone-brake');
-  const indicatorDot = $('tilt-indicator-dot');
   const flashBtn = $('btn-flash-tilt');
   const controls = $('controls');
 
@@ -426,7 +425,7 @@ export function initControls() {
 
   function interactiveTarget(target) {
     if (!(target instanceof Element)) return false;
-    return !!target.closest('#btn-flash-tilt, #btn-pause, #btn-camera, #overlay, #controls, .ds-button, .ds-icon-button');
+    return !!target.closest('#btn-flash-tilt, #btn-camera-tilt, #btn-pause, #btn-camera, #overlay, #controls, .ds-button, .ds-icon-button');
   }
 
   function releasePointer(e) {
@@ -486,13 +485,6 @@ export function initControls() {
     if (zone.classList.contains('active') !== active) zone.classList.toggle('active', active);
   }
 
-  function updateIndicator() {
-    const steer = G.tiltSmoothed;
-    indicatorDot.style.left = `${(50 + steer * 50).toFixed(1)}%`;
-    const abs = Math.abs(steer);
-    indicatorDot.style.background = abs > 0.5 ? '#e15b55' : (abs > 0.15 ? '#ffd166' : '#ffffff');
-  }
-
   function updateTilt(now) {
     syncControlUi();
     if (G.controlMode !== 'tilt') {
@@ -521,7 +513,6 @@ export function initControls() {
       if (now - G.tiltStartedAt > SENSOR_TIMEOUT) {
         fallbackToButtons('Датчики не отвечают. Переключено на кнопки.');
       }
-      updateIndicator();
       return;
     }
 
@@ -551,7 +542,6 @@ export function initControls() {
 
     updateZone(zoneGas, !!G.keys.gas);
     updateZone(zoneBrake, !!G.keys.brake);
-    updateIndicator();
   }
 
   G.tiltHandler = null;

@@ -17,12 +17,12 @@ export function initCamera() {
   G.runIntro = 0;
 
   // Профили камеры от первого лица: отдельно для каждого мотоцикла.
-  // { ns125: { fov: 75, height: 0 }, ... }
+  // { ns125: { fov: 100, height: 0.35 }, ... }
   const CAM_PROFILE_KEY = 'bajajGO_camprofiles';
-  const CAM_FOV_DEFAULT = 75;
+  const CAM_FOV_DEFAULT = 100;
   const CAM_FOV_MIN = 60;
-  const CAM_FOV_MAX = 110;
-  const CAM_HEIGHT_DEFAULT = 0;
+  const CAM_FOV_MAX = 160;
+  const CAM_HEIGHT_DEFAULT = 0.35;
   const CAM_HEIGHT_MIN = -1.5;
   const CAM_HEIGHT_MAX = 1.5;
   let camProfiles = {};
@@ -32,20 +32,13 @@ export function initCamera() {
     camProfiles = {};
   }
 
-  // Заводские дефолты для отдельных моделей (не сохраняются в localStorage):
-  // у Avenger посадка ниже и обзор шире, у остальных — стандартные 75 / 0.
-  const CAM_PROFILE_DEFAULTS = {
-    avenger220: { fov: 78, height: 0.15 }
-  };
-
   function getCamProfile(bikeId = G.selectedBikeId) {
     const p = camProfiles[bikeId] || {};
-    const fallback = CAM_PROFILE_DEFAULTS[bikeId] || { fov: CAM_FOV_DEFAULT, height: CAM_HEIGHT_DEFAULT };
     const fov = Number(p.fov);
     const height = Number(p.height);
     return {
-      fov: clamp(Number.isFinite(fov) ? fov : fallback.fov, CAM_FOV_MIN, CAM_FOV_MAX),
-      height: clamp(Number.isFinite(height) ? height : fallback.height, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
+      fov: clamp(Number.isFinite(fov) ? fov : CAM_FOV_DEFAULT, CAM_FOV_MIN, CAM_FOV_MAX),
+      height: clamp(Number.isFinite(height) ? height : CAM_HEIGHT_DEFAULT, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
     };
   }
   G.getCamProfile = getCamProfile;
@@ -687,7 +680,7 @@ export function initCamera() {
             ${button({ id: 'cam-reset', icon: '↺', label: 'СБРОСИТЬ ПО УМОЛЧАНИЮ' })}
             ${button({ id: 'cam-back', label: '← НАЗАД' })}
           </div>
-          <div class="cam-settings-col">
+          <div class="cam-settings-col cam-preview-col">
             <div class="cam-preview-wrap">
               <div class="cam-preview-tag">LIVE · КОКПИТ</div>
               <div id="cam-preview"></div>
