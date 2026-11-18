@@ -19,6 +19,30 @@ export interface CourseVector {
 
 export const STRAIGHT: CourseVector = { id: 'straight', yaw: 0 };
 export const EXIT_RIGHT: CourseVector = { id: 'exit', yaw: BRANCH_YAW };
+export const EXIT_LEFT: CourseVector = { id: 'exit-left', yaw: -BRANCH_YAW };
+
+/** Развилка: нулевой вектор — прямая, остальные — ответвления в порядке выбора. */
+export interface ForkCourse {
+  id: string;
+  vectors: readonly CourseVector[];
+}
+
+/** То, что сейчас стоит в игре: прямо или съезд вправо. */
+export const RIGHT_FORK: ForkCourse = {
+  id: 'right-fork',
+  vectors: [STRAIGHT, EXIT_RIGHT],
+};
+
+/** Выбор игрока. 0 и меньше — прямая, 1 — первое ответвление, 2 — следующее. */
+export function courseVector(course: ForkCourse, pick: number): CourseVector {
+  const index = Number.isFinite(pick) && pick > 0 ? Math.floor(pick) : 0;
+  return course.vectors[index] ?? course.vectors[0] ?? STRAIGHT;
+}
+
+/** Ответвления курса, без прямой. */
+export function branchVectors(course: ForkCourse): readonly CourseVector[] {
+  return course.vectors.filter((vector) => vector.yaw !== 0);
+}
 
 /** Один включённый вектор на маршруте. */
 export interface VectorSpawn {
@@ -37,6 +61,7 @@ export interface SplineSample {
 
 /** Кромки, которые нужны, чтобы понять, лежит ли точка на ленте съезда. */
 export interface RibbonEdges {
+  leftOuter: number;
   leftInner: number;
   rightInner: number;
   rightOuter: number;
@@ -50,8 +75,8 @@ export interface EmbedQuery {
   edges: RibbonEdges;
   /** Векторы, которые к этой метке уже стали дорогой. По nose по возрастанию. */
   owned: readonly VectorSpawn[];
-  /** Лента съезда этой зоны. null — нос ещё впереди. */
-  exit: VectorSpawn | null;
+  /** Открытые ответвления этой зоны. Пусто, если нос ещё впереди. */
+  branches: readonly VectorSpawn[];
   origin: number;
   turn: number;
   /** Этот съезд уже стал дорогой. */
@@ -66,6 +91,19 @@ interface PathRecord {
 }
 
 const STEP = 2;
+
+/** Лента справа берёт вектор с положительным углом, слева — с отрицательным. */
+function pickBranch(branches: readonly VectorSpawn[], edges: RibbonEdges, lat: number): VectorSpawn | null {
+  const rightWidth = edges.rightOuter - edges.rightInner;
+  if (rightWidth > 0.8 && lat >= edges.rightInner - 0.2) {
+    return branches.find((item) => item.yaw > 0) ?? null;
+  }
+  const leftWidth = edges.leftInner - edges.leftOuter;
+  if (leftWidth > 0.8 && lat <= edges.leftOuter + 0.2) {
+    return branches.find((item) => item.yaw < 0) ?? null;
+  }
+  return null;
+}
 
 function splineFrame(sample: SplineSample, s: number): PathFrame {
   return frameFromSpline(sample.x, sample.dx, s);
@@ -145,7 +183,8 @@ export function createVectorField() {
   }
 
   function embed(query: EmbedQuery, spline: (s: number) => SplineSample): RoadEmbed {
-    const { s, lat, y, nose, edges, owned, exit, origin, turn, ownedHere } = query;
+    const { s, lat, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
+    const exit = pickBranch(branches, edges, lat);
     const exitFrame = exit && s > exit.nose
       ? pathFrom(exit, s, turn, (u) => frame(owned, u, spline, turn, exit.nose))
       : null;

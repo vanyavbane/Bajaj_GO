@@ -1,6 +1,6 @@
 import { BRANCH_YAW } from './branch.ts';
-import { EXIT_RIGHT, STRAIGHT, createVectorField } from './vectors.ts';
-import type { VectorSpawn } from './vectors.ts';
+import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseVector, createVectorField } from './vectors.ts';
+import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -23,5 +23,8 @@ const later = field.frame([right, second], 500, straight, 110);
 assert(later.fx > at.fx + 0.15, 'второй вектор поворачивает дальше первого');
 assert(later.x > at.x, 'цепочка векторов не возвращается на старый сплайн');
 assert(STRAIGHT.yaw === 0 && EXIT_RIGHT.id === 'exit', 'каталог различает прямую и съезд');
+assert(courseVector(RIGHT_FORK, 0).id === 'straight' && courseVector(RIGHT_FORK, 1).yaw === BRANCH_YAW, 'выбор 0 — прямая, выбор 1 — правый съезд');
+const three: ForkCourse = { id: 'three', vectors: [STRAIGHT, EXIT_RIGHT, EXIT_LEFT] };
+assert(courseVector(three, 2).id === 'exit-left' && branchVectors(three).length === 2, 'третий слот курса — отдельный левый вектор');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('vectors ok');

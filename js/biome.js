@@ -4,7 +4,7 @@ import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
 import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
-import { EXIT_RIGHT, createVectorField } from './engine/vectors.js';
+import { RIGHT_FORK, courseVector, createVectorField } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -491,32 +491,43 @@ function zoneIndexAt(s) {
   return Math.floor(Math.max(0, offset + s) / ZONE_M);
 }
 
-/** Спавн вектора зоны. Угол берётся из каталога, не из расчёта биома. */
-function vectorSpawn(zone) {
+/** Спавн одного вектора курса. Прямая с нулевым углом путь не ответвляет. */
+function vectorSpawn(zone, vector) {
   const nose = noseOfZone(zone);
   return {
-    key: `${zone}:${EXIT_RIGHT.id}`,
+    key: `${zone}:${vector.id}`,
     nose,
-    yaw: EXIT_RIGHT.yaw,
+    yaw: vector.yaw,
     ownsFrom: nose + EXIT_CHOICE + EXIT_END,
   };
+}
+
+function chosenCourse(zone) {
+  return courseVector(RIGHT_FORK, chosenExit[zone] === 1 ? 1 : 0);
 }
 
 function ownedSpawns(s) {
   const zone = zoneIndexAt(s);
   const list = [];
   for (let z = 0; z <= zone; z++) {
-    if (chosenExit[z] !== 1) continue;
-    const spawn = vectorSpawn(z);
+    const vector = chosenCourse(z);
+    if (vector.yaw === 0) continue;
+    const spawn = vectorSpawn(z, vector);
     if (s >= spawn.ownsFrom - 0.01) list.push(spawn);
   }
   return list;
 }
 
-function exitSpawn(s) {
+function branchSpawns(s) {
   const nose = splitCenterS(s);
-  if (!(s > nose)) return null;
-  return vectorSpawn(zoneIndexAt(s));
+  if (!(s > nose)) return [];
+  const zone = zoneIndexAt(s);
+  const list = [];
+  for (const vector of RIGHT_FORK.vectors) {
+    if (vector.yaw === 0) continue;
+    list.push(vectorSpawn(zone, vector));
+  }
+  return list;
 }
 
 function embedRoad(s, lat) {
@@ -529,10 +540,10 @@ function embedRoad(s, lat) {
     nose,
     edges: roadEdgesAt(s),
     owned: ownedSpawns(s),
-    exit: exitSpawn(s),
+    branches: branchSpawns(s),
     origin: frameAt(s).origin,
     turn: EXIT_DIVERGE,
-    ownedHere: chosenExit[zone] === 1 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01,
+    ownedHere: chosenCourse(zone).yaw !== 0 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01,
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u) }));
 }
 
