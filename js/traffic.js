@@ -1,5 +1,5 @@
 import { exitLaneWorld } from './engine/fork.js';
-import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
+import { carriageLanes, clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -227,8 +227,10 @@ export function initTraffic() {
       // Скорость и направление — полоса биома в точке машины.
       // settle мог перенести её вперёд, поэтому конфиг читаем ещё раз.
       let road = lanesAt(car.s);
+      if (car.onExit) road = carriageLanes(road, 'one-way');
       settleCarLane(car, road);
       road = lanesAt(car.s);
+      if (car.onExit) road = carriageLanes(road, 'one-way');
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
         : road.speeds[clampLaneIndex(car.laneIdx, road.count)];

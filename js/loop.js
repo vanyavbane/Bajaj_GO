@@ -142,9 +142,12 @@ export function initLoop() {
     const effectiveMaxSpeed = (G.limpMode && G.fuelM <= 0)
       ? Math.min(effStats.maxSpeed, G.LIMP_MAX_SPEED)
       : effStats.maxSpeed;
+    const stickDrive = G.controlMode === 'stick';
+    const gasOn = G.keys.gas || (stickDrive && G.stickGas);
+    const brakeOn = G.keys.brake || (stickDrive && G.stickBrake);
     const stepped = stepSpeed(G.speed, dt, {
-      gas: G.keys.gas,
-      brake: G.keys.brake,
+      gas: gasOn,
+      brake: brakeOn,
       maxSpeed: effectiveMaxSpeed,
       accel: effStats.accel,
       brakeDecel: effStats.brakeDecel * (1 - 0.15 * (G.weather ? G.weather.wet : 0)),
@@ -152,9 +155,9 @@ export function initLoop() {
     });
     G.speed = stepped.speed;
 
-    G.tailLightBrakeMat.emissiveIntensity = G.keys.brake ? 3.4 : 1.1;
+    G.tailLightBrakeMat.emissiveIntensity = brakeOn ? 3.4 : 1.1;
     for (const fl of G.yuraFlames) {
-      fl.visible = effStats.isYura && G.keys.gas && G.speed > 40 && (Math.floor(now / 60) % 2 === 0);
+      fl.visible = effStats.isYura && gasOn && G.speed > 40 && (Math.floor(now / 60) % 2 === 0);
       fl.scale.z = 0.7 + Math.random() * 0.9;
     }
 
@@ -178,7 +181,9 @@ export function initLoop() {
       right: G.keys.right,
       // Наклон передаётся аналогом: чем сильнее крен, тем сильнее поворот.
       // Свайп по экрану по-прежнему работает дискретными keys.
-      steer: G.controlMode === 'tilt' && !G.swipeActive ? G.tiltSmoothed : undefined,
+      steer: G.controlMode === 'tilt' && !G.swipeActive
+        ? G.tiltSmoothed
+        : (G.controlMode === 'stick' && G.stickHeld ? G.stickSteer : undefined),
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,

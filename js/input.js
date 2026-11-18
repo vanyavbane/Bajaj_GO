@@ -107,6 +107,62 @@ export function initInput() {
     G.toggleCameraMode();
   });
 
+  const stick = $('stick');
+  const stickBase = $('stick-base');
+  const stickKnob = $('stick-knob');
+  G.stickSteer = 0;
+  G.stickGas = false;
+  G.stickBrake = false;
+  G.stickHeld = false;
+  let stickPointer = null;
+  const stickRadius = 46;
+  function placeKnob(x, y) {
+    if (!(stickKnob instanceof HTMLElement)) return;
+    stickKnob.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  function releaseStick() {
+    stickPointer = null;
+    G.stickSteer = 0;
+    G.stickGas = false;
+    G.stickBrake = false;
+    G.stickHeld = false;
+    placeKnob(0, 0);
+  }
+  function applyStick(e) {
+    const rect = stickBase.getBoundingClientRect();
+    const dx = e.clientX - (rect.left + rect.width * 0.5);
+    const dy = e.clientY - (rect.top + rect.height * 0.5);
+    const mag = Math.hypot(dx, dy) || 1;
+    const scale = Math.min(1, stickRadius / mag);
+    const kx = dx * scale;
+    const ky = dy * scale;
+    placeKnob(kx, ky);
+    const nx = kx / stickRadius;
+    const ny = ky / stickRadius;
+    G.stickSteer = Math.abs(nx) < 0.12 ? 0 : Math.max(-1, Math.min(1, nx));
+    G.stickGas = ny < -0.42;
+    G.stickBrake = ny > 0.42;
+  }
+  G.releaseStick = releaseStick;
+  if (stickBase instanceof HTMLElement) {
+    stickBase.addEventListener('pointerdown', e => {
+      if (G.controlMode !== 'stick') return;
+      if (!G.started || G.ended || G.paused || G.uiModal) return;
+      e.preventDefault();
+      stickPointer = e.pointerId;
+      G.stickHeld = true;
+      try { stickBase.setPointerCapture(e.pointerId); } catch (err) { /* жест уже закончился */ }
+      applyStick(e);
+    });
+    stickBase.addEventListener('pointermove', e => {
+      if (e.pointerId !== stickPointer) return;
+      applyStick(e);
+    });
+    const endStick = e => { if (e.pointerId === stickPointer) releaseStick(); };
+    stickBase.addEventListener('pointerup', endStick);
+    stickBase.addEventListener('pointercancel', endStick);
+  }
+
   const view = $('view');
   let swipeId = null;
   let swipeX = 0;
@@ -121,6 +177,7 @@ export function initInput() {
     G.swipeActive = false;
   }
   view.addEventListener('pointerdown', e => {
+    if (G.controlMode === 'stick') return;
     if (!G.started || G.ended || G.paused || G.uiModal) return;
     if (e.target instanceof Element && e.target.closest('#controls, #btn-pause')) return;
     swipeId = e.pointerId;

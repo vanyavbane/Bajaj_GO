@@ -7,6 +7,7 @@
 
 import { BRANCH_YAW, frameFromSpline, stepBranch } from './branch.ts';
 import type { PathFrame, RoadEmbed } from './branch.ts';
+import type { RoadWay } from './lanes.ts';
 
 export type { PathFrame, RoadEmbed };
 export { BRANCH_YAW };
@@ -15,11 +16,13 @@ export { BRANCH_YAW };
 export interface CourseVector {
   id: string;
   yaw: number;
+  /** inherit — дорога биома. one-way — съезд, пока он не влился в двустороннюю. */
+  way: RoadWay | 'inherit';
 }
 
-export const STRAIGHT: CourseVector = { id: 'straight', yaw: 0 };
-export const EXIT_RIGHT: CourseVector = { id: 'exit', yaw: BRANCH_YAW };
-export const EXIT_LEFT: CourseVector = { id: 'exit-left', yaw: -BRANCH_YAW };
+export const STRAIGHT: CourseVector = { id: 'straight', yaw: 0, way: 'inherit' };
+export const EXIT_RIGHT: CourseVector = { id: 'exit', yaw: BRANCH_YAW, way: 'one-way' };
+export const EXIT_LEFT: CourseVector = { id: 'exit-left', yaw: -BRANCH_YAW, way: 'one-way' };
 
 /** Развилка: нулевой вектор — прямая, остальные — ответвления в порядке выбора. */
 export interface ForkCourse {
@@ -108,6 +111,28 @@ export function openCourse(course: ForkCourse, s: number, layout: CourseLayout):
 /** Взятый ненулевой вектор этой зоны уже стал дорогой. */
 export function courseOwns(course: ForkCourse, pick: number, s: number, nose: number, ownAfter: number): boolean {
   return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter - 0.01;
+}
+
+/**
+ * Какая проезжая часть в точке.
+ * Лента съезда односторонняя. После того как она стала дорогой, она остаётся
+ * односторонней до конца зоны и там вливается в двустороннюю дорогу биома.
+ */
+export function carriageWay(args: {
+  course: ForkCourse;
+  pick: number;
+  s: number;
+  nose: number;
+  ownAfter: number;
+  zoneEnd: number;
+  onRamp: boolean;
+}): RoadWay {
+  if (args.onRamp) return 'one-way';
+  const vector = courseVector(args.course, args.pick);
+  if (vector.way === 'one-way' && args.s >= args.nose + args.ownAfter && args.s < args.zoneEnd) {
+    return 'one-way';
+  }
+  return 'two-way';
 }
 
 /** Один включённый вектор на маршруте. */

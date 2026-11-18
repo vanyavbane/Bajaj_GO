@@ -413,8 +413,17 @@ export interface GameState {
   highBeamTimer: number;
   highBeamCooldown: number;
   keys: { left: boolean; right: boolean; gas: boolean; brake: boolean };
-  /** Режим управления: экранные кнопки (по умолчанию) или наклон устройства. */
-  controlMode: 'buttons' | 'tilt';
+  /** Режим управления: кнопки, джойстик или наклон устройства. */
+  controlMode: 'buttons' | 'stick' | 'tilt';
+  soundMuted: boolean;
+  setSoundMuted: (muted: boolean) => void;
+  /** −1…1, горизонталь джойстика. */
+  stickSteer: number;
+  /** Палец на стике. Пока его нет, рулят клавиши. */
+  stickHeld: boolean;
+  stickGas: boolean;
+  stickBrake: boolean;
+  releaseStick: () => void;
   tiltAvailable: boolean;
   tiltSensitivity: number;
   tiltInvert: boolean;
@@ -434,7 +443,7 @@ export interface GameState {
   startTilt: () => boolean;
   stopTilt: () => void;
   startTiltSession: () => void;
-  setControlMode: (mode: 'buttons' | 'tilt') => Promise<{ ok: boolean; message?: string }>;
+  setControlMode: (mode: 'buttons' | 'stick' | 'tilt') => Promise<{ ok: boolean; message?: string }>;
   requestTiltPermission: () => Promise<boolean>;
   probeTiltSensors: (timeout?: number) => Promise<boolean>;
   calibrateTilt: () => boolean;

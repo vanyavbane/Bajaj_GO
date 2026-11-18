@@ -33,10 +33,20 @@ export function initEffects() {
   }
   G.spawnOverflyParticles = spawnOverflyParticles;
 
+  G.soundMuted = localStorage.getItem('bajajGO_soundMuted') === '1';
+  G.setSoundMuted = (muted) => {
+    G.soundMuted = !!muted;
+    localStorage.setItem('bajajGO_soundMuted', G.soundMuted ? '1' : '0');
+    if (G.soundMuted && rainGain && audioCtx) {
+      rainGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+    }
+  };
+
   let audioCtx = null;
   // Тон звуков понижается вместе с замедлением мира (0.45…1.0).
   let slowMoPitch = 1;
   function playJumpSound(type = 'overfly', combo = 1) {
+    if (G.soundMuted) return;
     try {
       const ctx = ensureAudio();
       const osc = ctx.createOscillator();
@@ -70,6 +80,7 @@ export function initEffects() {
 
   // Короткий двухнотный отклик при въезде в маркерную зону съезда
   function playExitChime(isFood) {
+    if (G.soundMuted) return;
     try {
       const ctx = ensureAudio();
       const now = ctx.currentTime;
@@ -132,7 +143,7 @@ export function initEffects() {
   }
 
   function setRainSound(level) {
-    const lvl = Math.max(0, Math.min(0.2, level));
+    const lvl = G.soundMuted ? 0 : Math.max(0, Math.min(0.2, level));
     // Не создаём AudioContext до первого реального дождя.
     if (!rainSource && lvl < 0.001) return;
     try {
@@ -145,6 +156,7 @@ export function initEffects() {
   G.setRainSound = setRainSound;
 
   function playThunder() {
+    if (G.soundMuted) return;
     try {
       const ctx = ensureAudio();
       const now = ctx.currentTime;
@@ -190,6 +202,7 @@ export function initEffects() {
   }
 
   function playFeedSound(kind, level) {
+    if (G.soundMuted) return;
     try {
       ensureAudio();
       if (kind === 'overfly') {
@@ -356,6 +369,7 @@ export function initEffects() {
 
   // Низкий «вдох» при входе в замедление.
   function playSlowMoEnter() {
+    if (G.soundMuted) return;
     try {
       const ctx = ensureAudio();
       const now = ctx.currentTime;

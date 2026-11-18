@@ -12,6 +12,15 @@ export interface LaneSource {
   START_LANE?: number;
 }
 
+/** Односторонняя — только попутные. Двусторонняя — есть встречные. */
+export type RoadWay = 'one-way' | 'two-way';
+
+/** На односторонней встречная полоса становится попутной. Смещения полос те же. */
+export function carriageLanes<T extends { oncomingCount: number }>(lanes: T, way: RoadWay): T {
+  if (way !== 'one-way' || lanes.oncomingCount === 0) return lanes;
+  return { ...lanes, oncomingCount: 0 };
+}
+
 export interface LaneConfig {
   count: number;
   oncoming: number;

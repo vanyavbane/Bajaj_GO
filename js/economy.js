@@ -1239,7 +1239,7 @@ function exitLane(s, side) {
           ${inline('☀️ Лучи от солнца', button({ id: 'pause-gr', variant: 'compact', label: onOff(visual.godRays) }))}
           ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
           ${inline('Кокпит: FOV / высота', button({ id: 'pause-cam-settings', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
-          ${inline('Управление', button({ id: 'pause-controls', variant: 'compact', label: G.controlMode === 'tilt' ? 'Акселерометр' : 'Кнопки' }))}
+          ${inline('Управление', button({ id: 'pause-controls', variant: 'compact', label: G.controlMode === 'tilt' ? 'Акселерометр' : (G.controlMode === 'stick' ? 'Джойстик' : 'Кнопки') }))}
           ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
         ` : button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
         ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
@@ -1281,6 +1281,7 @@ function exitLane(s, side) {
     }
     G.paused = true;
     G.keys.gas = G.keys.brake = G.keys.left = G.keys.right = false;
+    if (G.releaseStick) G.releaseStick();
     if (G.syncControlUi) G.syncControlUi();
     renderPauseMenu(false);
   }

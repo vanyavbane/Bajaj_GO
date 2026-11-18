@@ -1,5 +1,5 @@
 import { BRANCH_YAW } from './branch.ts';
-import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
+import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, carriageWay, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -34,5 +34,11 @@ assert(ownedCourse(RIGHT_FORK, 1070 + 10, layout, () => 1).length === 0, 'до �
 assert(openCourse(RIGHT_FORK, 1070 + 20, layout).length === 1, 'после носа открыто ответвление курса');
 assert(openCourse(RIGHT_FORK, 1070 - 5, layout).length === 0, 'до носа ответвлений нет');
 assert(courseOwns(RIGHT_FORK, 1, 1400, 1070, 330) && !courseOwns(RIGHT_FORK, 0, 1400, 1070, 330), 'прямой выбор дорогу не перехватывает');
+assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд односторонний, прямая наследует дорогу биома');
+const ramp = { course: RIGHT_FORK, pick: 0, s: 1200, nose: 1070, ownAfter: 330, zoneEnd: 1500, onRamp: true };
+assert(carriageWay(ramp) === 'one-way', 'лента съезда односторонняя ещё до выбора');
+assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: 1450 }) === 'one-way', 'после поворота съезд ещё односторонний');
+assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: 1500 }) === 'two-way', 'на границе зоны съезд вливается в двустороннюю дорогу');
+assert(carriageWay({ ...ramp, onRamp: false, pick: 0 }) === 'two-way', 'прямой ход остаётся двусторонним');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('vectors ok');

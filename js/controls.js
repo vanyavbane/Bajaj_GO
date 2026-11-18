@@ -83,6 +83,10 @@ export function initControls() {
 
   /* ---------- Состояние и загрузка настроек ---------- */
   G.controlMode = 'buttons';
+  G.stickSteer = 0;
+  G.stickGas = false;
+  G.stickBrake = false;
+  G.stickHeld = false;
   G.tiltSensitivity = 1;
   G.tiltInvert = false;
   G.tiltCalibration = { beta: 0, gamma: 0, calibratedAt: 0, axis: '', angle: 0 };
@@ -116,6 +120,10 @@ export function initControls() {
   if (storedMode === 'tilt') {
     if (G.tiltAvailable) G.controlMode = 'tilt';
     else writeStorage(MODE_KEY, 'buttons');
+  } else if (storedMode === 'stick') {
+    G.controlMode = 'stick';
+  } else if (!storedMode && touchCapable) {
+    G.controlMode = 'stick';
   }
 
   const storedSensitivity = Number(readStorage(SENSITIVITY_KEY));
@@ -330,15 +338,21 @@ export function initControls() {
   }
 
   /* ---------- Видимость оверлея и кнопок ---------- */
+  const stick = $('stick');
   function syncControlUi() {
     const inRun = !!(G.started && !G.ended && !G.paused && !G.uiModal);
     const tiltVisible = G.controlMode === 'tilt' && inRun;
+    const stickVisible = G.controlMode === 'stick' && inRun;
     if (overlay.hidden !== !tiltVisible) overlay.hidden = !tiltVisible;
+    if (stick instanceof HTMLElement) stick.hidden = !stickVisible;
+    controls.classList.toggle('stick-mode', G.controlMode === 'stick');
+    if (!stickVisible && G.releaseStick) G.releaseStick();
     if (G.controlMode === 'tilt') {
       if (!controls.hidden) controls.hidden = true;
       flashBtn.hidden = !tiltVisible;
     } else {
       flashBtn.hidden = true;
+      if (inRun) controls.hidden = false;
     }
     if (tiltVisible) {
       if (lastOverlayVisible !== true) resetTiltHints();
@@ -361,16 +375,20 @@ export function initControls() {
     }
   }
 
+  function leaveTilt(next) {
+    G.controlMode = next;
+    persistMode();
+    stopTilt();
+    clearTiltKeys();
+    if (G.releaseStick) G.releaseStick();
+    G.controlModeNotice = '';
+    syncControlUi();
+    return { ok: true };
+  }
+
   async function setControlMode(mode) {
-    if (mode !== 'tilt') {
-      G.controlMode = 'buttons';
-      persistMode();
-      stopTilt();
-      clearTiltKeys();
-      G.controlModeNotice = '';
-      syncControlUi();
-      return { ok: true };
-    }
+    if (mode === 'stick') return leaveTilt('stick');
+    if (mode !== 'tilt') return leaveTilt('buttons');
 
     if (!G.tiltAvailable) {
       return { ok: false, message: 'Акселерометр недоступен на этом устройстве. Используйте кнопки.' };
@@ -381,6 +399,7 @@ export function initControls() {
       return { ok: false, message: 'Доступ к датчикам отклонён. Остаёмся на кнопках.' };
     }
 
+    if (G.releaseStick) G.releaseStick();
     G.controlMode = 'tilt';
     G.controlModeNotice = '';
     persistMode();

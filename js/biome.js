@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
-import { laneDashOffsets } from './engine/lanes.js';
+import { carriageLanes, laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
 import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
-import { RIGHT_FORK, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt } from './engine/vectors.js';
+import { RIGHT_FORK, carriageWay, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -512,6 +512,21 @@ function embedRoad(s, lat) {
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u) }));
 }
 
+/** Односторонний съезд или двусторонняя дорога биома. */
+function roadWayAt(s, onRamp = false) {
+  const layout = courseLayout();
+  const nose = splitCenterS(s);
+  return carriageWay({
+    course: RIGHT_FORK,
+    pick: coursePick(zoneAt(s, layout)),
+    s,
+    nose,
+    ownAfter: layout.ownAfter,
+    zoneEnd: nose + layout.lead,
+    onRamp,
+  });
+}
+
 function roadCurvature(s) {
   const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
   const pose = embedRoad(s, lat);
@@ -563,8 +578,11 @@ function laneMarksAtS(s) {
     }
     list.push({ lat, w });
   };
-  for (const lat of laneDashOffsets(ca.offsets, ca.oncomingCount)) add(lat, 1 - r.t);
-  for (const lat of laneDashOffsets(cb.offsets, cb.oncomingCount)) add(lat, r.t);
+  const way = roadWayAt(s);
+  const aCount = way === 'one-way' ? 0 : ca.oncomingCount;
+  const bCount = way === 'one-way' ? 0 : cb.oncomingCount;
+  for (const lat of laneDashOffsets(ca.offsets, aCount)) add(lat, 1 - r.t);
+  for (const lat of laneDashOffsets(cb.offsets, bCount)) add(lat, r.t);
   for (const m of list) if (m.w > 1) m.w = 1;
   return list;
 }
@@ -1233,14 +1251,15 @@ let lastSplitZone = -1;
 let lastSplitSide = -1;
 
 function applyLaneConfig(dominant, playerS) {
+  const base = LANE_CONFIG[dominant];
+  const cfg = carriageLanes(base, roadWayAt(playerS));
+  G.laneCount = cfg.count;
+  G.oncomingCount = cfg.oncomingCount;
+  G.LANE_OFFSETS = cfg.offsets.slice();
+  G.LANE_SPEEDS = cfg.speeds.slice();
+  G.ROAD_WIDTH = base.width;
+  G.START_LANE = cfg.startLane;
   if (dominant !== lastLaneBiome) {
-    const cfg = LANE_CONFIG[dominant];
-    G.laneCount = cfg.count;
-    G.oncomingCount = cfg.oncomingCount;
-    G.LANE_OFFSETS = cfg.offsets.slice();
-    G.LANE_SPEEDS = cfg.speeds.slice();
-    G.ROAD_WIDTH = cfg.width;
-    G.START_LANE = cfg.startLane;
     lastLaneBiome = dominant;
     // Полос стало меньше (4 → 2) или смещения другого масштаба (МКАД):
     // плавно уводим байк на валидную полосу нового биома.
@@ -1264,7 +1283,7 @@ function updateScenery() {
 /** Полосы биома, которым нарисована дорога в точке s. Без s — под байком. */
 function lanesAtS(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
-  return LANE_CONFIG[biomeIndex(roadBiomeAtS(at))];
+  return carriageLanes(LANE_CONFIG[biomeIndex(roadBiomeAtS(at))], roadWayAt(at));
 }
 
 /** Случайная попутная полоса биома в точке s. */

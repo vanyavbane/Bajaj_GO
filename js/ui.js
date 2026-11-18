@@ -136,7 +136,7 @@ export function initUi() {
         ${note('Вид от третьего лица фиксированный. Профиль камеры хранится отдельно для каждого мотоцикла.')}
       `;
     } else if (tab === 'controls') {
-      const mode = G.controlMode === 'tilt' ? 'tilt' : 'buttons';
+      const mode = G.controlMode === 'tilt' ? 'tilt' : (G.controlMode === 'stick' ? 'stick' : 'buttons');
       const tiltAvailable = !!G.tiltAvailable;
       const noticeText = controlsNotice || G.controlModeNotice || '';
       const infoText = controlsInfo;
@@ -153,6 +153,13 @@ export function initUi() {
         <div class="ctrl-mode-block">
           <div class="ctrl-mode-title">СПОСОБ УПРАВЛЕНИЯ</div>
           <div class="ctrl-mode-options">
+            <button type="button" class="ctrl-mode-card ${mode === 'stick' ? 'on' : ''}" data-ctrl-mode="stick">
+              <div class="ctrl-mode-preview">
+                <div class="ctrl-preview-buttons"><span>◉</span><span>▲</span><span>▼</span></div>
+              </div>
+              <div class="ctrl-mode-label">Джойстик</div>
+              <div class="ctrl-mode-desc">Стик справа вместо кнопок: влево и вправо — руль, вверх — газ, вниз — тормоз. Клавиатура работает вместе с ним.</div>
+            </button>
             <button type="button" class="ctrl-mode-card ${mode === 'buttons' ? 'on' : ''}" data-ctrl-mode="buttons">
               <div class="ctrl-mode-preview">
                 <div class="ctrl-preview-buttons"><span>←</span><span>▼</span><span>▲</span><span>→</span></div>
@@ -193,9 +200,17 @@ export function initUi() {
         ` : ''}
       `;
     } else {
+      const muted = !!G.soundMuted;
       body = `
-        ${note('Раздел «Звук» пока пуст и появится позже.')}
-        ${note('Сейчас доступны графика, качество освещения, вид камеры и управление.')}
+        ${inline('Звук', button({
+          id: 'sound-mute',
+          variant: 'compact',
+          label: muted ? 'Выключен' : 'Включён',
+          pressed: !muted
+        }))}
+        ${note(muted
+          ? 'Беззвучный режим: прыжки, съезды, дождь, гром и очки не звучат.'
+          : 'Игровые звуки включены. Беззвучный режим выключает их все сразу.')}
       `;
     }
 
@@ -298,8 +313,8 @@ export function initUi() {
         const next = btn.dataset.ctrlMode;
         if (next === G.controlMode) return;
 
-        if (next === 'buttons') {
-          await G.setControlMode('buttons');
+        if (next === 'buttons' || next === 'stick') {
+          await G.setControlMode(next);
           renderSettings('controls', from);
           return;
         }
@@ -332,6 +347,14 @@ export function initUi() {
         }
       });
     });
+
+    const soundMute = document.getElementById('sound-mute');
+    if (soundMute) {
+      soundMute.addEventListener('click', () => {
+        if (G.setSoundMuted) G.setSoundMuted(!G.soundMuted);
+        renderSettings('sound', from);
+      });
+    }
 
     const tiltRange = /** @type {HTMLInputElement} */ (document.getElementById('tilt-sens-range'));
     if (tiltRange) {
