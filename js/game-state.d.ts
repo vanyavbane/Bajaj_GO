@@ -305,7 +305,8 @@ export interface GameState {
   biomeRoadDDY: (s: number) => number;
   nominalRoadWidth: number;
   forkSpreadAtS: (s: number) => number;
-  forkCenterShiftAtS: (s: number) => number;
+  /** Мировой центр дороги. После взятого съезда это его линия, не ось маршрута. */
+  roadOriginAt: (s: number) => number;
   /** Полоса байка или камеры в метрах от оси, уже со съездом. */
   riderLatAt: (s: number, laneOffset?: number) => number;
   /** Справа на этом метре стоит съезд: дома и деревья туда не ставятся. */
@@ -346,7 +347,6 @@ export interface GameState {
   laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
   laneDisplayScaleAtS: (s: number) => number;
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
-  splitLateralShiftAtS: (s: number, lateralOffset: number) => number;
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
   biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;

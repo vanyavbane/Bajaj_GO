@@ -1,9 +1,10 @@
 /**
- * Съезд справа от прямой дороги. Основная лента не сдвигается с оси:
- * не заехал на съезд — едешь вперёд по той же дороге.
+ * Дорога и съезд вправо.
+ * Кромки считаются относительно центра дороги. Взятый съезд переносит этот
+ * центр на свою линию и больше не возвращает его на ось маршрута.
+ * Прямой ход центр не двигает: съезд заканчивается сбоку.
  *
- * ChosenSide здесь про съезд, не про две равноправные ветки:
- * -1 съезд закрывается, +1 съезд оставлен, 0 решение ещё не принято.
+ * ChosenSide: -1 съезд закрыт, +1 съезд стал дорогой, 0 выбор ещё открыт.
  */
 
 /** -1 съезд не взят, +1 взят, 0 пока развилка открыта. */
@@ -111,29 +112,6 @@ export function forkClose(meters: number, zoneLength: number, lead = FORK_LEAD):
   return 0;
 }
 
-/** 0 на границе зоны, 1 когда прошлое решение уже отпустило ось. */
-export function forkHandoff(local: number, fadeLength: number): number {
-  const span = fadeLength > 0 ? fadeLength : 1;
-  const u = Math.max(0, Math.min(1, local / span));
-  return u * u * (3 - 2 * u);
-}
-
-/** Ось маршрута не переезжает. Съезд — отдельная лента, прямая дорога остаётся на месте. */
-export function forkCenterShift(
-  meters: number,
-  zoneLength: number,
-  side: ChosenSide,
-  lead = FORK_LEAD,
-  peak = FORK_SPREAD,
-): number {
-  void meters;
-  void zoneLength;
-  void side;
-  void lead;
-  void peak;
-  return 0;
-}
-
 /**
  * Насколько съезд уже отошёл, метры.
  * От носа растёт до пика, держится всю ветку и сходит только в запасе
@@ -194,35 +172,83 @@ function pinchSpan(from: number, to: number, keep: number): [number, number] {
   return [mid + (from - mid) * keep, mid + (to - mid) * keep];
 }
 
+/** Центр дороги после взятого съезда. Это смещение больше не возвращается на ноль. */
+export function exitCarryOrigin(roadHalf: number, base = 0): number {
+  const half = Math.max(0, Number.isFinite(roadHalf) ? roadHalf : 0);
+  const from = Number.isFinite(base) ? base : 0;
+  return from + half + FORK_SPREAD;
+}
+
 /**
- * Кромки с учётом фазы и выбора.
+ * Кромки в локальных метрах дороги.
  * Невыбранная ветка сходится в свою точку и пропадает.
- * Взятый съезд после этого переезжает на ось и становится дорогой следующего биома,
- * прямая ветка при этом уже нулевой ширины и не появляется обратно.
+ * Взятый съезд не уезжает обратно на ось: после развилки это уже сама дорога,
+ * а её мировой центр хранит вызывающий (`exitCarryOrigin`).
  */
 export function exitEdges(half: number, phase: ExitPhase, chosen: ChosenSide): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
-  if (phase.kind === 'none') return branchEdges(road, 0);
+  if (phase.kind === 'none' || phase.kind === 'settle') return branchEdges(road, 0);
   if (phase.kind === 'diverge' || phase.kind === 'run') return branchEdges(road, phase.spread);
-  if (phase.kind === 'end') {
-    const edge = branchEdges(road, phase.spread);
-    if (chosen === 0) return edge;
-    const keep = 1 - Math.max(0, Math.min(1, phase.t));
-    if (chosen === -1) {
-      [edge.rightInner, edge.rightOuter] = pinchSpan(edge.rightInner, edge.rightOuter, keep);
-    } else {
-      [edge.leftOuter, edge.leftInner] = pinchSpan(edge.leftOuter, edge.leftInner, keep);
-    }
-    return edge;
+  const edge = branchEdges(road, phase.spread);
+  if (chosen === 0) return edge;
+  const keep = 1 - Math.max(0, Math.min(1, phase.t));
+  if (chosen === -1) {
+    [edge.rightInner, edge.rightOuter] = pinchSpan(edge.rightInner, edge.rightOuter, keep);
+  } else {
+    [edge.leftOuter, edge.leftInner] = pinchSpan(edge.leftOuter, edge.leftInner, keep);
   }
-  if (chosen !== 1) return branchEdges(road, 0);
-  const center = (road + phase.spread) * (1 - Math.max(0, Math.min(1, phase.t)));
+  return edge;
+}
+
+/** Один кадр дороги: локальные кромки, мировой центр и те же кромки в мире. */
+export interface RoadFrame {
+  origin: number;
+  local: AsphaltEdges;
+  world: AsphaltEdges;
+  phase: ExitPhase;
+  chosen: ChosenSide;
+}
+
+export interface RoadQuery {
+  forkDistance: number;
+  half: number;
+  chosen: ChosenSide;
+  baseOrigin: number;
+  carriedOrigin: number | null;
+  endWeight?: number;
+}
+
+function translateEdges(edges: AsphaltEdges, origin: number): AsphaltEdges {
+  if (!origin) return edges;
   return {
-    leftOuter: 0,
-    leftInner: 0,
-    rightInner: center - road,
-    rightOuter: center + road,
+    leftOuter: edges.leftOuter + origin,
+    leftInner: edges.leftInner + origin,
+    rightInner: edges.rightInner + origin,
+    rightOuter: edges.rightOuter + origin,
   };
+}
+
+/** Единственная сборка дороги в точке. Фаза, выбор и уже увезённый центр приходят снаружи. */
+export function sampleRoad(query: RoadQuery): RoadFrame {
+  const phase = exitPhase(query.forkDistance);
+  const chosen = query.chosen;
+  const weighted: ExitPhase = phase.kind === 'end' && chosen !== 0
+    ? { ...phase, t: phase.t * (query.endWeight ?? 1) }
+    : phase;
+  const stored = query.carriedOrigin;
+  const carried = chosen === 1
+    && stored != null
+    && (weighted.kind === 'settle' || weighted.kind === 'none');
+  const origin = carried && stored != null ? stored : query.baseOrigin;
+  const local = exitEdges(query.half, weighted, chosen);
+  return { origin, local, world: translateEdges(local, origin), phase: weighted, chosen };
+}
+
+/** Полоса в мировых метрах. На боковой ленте riding true, иначе полоса относительно центра дороги. */
+export function laneMeters(lane: number, scale: number, half: number, frame: RoadFrame, riding: boolean): number {
+  const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
+  const logical = (Number.isFinite(lane) ? lane : 0) * span;
+  return frame.origin + roadLateral(logical, half, frame.local, riding);
 }
 
 export function exitGap(edges: AsphaltEdges): number {
@@ -261,14 +287,14 @@ export function worldEdge(edges: AsphaltEdges, side: -1 | 1): number {
   return Math.max(edges.leftInner, edges.rightOuter);
 }
 
-const ENTER_INSET = 1.15;
 const RELEASE_INSET = 2.6;
 const ATTACHED_GAP = 2.4;
 const RIDEABLE = 2.4;
 
-/** Съезд ещё приклеен к кромке и уже достаточно широк, байк стоит у правого края. */
+/** Съезд ещё приклеен, и байк уже стоит на его асфальте. Иначе захват перенёс бы его скачком. */
 export function canGrabExit(logical: number, edges: AsphaltEdges): boolean {
-  return exitGap(edges) < ATTACHED_GAP && exitWidth(edges) > RIDEABLE && logical >= edges.rightInner - ENTER_INSET;
+  if (!(exitGap(edges) < ATTACHED_GAP) || !(exitWidth(edges) > RIDEABLE)) return false;
+  return logical >= edges.rightInner - 0.35 && logical <= edges.rightOuter + 0.35;
 }
 
 /** Пока клин не открылся, уход влево отпускает съезд. */
@@ -286,16 +312,16 @@ export function holdLaneMin(edges: AsphaltEdges, roadHalf: number): number | nul
   return edges.leftInner - 1.5;
 }
 
-function riderOnExit(logical: number, roadHalf: number, edges: AsphaltEdges): number | null {
+function riderOnExit(logical: number, _roadHalf: number, edges: AsphaltEdges): number | null {
   const width = exitWidth(edges);
   if (width < 1) return null;
-  const center = (edges.rightInner + edges.rightOuter) * 0.5;
-  const anchor = Math.max(roadHalf, 0.001);
-  const parked = center + (logical - anchor);
   const pad = Math.min(0.7, width * 0.25);
   const inner = edges.rightInner + pad;
   const outer = Math.max(inner, edges.rightOuter - pad);
-  return Math.max(inner, Math.min(outer, parked));
+  // Уже на ленте — остаёмся в этой точке. Лента уехала — держимся за ближайшую кромку,
+  // а не прыгаем в её центр и не возвращаемся на прямую.
+  if (logical >= inner && logical <= outer) return logical;
+  return logical < inner ? inner : outer;
 }
 
 /**
@@ -322,20 +348,6 @@ export function exitRiderShift(logical: number, roadHalf: number, edges: Asphalt
   const world = riderOnExit(logical, roadHalf, edges);
   if (world == null) return 0;
   return world - logical;
-}
-
-/**
- * Когда ветка уже легла на ось, это новое значение полосы.
- * Его надо записать вместо сдвига в том же кадре, иначе байк прыгнет.
- * null — ветка ещё сбоку, сдвиг остаётся.
- */
-export function exitRebaseLane(logical: number, roadHalf: number, edges: AsphaltEdges): number | null {
-  const width = exitWidth(edges);
-  if (width < 1) return null;
-  const center = (edges.rightInner + edges.rightOuter) * 0.5;
-  const anchor = Math.max(roadHalf, 0.001);
-  if (!(Math.abs(center) < anchor * 0.2 && edges.rightInner < 0)) return null;
-  return riderOnExit(logical, roadHalf, edges);
 }
 
 /**
@@ -375,9 +387,9 @@ const RIBBON_MARGIN = 0.7;
 const RIBBON_FLOOR = 2.2;
 
 /**
- * Пределы руля. Пока съезд ещё приклеен к прямой, правый предел — его дальний край,
- * иначе кромка прямой дороги становится стеной ровно там, где надо перестроиться.
- * Когда клин уже открыт, за стену пускает только тот, кто уже на съезде.
+ * Пределы руля в координатах полосы, не в метрах дальнего края съезда.
+ * Пока ленты соединены, можно чуть заехать на нос рампы. После клина
+ * полоса остаётся у правого края прямой, а на ленту её переносит roadLateral.
  */
 export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = false): RoadLimits {
   const span = Math.max(scale, 0.05);
@@ -392,8 +404,15 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
     minEdge = (edge.leftOuter + RIBBON_MARGIN) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN) / span;
     const joined = exitGap(edge) < ATTACHED_GAP && exitWidth(edge) > RIDEABLE;
-    if (joined) maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN) / span);
-    else if (riding) maxEdge = Math.max(maxEdge, (edge.leftInner + 1.2) / span);
+    if (riding && exitWidth(edge) > 1 && exitGap(edge) >= ATTACHED_GAP) {
+      // Полоса остаётся у правого края прямой. На ленту переносит roadLateral,
+      // поэтому предел не прыгает к дальнему краю съезда, когда открывается клин.
+      const anchor = edge.leftInner;
+      minEdge = Math.max(minEdge, (anchor - 1.5) / span);
+      maxEdge = Math.max(maxEdge, (anchor + 0.8) / span);
+    } else if (joined) {
+      maxEdge = Math.max(maxEdge, (edge.rightInner + 0.45) / span);
+    }
   }
   if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };
   if (minEdge > -RIBBON_FLOOR) minEdge = -RIBBON_FLOOR;

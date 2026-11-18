@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, roadLateral, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitEdges, exitPhase, exitReserved, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, laneMeters, logicalRoadLimits, roadLateral, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -150,6 +150,8 @@ let splitChoices = Object.create(null); // zone → [left, right]
 const chosenZones = new Set();
 /** Зона → 1 если взят съезд, -1 если поехали прямо. Не выводится из индекса биома. */
 const chosenExit = Object.create(null);
+/** Зона → мировой центр дороги после взятого съезда. На ось не возвращается. */
+const chosenOrigin = Object.create(null);
 /** Метр, на котором выбор развилки зоны был зафиксирован. Нужен, чтобы
  *  схлопывание чужой ветки и сдвиг оси вводились плавно, а не рывком. */
 const splitCommitMeters = Object.create(null);
@@ -242,6 +244,13 @@ function readPlan() {
         if (Number.isFinite(zone) && (side === 1 || side === -1)) chosenExit[zone] = side;
       }
     }
+    if (parsed.origins && typeof parsed.origins === 'object') {
+      for (const key of Object.keys(parsed.origins)) {
+        const zone = Number(key);
+        const origin = Number(parsed.origins[key]);
+        if (Number.isFinite(zone) && Number.isFinite(origin)) chosenOrigin[zone] = origin;
+      }
+    }
   } catch {
     /* сохранение недоступно — план соберётся заново */
   }
@@ -289,12 +298,13 @@ function persistBiome() {
     else localStorage.setItem(PENDING_KEY, String(biomeIndex(G.pendingBiome)));
 
     const zone = currentZone();
-    const plan = { zones: {}, choices: {}, chosen: [], exits: {} };
+    const plan = { zones: {}, choices: {}, chosen: [], exits: {}, origins: {} };
     for (let z = Math.max(0, zone - 2); z <= zone + 4; z++) {
       if (zoneBiomes[z] != null) plan.zones[z] = biomeIndex(zoneBiomes[z]);
       if (splitChoices[z]) plan.choices[z] = splitChoices[z].slice(0, 2);
       if (chosenZones.has(z)) plan.chosen.push(z);
       if (chosenExit[z] === 1 || chosenExit[z] === -1) plan.exits[z] = chosenExit[z];
+      if (chosenOrigin[z] != null) plan.origins[z] = chosenOrigin[z];
     }
     localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
   } catch {
@@ -541,30 +551,60 @@ function splitDecisionWeight(zone, meters) {
   return u * u * (3 - 2 * u);
 }
 
-function forkCenterShiftAtS(_s) {
-  return 0;
+function originBefore(zone) {
+  let origin = 0;
+  for (let z = 0; z < zone; z++) {
+    if (chosenOrigin[z] != null) origin = chosenOrigin[z];
+  }
+  return origin;
 }
 
-function exitPhaseAt(s) {
+/** Один кадр дороги в точке s. */
+function frameAt(s) {
   const route = routeAt(s);
-  const phase = exitPhase(forkOffset(route.meters, ZONE_M));
-  if (phase.kind === 'end' && forkChosenSideForZone(route.zone) !== 0) {
-    phase.t *= splitDecisionWeight(route.zone, route.meters);
-  }
-  return phase;
+  const carried = chosenOrigin[route.zone];
+  return sampleRoad({
+    forkDistance: forkOffset(route.meters, ZONE_M),
+    half: roadWidthAtS(s) * 0.5,
+    chosen: forkChosenSideForZone(route.zone),
+    baseOrigin: originBefore(route.zone),
+    carriedOrigin: carried == null ? null : carried,
+    endWeight: splitDecisionWeight(route.zone, route.meters),
+  });
+}
+
+function localEdgesAt(s) {
+  return frameAt(s).local;
+}
+
+function roadEdgesAt(s) {
+  return frameAt(s).world;
 }
 
 function forkCloseAtS(s) {
-  const phase = exitPhaseAt(s);
+  const phase = frameAt(s).phase;
   if (phase.kind === 'settle') return 1;
   if (phase.kind === 'end') return phase.t;
   return 0;
 }
 
-/** Кромки асфальта в точке s. Выбор только этой зоны, прошлое решение сюда не течёт. */
-function roadEdgesAt(s) {
-  const route = routeAt(s);
-  return exitEdges(roadWidthAtS(s) * 0.5, exitPhaseAt(s), forkChosenSideForZone(route.zone));
+/** В кадре, когда прямая закончилась, центр дороги становится центром съезда. */
+function commitExitOrigin(zone, s) {
+  if (chosenExit[zone] !== 1 || chosenOrigin[zone] != null) return;
+  const phase = exitPhase(forkOffset(blendMetersAt(s), ZONE_M));
+  if (phase.kind !== 'settle') return;
+  const half = roadWidthAtS(s) * 0.5;
+  const span = laneSpanAt(s);
+  const prev = originBefore(zone);
+  const ribbon = exitEdges(half, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
+  const world = prev + roadLateral(G.laneOffset * span, half, ribbon, exitHold);
+  const origin = exitCarryOrigin(half, prev);
+  chosenOrigin[zone] = origin;
+  if (exitHold) {
+    G.laneOffset = (world - origin) / span;
+    G.lateralVelocity = 0;
+    exitHold = false;
+  }
 }
 
 /** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
@@ -582,27 +622,19 @@ function exitReservedAt(s) {
   return exitReserved(forkOffset(Math.max(0, blendMetersAt(s)), ZONE_M));
 }
 
-/** Единственный перевод полосы в метры от оси. riding — байк уже на съезде. */
+/** Единственный перевод полосы в мировые метры. riding — байк ещё на боковой ленте. */
 function roadMetersAt(s, laneOffset, riding) {
-  return roadLateral(laneOffset * laneSpanAt(s), roadWidthAtS(s) * 0.5, roadEdgesAt(s), riding);
+  return laneMeters(laneOffset, laneSpanAt(s), roadWidthAtS(s) * 0.5, frameAt(s), riding);
 }
 
 /** Съезд берётся только с правой кромки, пока ленты ещё соединены.
  *  После клина вернуться на прямую уже нельзя, и руль не уводит байка в траву. */
 function updateExitHold(meters, zone) {
-  const edge = roadEdgesAt(G.playerS);
+  commitExitOrigin(zone, G.playerS);
+  const edge = localEdgesAt(G.playerS);
   const half = roadWidthAtS(G.playerS) * 0.5;
   const span = laneSpanAt(G.playerS);
   const lat = G.laneOffset * span;
-  if (exitHold) {
-    const rebased = exitRebaseLane(lat, half, edge);
-    if (rebased != null) {
-      G.laneOffset = rebased / span;
-      G.lateralVelocity = 0;
-      exitHold = false;
-      return;
-    }
-  }
   if (!exitReserved(forkOffset(meters, ZONE_M))) {
     exitHold = false;
     return;
@@ -1138,7 +1170,7 @@ function applyLaneConfig(dominant, playerS) {
     }
     if (G.remapTrafficLanes) G.remapTrafficLanes(cfg);
   }
-  const limits = logicalRoadLimits(roadEdgesAt(playerS), laneDisplayScaleAtS(playerS), exitHold);
+  const limits = logicalRoadLimits(localEdgesAt(playerS), laneDisplayScaleAtS(playerS), exitHold);
   G.roadEdgeMin = limits.min;
   G.roadEdgeMax = limits.max;
   G.ROAD_EDGE = Math.max(Math.abs(limits.min), limits.max);
@@ -1373,6 +1405,8 @@ function resetBiomeRun() {
   G.visitCounts[G.currentBiome] = 1;
   G.pendingBiome = null;
   chosenZones.clear();
+  for (const key of Object.keys(chosenExit)) delete chosenExit[key];
+  for (const key of Object.keys(chosenOrigin)) delete chosenOrigin[key];
   // План следующей зоны пересобирается под свежие счётчики посещений.
   delete splitChoices[zone];
   delete splitChoices[zone + 1];
@@ -1457,7 +1491,7 @@ export function initBiome() {
   G.roadWidthAtS = roadWidthAtS;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
-  G.forkCenterShiftAtS = forkCenterShiftAtS;
+  G.roadOriginAt = (s) => frameAt(s).origin;
   G.riderLatAt = riderLatAt;
   G.exitReservedAt = exitReservedAt;
   G.forkChosenSideAtS = forkChosenSideAtS;
@@ -1477,7 +1511,6 @@ export function initBiome() {
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
-  G.splitLateralShiftAtS = () => 0;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
   G.laneMarksAtS = laneMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
