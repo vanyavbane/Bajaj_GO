@@ -8,15 +8,15 @@
  * ChosenSide: -1 съезд закрыт, +1 съезд стал дорогой, 0 выбор ещё открыт.
  */
 
-import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
-import type { PlacedBlock } from './blocks.ts';
+import { RIGHT_EXIT, builtChain, compileExit, placedBlock, spanAt } from './blocks.ts';
+import type { BuildChoice, PlacedBlock } from './blocks.ts';
 
 export type { PlacedBlock };
 
 const EXIT_PLAN = compileExit(RIGHT_EXIT);
 
-/** -1 съезд не взят, +1 взят, 0 пока развилка открыта. */
-export type ChosenSide = -1 | 0 | 1;
+/** -1 съезд не взят, +1 взят, 0 пока развилка открыта. То же значение, что BuildChoice. */
+export type ChosenSide = BuildChoice;
 
 /**
  * Слот на баннере развилки. 0 — левый вариант пары, 1 — правый.
@@ -141,6 +141,17 @@ export function forkAmountAt(meters: number, zoneLength: number, lead = FORK_LEA
   return forkSpreadAt(meters, zoneLength, lead, 1);
 }
 
+/**
+ * Занятость развилки для барьера, трамплинов и сервиса.
+ * До выбора хвост ещё рисует обе ленты. После выбора блок settle — уже одна дорога,
+ * поэтому флаг гаснет там, а не скачком на границе зоны.
+ */
+export function liveForkAmount(amount: number, phase: ExitKind, chosen: ChosenSide): number {
+  const raw = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  if (chosen !== 0 && (phase === 'settle' || phase === 'none')) return 0;
+  return raw;
+}
+
 /** -1 слева, включая ровно ноль. */
 export function forkSide(lateralOffset: number): -1 | 1 {
   return lateralOffset <= 0 ? -1 : 1;
@@ -170,6 +181,32 @@ export function exitPhase(d: number): ExitPhase {
 /** Какой блок стоит в этой метке и выбран ли уже его хвост. */
 export function exitBlockAt(d: number, chosen: ChosenSide): PlacedBlock | null {
   return placedBlock(EXIT_PLAN, d, chosen);
+}
+
+/** Имена блоков, которые выбор уже поставил. До выбора в списке только подход. */
+export function exitChain(chosen: ChosenSide): readonly string[] {
+  return builtChain(EXIT_PLAN, chosen);
+}
+
+/** Кромки поставленного блока. Непостроенный хвост остаётся развилкой, его ещё не закрывают. */
+function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, endWeight: number): AsphaltEdges {
+  const road = Math.max(0, Number.isFinite(half) ? half : 0);
+  if (!block) return branchEdges(road, 0);
+  if (!block.built) return branchEdges(road, FORK_SPREAD);
+  if (block.kind === 'split') return branchEdges(road, FORK_SPREAD * smooth01(block.u));
+  if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
+  if (block.kind === 'seal') {
+    const edge = branchEdges(road, FORK_SPREAD);
+    const pinch = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
+    const keep = 1 - pinch;
+    if (chosen === -1) {
+      [edge.rightInner, edge.rightOuter] = pinchSpan(edge.rightInner, edge.rightOuter, keep);
+    } else if (chosen === 1) {
+      [edge.leftOuter, edge.leftInner] = pinchSpan(edge.leftOuter, edge.leftInner, keep);
+    }
+    return edge;
+  }
+  return branchEdges(road, 0);
 }
 
 /** Земля справа занята съездом: дома и деревья туда не ставятся. */
@@ -246,34 +283,52 @@ function translateEdges(edges: AsphaltEdges, origin: number): AsphaltEdges {
   };
 }
 
-/** Единственная сборка дороги в точке. Фаза, выбор и уже увезённый центр приходят снаружи. */
+/** Единственная сборка дороги в точке. Кромки берёт поставленный блок. */
 export function sampleRoad(query: RoadQuery): RoadFrame {
-  const phase = exitPhase(query.forkDistance);
   const chosen = query.chosen;
+  const endWeight = query.endWeight ?? 1;
+  const block = exitBlockAt(query.forkDistance, chosen);
+  const phase = exitPhase(query.forkDistance);
   const weighted: ExitPhase = phase.kind === 'end' && chosen !== 0
-    ? { ...phase, t: phase.t * (query.endWeight ?? 1) }
+    ? { ...phase, t: phase.t * endWeight }
     : phase;
   const stored = query.carriedOrigin;
-  const carried = chosen === 1
-    && stored != null
-    && (weighted.kind === 'settle' || weighted.kind === 'none');
+  const onCarry = block != null && block.built && block.kind === 'carry';
+  const carried = chosen === 1 && stored != null && (onCarry || weighted.kind === 'none');
   const origin = carried && stored != null ? stored : query.baseOrigin;
-  const local = exitEdges(query.half, weighted, chosen);
+  const local = blockEdges(query.half, block, chosen, endWeight);
   return {
     origin,
     local,
     world: translateEdges(local, origin),
     phase: weighted,
     chosen,
-    block: exitBlockAt(query.forkDistance, chosen),
+    block,
   };
 }
 
-/** Полоса в мировых метрах. На боковой ленте riding true, иначе полоса относительно центра дороги. */
+/**
+ * Центр, от которого считаются полосы машин и разметки.
+ * Пока съезд закрывает прямую, полосы переезжают на его ленту.
+ * К блоку carry они приходят уже в его центр, без скачка.
+ */
+function laneAnchor(frame: RoadFrame): number {
+  const origin = frame.origin;
+  if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') {
+    return origin;
+  }
+  const local = exitRibbonCenter(frame.local);
+  if (local == null) return origin;
+  const t = frame.phase.kind === 'end' ? Math.max(0, Math.min(1, frame.phase.t)) : 1;
+  return origin + local * t;
+}
+
+/** Полоса в мировых метрах. riding оставляет байка на боковой ленте старым сдвигом. */
 export function laneMeters(lane: number, scale: number, half: number, frame: RoadFrame, riding: boolean): number {
   const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
   const logical = (Number.isFinite(lane) ? lane : 0) * span;
-  return frame.origin + roadLateral(logical, half, frame.local, riding);
+  if (riding) return frame.origin + roadLateral(logical, half, frame.local, true);
+  return laneAnchor(frame) + logical;
 }
 
 export function exitGap(edges: AsphaltEdges): number {
@@ -291,15 +346,21 @@ export function exitRibbonCenter(edges: AsphaltEdges): number | null {
   return (edges.rightInner + edges.rightOuter) * 0.5;
 }
 
-/** Прямая лента ещё накрывает ось, а не сжата в точку. */
-export function mainRoadOpen(edges: AsphaltEdges): boolean {
-  return edges.leftOuter < -0.5 && edges.leftInner > 0.5 && edges.leftInner - edges.leftOuter > 1;
+/**
+ * Прямая лента ещё накрывает центр дороги, а не сжата в точку.
+ * Центр — ось этой ленты. После съезда это уже не ноль маршрута.
+ */
+export function mainRoadOpen(edges: AsphaltEdges, center = 0): boolean {
+  const axis = Number.isFinite(center) ? center : 0;
+  return edges.leftOuter < axis - 0.5
+    && edges.leftInner > axis + 0.5
+    && edges.leftInner - edges.leftOuter > 1;
 }
 
 /** Кромка дороги, по которой едут. Пока прямая жива — это она, даже если справа открыт съезд.
  *  Когда прямая сжата в точку, кромки берёт съезд, ставший дорогой. */
-export function carriageEdge(edges: AsphaltEdges, side: -1 | 1): number {
-  if (mainRoadOpen(edges)) return side < 0 ? edges.leftOuter : edges.leftInner;
+export function carriageEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
+  if (mainRoadOpen(edges, center)) return side < 0 ? edges.leftOuter : edges.leftInner;
   if (edges.leftInner - edges.leftOuter < 1 && exitWidth(edges) > 1) {
     return side < 0 ? edges.rightInner : edges.rightOuter;
   }
@@ -316,15 +377,16 @@ export function outwardFrom(edge: number, origin: number, gap: number): number {
 }
 
 /** Дальний асфальт для откоса. Узкая умирающая лента не отодвигает землю. */
-export function worldEdge(edges: AsphaltEdges, side: -1 | 1): number {
+export function worldEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
   const leftGone = edges.leftInner - edges.leftOuter < 1;
+  const main = mainRoadOpen(edges, center);
   if (side < 0) {
-    if (mainRoadOpen(edges)) return edges.leftOuter;
+    if (main) return edges.leftOuter;
     if (leftGone && exitWidth(edges) > 1) return edges.rightInner;
     return edges.leftOuter;
   }
-  if (exitWidth(edges) > 1 && (mainRoadOpen(edges) || leftGone)) return edges.rightOuter;
-  if (mainRoadOpen(edges)) return edges.leftInner;
+  if (exitWidth(edges) > 1 && (main || leftGone)) return edges.rightOuter;
+  if (main) return edges.leftInner;
   return Math.max(edges.leftInner, edges.rightOuter);
 }
 

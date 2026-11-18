@@ -1,4 +1,4 @@
-import { carriageEdge, exitWidth, mainRoadOpen } from './fork.ts';
+import { exitWidth, mainRoadOpen, outwardFrom, worldEdge } from './fork.ts';
 import type { AsphaltEdges, ChosenSide } from './fork.ts';
 
 export type { AsphaltEdges, ChosenSide };
@@ -6,9 +6,8 @@ export type { AsphaltEdges, ChosenSide };
 /**
  * Контракт постановки окружения.
  *
- * Боковое смещение считается не от оси, а от кромки асфальта в той же
- * системе, что `placeOnRoad`: до сдвига оси развилки. Сдвиг оси добавляет
- * уже `placeOnRoad`, второй раз его прибавлять нельзя.
+ * Боковое смещение — готовые метры для `placeOnRoad`. Знак берётся от центра
+ * дороги, поэтому после съезда левый декор остаётся слева от полотна.
  *
  * Кромки приходят снаружи (`roadEdgesAt`): две ленты, разъезд и схлопывание
  * чужой ветки уже внутри них. Этот модуль решает только, можно ли ставить
@@ -22,6 +21,8 @@ export type AssetSide = -1 | 1;
 export interface RoadsideFrame {
   edges: AsphaltEdges;
   chosenSide: ChosenSide;
+  /** Мировой центр дороги. От него считается, какая кромка внешняя. */
+  origin: number;
 }
 
 /**
@@ -72,10 +73,9 @@ export function sideOpen(_chosenSide: ChosenSide, _side: AssetSide): boolean {
   return true;
 }
 
-/** Кромка дороги, вдоль которой ставится декор. Съезд справа в неё не входит,
- *  пока прямая ещё есть. */
-export function outerEdge(edges: AsphaltEdges, side: AssetSide): number {
-  return carriageEdge(edges, side);
+/** Дальний живой асфальт. Декор стоит снаружи него, в том числе снаружи съезда. */
+export function outerEdge(edges: AsphaltEdges, side: AssetSide, center = 0): number {
+  return worldEdge(edges, side, center);
 }
 
 /**
@@ -84,20 +84,21 @@ export function outerEdge(edges: AsphaltEdges, side: AssetSide): number {
  */
 export function besidePose(frame: RoadsideFrame, asset: BesideAsset): RoadsidePose {
   if (!sideOpen(frame.chosenSide, asset.side)) return HIDDEN;
-  const absLat = Math.abs(outerEdge(frame.edges, asset.side)) + outward(asset.gap) + outward(asset.inset);
-  return { lateral: asset.side * absLat, absLat };
+  const edge = outerEdge(frame.edges, asset.side, frame.origin);
+  const lateral = outwardFrom(edge, frame.origin, outward(asset.gap) + outward(asset.inset));
+  return { lateral, absLat: Math.abs(lateral - frame.origin) };
 }
 
 /**
  * Сколько метров от оси до асфальта внутри разъезда.
  * На прямой внутренние кромки сходятся, и места под островок нет.
  */
-function exitGore(edges: AsphaltEdges): boolean {
-  return mainRoadOpen(edges) && exitWidth(edges) > 1 && edges.rightInner > edges.leftInner;
+function exitGore(edges: AsphaltEdges, center = 0): boolean {
+  return mainRoadOpen(edges, center) && exitWidth(edges) > 1 && edges.rightInner > edges.leftInner;
 }
 
-export function medianRoom(edges: AsphaltEdges): number {
-  if (exitGore(edges)) return Math.max(0, (edges.rightInner - edges.leftInner) * 0.5);
+export function medianRoom(edges: AsphaltEdges, center = 0): number {
+  if (exitGore(edges, center)) return Math.max(0, (edges.rightInner - edges.leftInner) * 0.5);
   const left = -finite(edges.leftInner);
   const right = finite(edges.rightInner);
   if (left <= 0 || right <= 0) return 0;
@@ -105,18 +106,18 @@ export function medianRoom(edges: AsphaltEdges): number {
 }
 
 /** Помещается ли объект между лентами, не задевая асфальт. */
-export function medianFits(edges: AsphaltEdges, asset: MedianAsset): boolean {
-  return medianRoom(edges) >= outward(asset.halfWidth) + outward(asset.gap);
+export function medianFits(edges: AsphaltEdges, asset: MedianAsset, center = 0): boolean {
+  return medianRoom(edges, center) >= outward(asset.halfWidth) + outward(asset.gap);
 }
 
 /** Смещение на островке. Вылезающий в сторону асфальта сдвиг обрезается. */
-export function medianPose(edges: AsphaltEdges, asset: MedianAsset): RoadsidePose {
-  const room = medianRoom(edges);
+export function medianPose(edges: AsphaltEdges, asset: MedianAsset, center = 0): RoadsidePose {
+  const room = medianRoom(edges, center);
   const need = outward(asset.halfWidth) + outward(asset.gap);
   if (room < need) return HIDDEN;
   const limit = room - need;
-  const center = exitGore(edges) ? (edges.leftInner + edges.rightInner) * 0.5 : 0;
-  const desired = asset.lateral == null ? center : finite(asset.lateral);
-  const lateral = center + Math.max(-limit, Math.min(limit, desired - center));
-  return { lateral, absLat: Math.abs(lateral) };
+  const goreCenter = exitGore(edges, center) ? (edges.leftInner + edges.rightInner) * 0.5 : center;
+  const desired = asset.lateral == null ? goreCenter : finite(asset.lateral);
+  const lateral = goreCenter + Math.max(-limit, Math.min(limit, desired - goreCenter));
+  return { lateral, absLat: Math.abs(lateral - center) };
 }

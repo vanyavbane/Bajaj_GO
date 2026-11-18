@@ -293,9 +293,9 @@ export interface GameState {
   /** Кадр кромок в точке s и постановка декора относительно них. */
   roadsideFrameAt: (s: number) => RoadsideFrame;
   besidePose: (frame: RoadsideFrame, asset: BesideAsset) => RoadsidePose;
-  medianRoom: (edges: AsphaltEdges) => number;
-  medianFits: (edges: AsphaltEdges, asset: MedianAsset) => boolean;
-  medianPose: (edges: AsphaltEdges, asset: MedianAsset) => RoadsidePose;
+  medianRoom: (edges: AsphaltEdges, center?: number) => number;
+  medianFits: (edges: AsphaltEdges, asset: MedianAsset, center?: number) => boolean;
+  medianPose: (edges: AsphaltEdges, asset: MedianAsset, center?: number) => RoadsidePose;
   biomeMetersAt: (s: number) => number;
   biomeRoadX: (s: number) => number;
   biomeRoadDX: (s: number) => number;
@@ -309,6 +309,8 @@ export interface GameState {
   roadOriginAt: (s: number) => number;
   /** Блок рецепта съезда в точке s. null — здесь обычная дорога без съезда. */
   roadBlockAt: (s: number) => PlacedBlock | null;
+  /** Блоки, которые выбор уже поставил в зоне точки s. До выбора здесь только подход. */
+  builtBlocksAt: (s: number) => readonly string[];
   /** Полоса байка или камеры в метрах от оси, уже со съездом. */
   riderLatAt: (s: number, laneOffset?: number) => number;
   /** Справа на этом метре стоит съезд: дома и деревья туда не ставятся. */

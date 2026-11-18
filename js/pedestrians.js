@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { outwardFrom, worldEdge } from './engine/fork.js';
 import { keepInWindow } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -58,11 +57,9 @@ export function initPedestrians() {
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
       const side = Math.sign(ped.lateralOffset) || 1;
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
-      const edges = G.roadEdgesAt ? G.roadEdgesAt(ped.s) : null;
       const signed = side < 0 ? -1 : 1;
-      const edge = edges ? worldEdge(edges, signed) : G.roadOuterLat(ped.s, signed);
-      const origin = G.roadOriginAt ? G.roadOriginAt(ped.s) : 0;
-      const lat = outwardFrom(edge, origin, 1.15 + jitter * cw);
+      const pose = G.besidePose(G.roadsideFrameAt(ped.s), { side: signed, gap: 1.15 + jitter * cw, inset: 0 });
+      const lat = pose.lateral == null ? 0 : pose.lateral;
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
       G.placeOnRoad(ped.group, ped.s, lat, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);

@@ -191,6 +191,14 @@ export function spanAt(plan: CompiledExit, d: number): SpanHit | null {
   return null;
 }
 
+/** Цепочка, которую игрок уже поставил: подход и выбранный хвост. До выбора хвоста нет. */
+export function builtChain(plan: CompiledExit, chosen: BuildChoice): readonly string[] {
+  const head = plan.approach.map((span) => span.id);
+  if (chosen === 0) return head;
+  const tail = (chosen === 1 ? plan.exit : plan.straight).map((span) => span.id);
+  return [...head, ...tail];
+}
+
 /** Блок, который реально построен. До выбора хвост ещё не стоит. */
 export function placedBlock(plan: CompiledExit, d: number, chosen: BuildChoice): PlacedBlock | null {
   const span = spanAt(plan, d);

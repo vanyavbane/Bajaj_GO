@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitCarryOrigin, exitEdges, exitPhase, exitReserved, forkSpreadAt, laneMeters, logicalRoadLimits, pickToSide, roadLateral, sampleRoad, splitPick } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitCarryOrigin, exitEdges, exitPhase, exitReserved, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, pickToSide, roadLateral, sampleRoad, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -54,6 +54,45 @@ assert(carriedFrame.origin === exitCarryOrigin(10, 0), 'взятый съезд 
 assert(carriedFrame.local.leftOuter === -10 && carriedFrame.local.leftInner === 10, 'локальная дорога прямая относительно этого центра');
 assert(Math.abs(carriedFrame.world.leftOuter - (carriedFrame.origin - 10)) < 1e-6, 'мировые кромки сдвинуты на центр съезда');
 assert(laneMeters(0, 1, 10, carriedFrame, false) === carriedFrame.origin, 'нулевая полоса стоит в центре увезённой дороги');
+const carriedOrigin = exitCarryOrigin(10, 0);
+const sealStart = sampleRoad({
+  forkDistance: EXIT_CHOICE + 0.01,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 0,
+  carriedOrigin,
+  endWeight: 0,
+});
+const sealEnd = sampleRoad({
+  forkDistance: EXIT_CHOICE + 69.95,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 0,
+  carriedOrigin,
+  endWeight: 1,
+});
+const carryStart = sampleRoad({
+  forkDistance: EXIT_CHOICE + 70.05,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 0,
+  carriedOrigin,
+  endWeight: 1,
+});
+assert(Math.abs(laneMeters(0, 1, 10, sealStart, false)) < 0.05, 'в начале закрытия прямой полосы ещё на ней');
+assert(
+  Math.abs(laneMeters(0, 1, 10, sealEnd, false) - laneMeters(0, 1, 10, carryStart, false)) < 0.25,
+  'полосы не прыгают, когда съезд становится дорогой',
+);
+const straightEnd = sampleRoad({
+  forkDistance: EXIT_CHOICE + 69,
+  half: 10,
+  chosen: -1,
+  baseOrigin: 0,
+  carriedOrigin: null,
+  endWeight: 1,
+});
+assert(Math.abs(laneMeters(2, 1, 10, straightEnd, false) - 2) < 1e-6, 'прямой ход оставляет полосы на прямой');
 const nose = branchEdges(10, 4);
 assert(nose.rightInner <= 10.01 && nose.rightOuter > nose.rightInner, 'на подходе съезд ещё соединён с правой кромкой');
 assert(nose.rightOuter - nose.rightInner > 2, 'соединённый съезд уже можно занять');
@@ -101,5 +140,8 @@ const plainLimits = logicalRoadLimits(branchEdges(10, 0), 1, false);
 assert(blocked.max < splitRoad.leftInner, 'после клина с прямой на съезд уже не перестроиться');
 assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');
 assert(!exitReserved(-5) && exitReserved(EXIT_DIVERGE) && !exitReserved(FORK_LEAD + 1), 'коридор съезда не залезает за границу зоны');
+assert(liveForkAmount(1, 'settle', 0) === 1, 'до выбора хвост ещё занимает место развилки');
+assert(liveForkAmount(1, 'settle', 1) === 0 && liveForkAmount(1, 'settle', -1) === 0, 'после выбора блок дороги уже не развилка');
+assert(liveForkAmount(1, 'end', 1) === 1 && liveForkAmount(0, 'none', 1) === 0, 'закрытие ветки ещё развилка, пустая фаза — нет');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('biome catalog ok');

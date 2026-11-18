@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { EXIT_CHOICE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -450,7 +450,9 @@ function forkSpreadAtMeters(meters) {
 }
 
 function forkSpreadAtS(s) {
-  return forkSpreadAtMeters(blendMetersAt(s));
+  const frame = frameAt(s);
+  const raw = forkSpreadAtMeters(blendMetersAt(s));
+  return liveForkAmount(raw, frame.phase.kind, frame.chosen);
 }
 
 /** Ширина одной ветки. Зазор между ветками сюда не входит: его рисует полотно отдельно. */
@@ -459,7 +461,9 @@ function roadWidthAtS(s) {
 }
 
 function splitAmountAtS(s) {
-  return splitAmountAtMeters(blendMetersAt(s));
+  const frame = frameAt(s);
+  const raw = splitAmountAtMeters(blendMetersAt(s));
+  return liveForkAmount(raw, frame.phase.kind, frame.chosen);
 }
 
 /** Центр развилки в координате s игрока. Единственная формула, её читает и полотно. */
@@ -599,7 +603,8 @@ function commitExitOrigin(zone, s) {
 /** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
  *  Когда съезд заменил прямую, кромки переходят на него. */
 function roadOuterLat(s, side) {
-  return carriageEdge(roadEdgesAt(s), side < 0 ? -1 : 1);
+  const frame = frameAt(s);
+  return carriageEdge(frame.world, side < 0 ? -1 : 1, frame.origin);
 }
 
 function laneSpanAt(s) {
@@ -1029,14 +1034,15 @@ const SHOULDER = {
   cityEdge: 3.55
 };
 
-/** Высота земли в мировой точке lat. Сторона считается от центра дороги. */
+/** Высота земли в мировой точке lat. Профиль тот же, что у откоса этой кромки. */
 function groundOffset(lat, s) {
   const frame = frameAt(s);
   const side = lat < frame.origin ? -1 : 1;
-  const asphalt = Math.abs(worldEdge(frame.world, side));
+  const edge = worldEdge(frame.world, side, frame.origin);
+  const fromCenter = Math.abs(edge - frame.origin);
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
-  const lats = shoulderLats(asphalt, cityOuter, SHOULDER);
-  return shoulderHeight(lat, lats, SHOULDER);
+  const lats = shoulderLats(fromCenter, cityOuter, SHOULDER);
+  return shoulderHeight(Math.abs(lat - frame.origin), lats, SHOULDER);
 }
 
 /* ---------- Состояние, баннеры и HUD ---------- */
@@ -1102,13 +1108,15 @@ function updateBiomeChip(biomeIndexValue) {
   chip.style.setProperty('--chip-accent', hexColor(biome.accent));
 }
 
-/** @returns {{root: HTMLElement, left: HTMLElement|null, right: HTMLElement|null, leftIco: HTMLElement|null, leftName: HTMLElement|null, rightIco: HTMLElement|null, rightName: HTMLElement|null}|null} */
+/** @returns {{root: HTMLElement, head: HTMLElement|null, hint: HTMLElement|null, left: HTMLElement|null, right: HTMLElement|null, leftIco: HTMLElement|null, leftName: HTMLElement|null, rightIco: HTMLElement|null, rightName: HTMLElement|null}|null} */
 function splitEls() {
   const root = document.getElementById('split-banner');
   if (!root) return null;
   const q = (sel) => /** @type {HTMLElement|null} */ (root.querySelector(sel));
   return {
     root,
+    head: q('.split-head'),
+    hint: q('.split-hint'),
     left: q('.split-opt.left'),
     right: q('.split-opt.right'),
     leftIco: q('.split-opt.left .split-ico'),
@@ -1150,6 +1158,13 @@ function updateSplitBanner(info) {
   if (els.right) {
     els.right.style.setProperty('--opt-accent', hexColor(rightBiome.accent));
     els.right.classList.toggle('active', side === 1);
+  }
+  if (els.head) els.head.textContent = info.chosen ? 'ПУТЬ ВЫБРАН' : 'ВЫБОР ПУТИ';
+  if (els.hint) {
+    const picked = side === 1 ? rightBiome : leftBiome;
+    els.hint.textContent = info.chosen
+      ? (side === 1 ? `Съезд · ${picked.short}` : `Прямо · ${picked.short}`)
+      : 'Правая лента — съезд. На своей полосе остаёшься прямо.';
   }
   els.root.hidden = false;
   els.root.classList.toggle('decided', !!info.chosen);
@@ -1309,18 +1324,9 @@ function updateBiome(dt) {
   const previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
     : (exitHold ? 1 : 0);
-  // Дорогу впереди меняем один раз, когда клин уже не перейти.
-  // Касание кромки на подходе больше не пересобирает профиль.
-  if (!chosenBefore && exitHold) {
-    const gapNow = roadEdgesAt(G.playerS).rightInner - roadEdgesAt(G.playerS).leftInner;
-    if (gapNow >= 2.4 && zoneBiomes[zone + 1] !== choices[1]) {
-      zoneBiomes[zone + 1] = choices[1];
-      delete roadLock[zone + 1];
-      dropRoadCache();
-    }
-  }
 
-  // Авто-выбор, если игрок не ушёл на ветку до sSplit + 30.
+  // Выбор фиксируется в конце параллельного участка. До этого следующая
+  // локация не переписывается: уход со съезда обратно на прямую остаётся прямым.
   if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
     commitSplit(zone, previewSide, meters);
   }
@@ -1355,7 +1361,7 @@ function updateBiome(dt) {
   const chosenSide = splitPick(chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1);
   const bannerSide = branchPick(previewSide);
   G.splitState = {
-    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < SPLIT_AUTO_D + 40,
+    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < SPLIT_AUTO_D + EXIT_END,
     zone,
     meters: splitM,
     splitMeters: splitM,
@@ -1516,15 +1522,16 @@ export function initBiome() {
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
   G.roadBlockAt = (s) => frameAt(s).block;
+  G.builtBlocksAt = (s) => exitChain(forkChosenSideAtS(s));
   G.riderLatAt = riderLatAt;
   G.exitReservedAt = exitReservedAt;
   G.forkChosenSideAtS = forkChosenSideAtS;
   G.forkCloseAtS = forkCloseAtS;
   G.roadEdgesAt = roadEdgesAt;
-  G.roadsideFrameAt = (s) => ({
-    edges: roadEdgesAt(s),
-    chosenSide: forkChosenSideAtS(s),
-  });
+  G.roadsideFrameAt = (s) => {
+    const frame = frameAt(s);
+    return { edges: frame.world, chosenSide: frame.chosen, origin: frame.origin };
+  };
   G.besidePose = besidePose;
   G.medianRoom = medianRoom;
   G.medianFits = medianFits;
@@ -1654,10 +1661,15 @@ export function initBiomeWorld() {
           if (!visible) continue;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
+          const sideSign = side < 0 ? -1 : 1;
           const frame = frameAt(s);
-          const edge = worldEdge(frame.world, side < 0 ? -1 : 1);
-          const gap = Math.max(8, entry.lat - Math.abs(edge));
-          const lat = outwardFrom(edge, frame.origin, gap);
+          const edge = worldEdge(frame.world, sideSign, frame.origin);
+          const gap = Math.max(8, entry.lat - Math.abs(edge - frame.origin));
+          const pose = besidePose(
+            { edges: frame.world, chosenSide: frame.chosen, origin: frame.origin },
+            { side: sideSign, gap, inset: 0 }
+          );
+          if (pose.lateral == null) continue;
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;
@@ -1666,8 +1678,8 @@ export function initBiomeWorld() {
           G.placeOnRoad(
             entry.group,
             s,
-            side * lat,
-            groundOffset(lat, s),
+            pose.lateral,
+            groundOffset(pose.lateral, s),
             entry.yaw
           );
         }

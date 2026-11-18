@@ -1,4 +1,4 @@
-import { branchEdges, exitEdges } from './fork.ts';
+import { branchEdges, carriageEdge, exitEdges, mainRoadOpen } from './fork.ts';
 import {
   besidePose,
   medianFits,
@@ -20,7 +20,7 @@ const straight: AsphaltEdges = {
   rightOuter: 10,
 };
 
-const open: RoadsideFrame = { edges: straight, chosenSide: 0 };
+const open: RoadsideFrame = { edges: straight, chosenSide: 0, origin: 0 };
 const right = besidePose(open, { side: 1, gap: 2, inset: 1 });
 assert(right.lateral === 13 && right.absLat === 13, 'прямая: правый объект за кромкой на зазор и выступ');
 
@@ -33,7 +33,7 @@ const fork: AsphaltEdges = {
   rightInner: 25.84,
   rightOuter: 36,
 };
-const both: RoadsideFrame = { edges: fork, chosenSide: 0 };
+const both: RoadsideFrame = { edges: fork, chosenSide: 0, origin: 0 };
 const outside = besidePose(both, { side: -1, gap: 8, inset: 0 });
 assert(outside.lateral === -44, 'разъезд: объект снаружи внешней кромки, не в зазоре');
 assert(Math.abs(medianRoom(fork) - 25.84) < 1e-9, 'островок доходит до внутренней кромки');
@@ -42,7 +42,7 @@ assert(!medianFits(fork, { halfWidth: 30, gap: 0 }), 'объект шире ос
 assert(medianRoom(straight) === 0, 'на прямой островка нет');
 
 const highway = branchEdges(10, 22);
-assert(outerEdge(highway, 1) === 10, 'декор справа держится за прямую, не за внешний край съезда');
+assert(outerEdge(highway, 1) === highway.rightOuter, 'декор справа стоит снаружи съезда, не в клине');
 assert(outerEdge(highway, -1) === -10, 'левая кромка прямой не двигается');
 assert(Math.abs(medianRoom(highway) - (highway.rightInner - highway.leftInner) * 0.5) < 1e-9, 'клин съезда считается от его середины до асфальта');
 const inGore = medianPose(highway, { halfWidth: 1, gap: 1 });
@@ -51,6 +51,17 @@ assert(inGore.lateral != null && inGore.lateral > highway.leftInner && inGore.la
 const settled = exitEdges(10, { kind: 'settle', t: 1, spread: 22 }, 1);
 assert(outerEdge(settled, -1) === -10 && outerEdge(settled, 1) === 10, 'когда съезд стал дорогой, кромки у него');
 assert(sideOpen(1, -1) && sideOpen(-1, 1), 'выбор не прячет обочину живой дороги');
+const carried: AsphaltEdges = { leftOuter: 22, leftInner: 42, rightInner: 42, rightOuter: 42 };
+const carriedFrame: RoadsideFrame = { edges: carried, chosenSide: 1, origin: 32 };
+const carriedLeft = besidePose(carriedFrame, { side: -1, gap: 8, inset: 0 });
+const carriedRight = besidePose(carriedFrame, { side: 1, gap: 8, inset: 0 });
+assert(carriedLeft.lateral === 14, 'после съезда левый декор остаётся слева от дороги');
+assert(carriedRight.lateral === 50, 'после съезда правый декор остаётся справа от дороги');
+const shifted = { leftOuter: 22, leftInner: 42, rightInner: 54, rightOuter: 74 };
+assert(mainRoadOpen(shifted, 32) && !mainRoadOpen(shifted), 'прямая лента жива вокруг своего центра');
+assert(carriageEdge(shifted, 1, 32) === 42, 'кромка проезда — край прямой, съезд в неё не входит');
+assert(outerEdge(shifted, 1, 32) === 74, 'декор справа за внешним асфальтом съезда');
+assert(Math.abs(medianRoom(shifted, 32) - 6) < 1e-9, 'клин после переноса центра сохраняет ширину');
 
 const clipped = medianPose(fork, { halfWidth: 1, gap: 3.2, lateral: 40 });
 assert(clipped.lateral != null && Math.abs(clipped.lateral) <= 25.84 - 4.2 + 1e-9, 'сдвиг по островку не заходит на асфальт');

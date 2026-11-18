@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { outwardFrom, worldEdge } from './engine/fork.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -385,22 +384,19 @@ export function initRoadside() {
 
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
-      const signedEdge = (at, side) => {
-        const edge = G.roadEdgesAt ? G.roadEdgesAt(at) : null;
-        return edge ? worldEdge(edge, side) : G.roadOuterLat(at, side);
+      const decorAt = (at, side, gap) => {
+        const frame = G.roadsideFrameAt(at);
+        const pose = G.besidePose(frame, { side, gap, inset: 0 });
+        return pose.lateral == null ? frame.origin : pose.lateral;
       };
-      const originAt = (at) => (G.roadOriginAt ? G.roadOriginAt(at) : 0);
-      const leftEdge = signedEdge(slot.s, -1);
-      const rightEdge = signedEdge(slot.s, 1);
-      const origin = originAt(slot.s);
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
       slot.lastDom = dom;
+      const leftLamp = decorAt(slot.s, -1, 0.8);
+      const rightLamp = decorAt(slot.s, 1, 0.8);
+      const leftProp = decorAt(slot.s, -1, 12);
+      const rightProp = decorAt(slot.s, 1, 12);
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        const leftLamp = outwardFrom(leftEdge, origin, 0.8);
-        const rightLamp = outwardFrom(rightEdge, origin, 0.8);
-        const leftProp = outwardFrom(leftEdge, origin, 12);
-        const rightProp = outwardFrom(rightEdge, origin, 12);
         G.placeOnRoad(slot.leftLamp, slot.s, leftLamp, 0);
         G.placeOnRoad(slot.rightLamp, slot.s, rightLamp, 0);
         G.placeOnRoad(slot.leftProp, slot.s, leftProp, G.groundOffset(leftProp, slot.s));
@@ -408,8 +404,7 @@ export function initRoadside() {
         if (slot.billboard) {
           const bb = slot.billboard;
           const boardS = slot.s + 6;
-          const boardEdge = signedEdge(boardS, bb.side < 0 ? -1 : 1);
-          const boardLat = outwardFrom(boardEdge, originAt(boardS), 4.8);
+          const boardLat = decorAt(boardS, bb.side < 0 ? -1 : 1, 4.8);
           G.placeOnRoad(bb.group, boardS, boardLat, G.groundOffset(boardLat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
@@ -419,7 +414,7 @@ export function initRoadside() {
           const wf = Math.max(1, span / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
         }
-      }, Math.round((leftEdge + rightEdge) * 50) + Math.round(city * 20) * 100000);
+      }, Math.round((leftLamp + rightLamp) * 50) + Math.round(city * 20) * 100000);
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.

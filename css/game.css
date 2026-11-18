@@ -137,6 +137,7 @@ button{font-family:var(--ds-font)}
   color:var(--bf-accent);
 }
 #split-banner.decided .split-head{color:var(--bf-signal)}
+#split-banner.decided .split-opt:not(.active){opacity:.38}
 #split-banner .split-row{
   display:grid;grid-template-columns:1fr 1fr;gap:7px;
 }

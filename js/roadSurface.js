@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, shoulderLats, worldEdge } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -43,14 +43,26 @@ export function initRoadSurface() {
   }
 
   function edgeLat(s, side) {
-    return worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1);
+    return worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1, roadCenter(s));
+  }
+
+/** Наружу от центра дороги. Знак кромки сам по себе сторону не задаёт. */
+  function outwardSign(s, edge) {
+    return edge < roadCenter(s) ? -1 : 1;
   }
 
   /** Белая линия чуть внутрь кромки, даже если вся дорога уже справа от оси. */
   function insetEdge(s, side, inset) {
     const edge = edgeLat(s, side);
-    const outward = edge < 0 ? -1 : 1;
-    return edge - outward * inset;
+    return edge - outwardSign(s, edge) * inset;
+  }
+
+  /** Точка откоса: fromCenter — удаление от центра, как у shoulderLats. */
+  function slopeLat(s, side, fromCenter) {
+    const edge = edgeLat(s, side);
+    const origin = roadCenter(s);
+    const edgeDist = Math.abs(edge - origin);
+    return outwardFrom(edge, origin, Math.max(0, fromCenter - edgeDist));
   }
 
   function roadPointAt(out, s, lat, yOffset) {
@@ -198,9 +210,9 @@ export function initRoadSurface() {
   slopeRightMesh.frustumCulled = false;
   G.scene.add(slopeRightMesh);
 
-  /** Внешний асфальт: за живой лентой, без умирающего съезда. */
+/** Удаление живой кромки от центра дороги. Откос начинается отсюда, не от нуля. */
   function farAsphalt(s, side) {
-    return Math.abs(worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1));
+    return Math.abs(edgeLat(s, side) - roadCenter(s));
   }
 
   function shadeSlope(geo, side) {
@@ -227,12 +239,16 @@ export function initRoadSurface() {
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
       };
       const sh = G.shoulder;
-      const asphalt = farAsphalt(sampleS[r], side);
+      const s = sampleS[r];
+      const asphalt = farAsphalt(s, side);
       const cityOuter = sh.cityEdge * sampleCity[r];
       const lat = shoulderLats(asphalt, cityOuter, sh);
-      write(0, -lat.far, -lat.berm, sh.farY, sh.bermY);
-      write(1, -lat.far, -lat.lip, sh.farY, sh.lipY);
-      write(2, -lat.berm, -lat.lip, sh.bermY, sh.lipY);
+      const far = slopeLat(s, side, lat.far);
+      const berm = slopeLat(s, side, lat.berm);
+      const lip = slopeLat(s, side, lat.lip);
+      write(0, far, berm, sh.farY, sh.bermY);
+      write(1, far, lip, sh.farY, sh.lipY);
+      write(2, berm, lip, sh.bermY, sh.lipY);
     }
     geo.attributes.normal.needsUpdate = true;
   }
@@ -375,8 +391,7 @@ export function initRoadSurface() {
       if (weight > maxWeight) maxWeight = weight;
       const vis = weight > 0.02 ? weight : 0;
       const edge = edgeLat(s, side);
-      const outward = edge < 0 ? -1 : 1;
-      const lat = edge + outward * GUARD_OFFSET;
+      const lat = edge + outwardSign(s, edge) * GUARD_OFFSET;
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
       const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
@@ -419,8 +434,7 @@ export function initRoadSurface() {
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
         const edge = edgeLat(s, side);
-        const outward = edge < 0 ? -1 : 1;
-        const lat = edge + outward * GUARD_OFFSET;
+        const lat = edge + outwardSign(s, edge) * GUARD_OFFSET;
         dummy.scale.set(weight, weight, weight);
         G.placeOnRoad(dummy, s, lat, 0.31 * weight);
         dummy.updateMatrix();
@@ -484,10 +498,8 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const edge = edgeLat(sampleS[r], side);
-      const outward = edge < 0 ? -1 : 1;
-      const inner = Math.abs(edge) + baseWidth * cw;
       const halfW = width * 0.5 * cw;
-      const center = edge + outward * (baseWidth * cw + halfW);
+      const center = edge + outwardSign(sampleS[r], edge) * (baseWidth * cw + halfW);
       const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
@@ -506,16 +518,17 @@ export function initRoadSurface() {
       const rx = rightX[r], rz = rightZ[r];
       const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
-      const left = shoulderLats(farAsphalt(sampleS[r], -1), cityOuter, sh);
-      const right = shoulderLats(farAsphalt(sampleS[r], 1), cityOuter, sh);
+      const s = sampleS[r];
+      const left = shoulderLats(farAsphalt(s, -1), cityOuter, sh);
+      const right = shoulderLats(farAsphalt(s, 1), cityOuter, sh);
       const idx = r * 3;
-      posL.setXYZ(idx,     cx + rx * -left.far, cy + sh.farY, cz + rz * -left.far);
-      posL.setXYZ(idx + 1, cx + rx * -left.berm, cy + sh.bermY, cz + rz * -left.berm);
-      posL.setXYZ(idx + 2, cx + rx * -left.lip, cy + sh.lipY, cz + rz * -left.lip);
+      posL.setXYZ(idx,     cx + rx * slopeLat(s, -1, left.far), cy + sh.farY, cz + rz * slopeLat(s, -1, left.far));
+      posL.setXYZ(idx + 1, cx + rx * slopeLat(s, -1, left.berm), cy + sh.bermY, cz + rz * slopeLat(s, -1, left.berm));
+      posL.setXYZ(idx + 2, cx + rx * slopeLat(s, -1, left.lip), cy + sh.lipY, cz + rz * slopeLat(s, -1, left.lip));
 
-      posR.setXYZ(idx,     cx + rx * right.lip, cy + sh.lipY, cz + rz * right.lip);
-      posR.setXYZ(idx + 1, cx + rx * right.berm, cy + sh.bermY, cz + rz * right.berm);
-      posR.setXYZ(idx + 2, cx + rx * right.far, cy + sh.farY, cz + rz * right.far);
+      posR.setXYZ(idx,     cx + rx * slopeLat(s, 1, right.lip), cy + sh.lipY, cz + rz * slopeLat(s, 1, right.lip));
+      posR.setXYZ(idx + 1, cx + rx * slopeLat(s, 1, right.berm), cy + sh.bermY, cz + rz * slopeLat(s, 1, right.berm));
+      posR.setXYZ(idx + 2, cx + rx * slopeLat(s, 1, right.far), cy + sh.farY, cz + rz * slopeLat(s, 1, right.far));
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -637,28 +650,39 @@ export function initRoadSurface() {
       updateIslandStrip(accentLineR, 1);
     }
 
-    // Прямые стрелки остаются на основной дороге. Стрелки съезда — на его ленте.
+    // Стрелки стоят на участке выбора, где обе ленты уже полной ширины.
+    // Прямые — по центру дороги, съезд — по центру его ленты.
     const exitCenterAt = (s) => {
       const edge = G.roadEdgesAt(s);
       const width = edge.rightOuter - edge.rightInner;
       if (width < 1.2) return null;
       return (edge.rightInner + edge.rightOuter) * 0.5;
     };
+    const decided = !!(G.splitState && G.splitState.chosen);
+    const tookExit = decided && G.splitState.chosenSide === 1;
+    const stayed = decided && G.splitState.chosenSide === 0;
+    accentLineMatL.opacity = !decided || stayed ? 0.9 : 0.22;
+    accentLineMatR.opacity = !decided || tookExit ? 0.9 : 0.22;
+    const markS = [
+      splitS + EXIT_DIVERGE + 36,
+      splitS + EXIT_DIVERGE + EXIT_RUN * 0.62
+    ];
     const forward = [
-      { mesh: arrowLeftA, s: splitS + 40 },
-      { mesh: arrowLeftB, s: splitS + EXIT_DIVERGE * 0.7 }
+      { mesh: arrowLeftA, s: markS[0] },
+      { mesh: arrowLeftB, s: markS[1] }
     ];
     for (const a of forward) {
-      a.mesh.visible = active;
-      if (!active) continue;
-      placeAlongLane(a.mesh, a.s, 0, 0, 2.4, 0.055);
+      a.mesh.visible = active && !tookExit;
+      if (!a.mesh.visible) continue;
+      const lat = roadCenter(a.s);
+      placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
     }
     const exiting = [
-      { mesh: arrowRightA, s: splitS + 40 },
-      { mesh: arrowRightB, s: splitS + EXIT_DIVERGE * 0.7 }
+      { mesh: arrowRightA, s: markS[0] },
+      { mesh: arrowRightB, s: markS[1] }
     ];
     for (const a of exiting) {
-      const lat = active ? exitCenterAt(a.s) : null;
+      const lat = active && !stayed ? exitCenterAt(a.s) : null;
       a.mesh.visible = lat != null;
       if (lat == null) continue;
       placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);

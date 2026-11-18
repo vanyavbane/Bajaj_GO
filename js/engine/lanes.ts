@@ -64,7 +64,11 @@ export function laneDashOffsets(offsets: number[] | null | undefined, oncomingCo
   const split = oncomingCount | 0;
   for (let i = 0; i < offsets.length - 1; i++) {
     if (i + 1 === split) continue;
-    marks.push(((offsets[i] ?? Number.NaN) + (offsets[i + 1] ?? Number.NaN)) * 0.5);
+    const left = offsets[i];
+    const right = offsets[i + 1];
+    if (typeof left !== 'number' || typeof right !== 'number') continue;
+    if (!Number.isFinite(left) || !Number.isFinite(right)) continue;
+    marks.push((left + right) * 0.5);
   }
   return marks;
 }
