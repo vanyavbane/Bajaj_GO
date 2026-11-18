@@ -26,8 +26,8 @@ const PARK_EDGE = FORK_LEAD - 26;
 /** Отступ от кромки асфальта до ствола и лавочки, метров. */
 const PARK_MARGIN = 3.2;
 /** Сколько метров до/после центра развилки парк вообще виден. */
-const VIEW_BEHIND = 170;
-const VIEW_AHEAD = 240;
+const VIEW_BEHIND = 700;
+const VIEW_AHEAD = 360;
 
 /** Детерминированный генератор: парк одинаковый в каждом заезде. */
 function makeRandom(seed) {

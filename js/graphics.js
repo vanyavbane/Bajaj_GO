@@ -14,7 +14,7 @@ const LABELS = {
 };
 
 function copyPreset(name) {
-  return { preset: name, ...PRESETS[name] };
+  return { preset: name, ...PRESETS[name], hdrPlus: false, sharpness: 0, brightness: 0 };
 }
 
 function detectPreset(graphics) {
@@ -31,6 +31,12 @@ function detectPreset(graphics) {
   return 'custom';
 }
 
+function clampNum(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 function sanitize(raw) {
   const shadows = raw && (raw.shadows === 'off' || raw.shadows === 'low' || raw.shadows === 'high')
     ? raw.shadows : 'low';
@@ -38,7 +44,10 @@ function sanitize(raw) {
   const lamps = raw && (raw.lamps === 0 || raw.lamps === 2 || raw.lamps === 4 || raw.lamps === 6) ? raw.lamps : 2;
   const reflections = !!(raw && raw.reflections);
   const exposure = raw && raw.exposure === 1.18 ? 1.18 : 1;
-  const graphics = { shadows, scale, lamps, reflections, exposure, preset: 'custom' };
+  const hdrPlus = !!(raw && raw.hdrPlus);
+  const sharpness = clampNum(raw && raw.sharpness, -100, 100, 0);
+  const brightness = clampNum(raw && raw.brightness, -100, 100, 0);
+  const graphics = { shadows, scale, lamps, reflections, exposure, hdrPlus, sharpness, brightness, preset: 'custom' };
   graphics.preset = detectPreset(graphics);
   return graphics;
 }
@@ -93,21 +102,47 @@ export function initGraphics() {
 
     // Composer и буферы пост-эффектов должны совпадать с новым размером/DPR.
     if (G.applyPostFxSize) G.applyPostFxSize();
+
+    if (G.postFx) {
+      const b = (current.brightness || 0) / 100;
+      if (G.postFx.brightnessPass) {
+        G.postFx.brightnessPass.uniforms.uAmount.value = b;
+        G.postFx.brightnessPass.enabled = Math.abs(b) > 0.001;
+      }
+      if (G.postFx.hdrPlusPass) G.postFx.hdrPlusPass.enabled = !!current.hdrPlus;
+      const sh = (current.sharpness || 0) / 100;
+      if (G.postFx.sharpenPass) {
+        G.postFx.sharpenPass.uniforms.uAmount.value = sh;
+        G.postFx.sharpenPass.enabled = Math.abs(sh) > 0.001;
+      }
+    }
   }
 
   function chooseGraphics(key, raw) {
     const current = G.graphics;
     if (key === 'preset' && PRESETS[raw]) {
       G.graphics = copyPreset(raw);
-    } else if (key === 'shadows' || key === 'scale' || key === 'lamps' || key === 'reflections') {
+    } else if (key === 'shadows' || key === 'scale' || key === 'lamps' || key === 'reflections' || key === 'hdrPlus') {
       if (key === 'scale' || key === 'lamps') current[key] = Number(raw);
       else if (key === 'reflections') current.reflections = raw === 'true' || raw === '1';
+      else if (key === 'hdrPlus') current.hdrPlus = raw === 'true' || raw === '1' || raw === true;
       else current.shadows = raw;
       current.preset = detectPreset(current);
     }
     applyGraphics();
     G.saveGarage();
   }
+
+  function setGraphicsValue(key, value) {
+    const current = G.graphics;
+    if (key === 'sharpness' || key === 'brightness') {
+      current[key] = clampNum(value, -100, 100, 0);
+    }
+    applyGraphics();
+    G.saveGarage();
+  }
+
+  G.setGraphicsValue = setGraphicsValue;
 
   G.applyGraphics = applyGraphics;
   G.chooseGraphics = chooseGraphics;

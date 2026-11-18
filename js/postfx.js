@@ -105,7 +105,7 @@ class MotionBlurPass extends Pass {
 
   render(renderer, writeBuffer, readBuffer) {
     this.uniforms.tDiffuse.value = readBuffer.texture;
-    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    renderer.setRenderTarget(/** @type {any} */ (this).renderToScreen ? null : writeBuffer);
     this.fsQuad.render(renderer);
   }
 }
@@ -248,7 +248,209 @@ class GodRaysPass extends Pass {
 
     // 2. Наложение лучей на кадр.
     this.fsQuad.material = this.compositeMaterial;
-    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    renderer.setRenderTarget(/** @type {any} */ (this).renderToScreen ? null : writeBuffer);
+    this.fsQuad.render(renderer);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Brightness: мягкое изменение яркости без пересветов. uAmount в [-1..1].
+ * При 0 проход отключается (пиксель-в-пиксель исходник).
+ * ------------------------------------------------------------------------ */
+const BRIGHTNESS_FRAGMENT = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform float uAmount;
+  varying vec2 vUv;
+
+  void main() {
+    vec4 c = texture2D(tDiffuse, vUv);
+    float e = exp2(uAmount * 1.2);
+    vec3 col = c.rgb * e;
+    float hi = max(uAmount, 0.0);
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    // Мягкое сжатие светов при повышении яркости — без «выжигания» в белое.
+    col = col / (1.0 + lum * 0.65 * hi);
+    // При затемнении чуть приподнимаем тени, чтобы не было «чёрных провалов».
+    float lo = max(-uAmount, 0.0);
+    vec3 lifted = 1.0 - exp(-col * 1.35);
+    col = mix(col, lifted, 0.22 * lo);
+    gl_FragColor = vec4(col, c.a);
+  }
+`;
+
+class BrightnessPass extends Pass {
+  constructor() {
+    super();
+    this.enabled = false;
+    this.needsSwap = true;
+    this.uniforms = {
+      tDiffuse: { value: null },
+      uAmount: { value: 0 }
+    };
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: BRIGHTNESS_FRAGMENT,
+      depthTest: false,
+      depthWrite: false
+    });
+    this.fsQuad = new FullScreenQuad(this.material);
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(/** @type {any} */ (this).renderToScreen ? null : writeBuffer);
+    this.fsQuad.render(renderer);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * HDR+: локальное тональное сжатие с усилением деталей в тенях/светах.
+ * Оценка локальной яркости — по окрестности (12 сэмплов), без тяжёлых
+ * мультипроходных гауссов. При выключении проход отключается.
+ * ------------------------------------------------------------------------ */
+const HDR_PLUS_FRAGMENT = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform vec2 uTexel;
+  varying vec2 vUv;
+
+  void main() {
+    vec4 c = texture2D(tDiffuse, vUv);
+    vec3 lumW = vec3(0.2126, 0.7152, 0.0722);
+    float L = dot(c.rgb, lumW);
+
+    // Локальное среднее: центр + 12 сэмплов в два кольца.
+    vec3 blur = c.rgb * 4.0;
+    vec2 o1 = uTexel * 1.5;
+    vec2 o2 = uTexel * 3.5;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( o1.x,  0.0), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2(-o1.x,  0.0), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( 0.0,  o1.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( 0.0, -o1.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( o2.x,  0.0), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2(-o2.x,  0.0), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( 0.0,  o2.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( 0.0, -o2.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( o1.x,  o1.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2(-o1.x,  o1.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2( o1.x, -o1.y), 0.001, 0.999)).rgb;
+    blur += texture2D(tDiffuse, clamp(vUv + vec2(-o1.x, -o1.y), 0.001, 0.999)).rgb;
+    blur /= 16.0;
+    float Lb = dot(blur, lumW);
+
+    // Локальный контраст: усиливаем отличие от окружения.
+    float detail = L - Lb;
+    float Ld = Lb + detail * 1.45;
+
+    // Мягкое тональное сжатие (без клиппинга).
+    float Lc = Ld / (1.0 + max(Ld, 0.0) * 0.75);
+
+    float scale = (L > 1e-5) ? (Lc / L) : 1.0;
+    scale = clamp(scale, 0.2, 4.0);
+    vec3 col = c.rgb * scale;
+
+    // Лёгкое раскрытие теней без пересветов.
+    col = mix(col, 1.0 - exp(-col * 1.15), 0.12);
+    // Финальная защита от пересвета.
+    float l2 = dot(col, lumW);
+    col = col / (1.0 + max(l2 - 1.0, 0.0) * 0.35);
+
+    gl_FragColor = vec4(max(col, 0.0), c.a);
+  }
+`;
+
+class HDRPlusPass extends Pass {
+  constructor() {
+    super();
+    this.enabled = false;
+    this.needsSwap = true;
+    this.uniforms = {
+      tDiffuse: { value: null },
+      uTexel: { value: new THREE.Vector2(1, 1) }
+    };
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: HDR_PLUS_FRAGMENT,
+      depthTest: false,
+      depthWrite: false
+    });
+    this.fsQuad = new FullScreenQuad(this.material);
+  }
+
+  setSize(width, height) {
+    this.uniforms.uTexel.value.set(1 / Math.max(1, width), 1 / Math.max(1, height));
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(/** @type {any} */ (this).renderToScreen ? null : writeBuffer);
+    this.fsQuad.render(renderer);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Резкость: >0 — unsharp mask, <0 — мягкое размытие, 0 — проход отключён.
+ * uAmount в [-1..1]. Защита от «звона» на резких краях.
+ * ------------------------------------------------------------------------ */
+const SHARPEN_FRAGMENT = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform vec2 uTexel;
+  uniform float uAmount;
+  varying vec2 vUv;
+
+  void main() {
+    vec4 c = texture2D(tDiffuse, vUv);
+    vec3 cN = texture2D(tDiffuse, clamp(vUv + vec2(0.0, uTexel.y), 0.001, 0.999)).rgb;
+    vec3 cS = texture2D(tDiffuse, clamp(vUv - vec2(0.0, uTexel.y), 0.001, 0.999)).rgb;
+    vec3 cE = texture2D(tDiffuse, clamp(vUv + vec2(uTexel.x, 0.0), 0.001, 0.999)).rgb;
+    vec3 cW = texture2D(tDiffuse, clamp(vUv - vec2(uTexel.x, 0.0), 0.001, 0.999)).rgb;
+    vec3 blur = (c.rgb + cN + cS + cE + cW) / 5.0;
+
+    vec3 col;
+    if (uAmount > 0.0) {
+      vec3 d = c.rgb - blur;
+      col = c.rgb + d * (uAmount * 1.6);
+      // Анти-звон: не даём перескочить дальше разумного от соседей.
+      vec3 hi = max(max(max(cN, cS), max(cE, cW)), c.rgb);
+      vec3 lo = min(min(min(cN, cS), min(cE, cW)), c.rgb);
+      vec3 margin = (hi - lo) * (0.6 + 0.8 * uAmount) + 0.02;
+      col = clamp(col, lo - margin, hi + margin);
+      col = max(col, 0.0);
+    } else {
+      col = mix(c.rgb, blur, clamp(-uAmount, 0.0, 1.0));
+    }
+    gl_FragColor = vec4(col, c.a);
+  }
+`;
+
+class SharpenPass extends Pass {
+  constructor() {
+    super();
+    this.enabled = false;
+    this.needsSwap = true;
+    this.uniforms = {
+      tDiffuse: { value: null },
+      uTexel: { value: new THREE.Vector2(1, 1) },
+      uAmount: { value: 0 }
+    };
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: SHARPEN_FRAGMENT,
+      depthTest: false,
+      depthWrite: false
+    });
+    this.fsQuad = new FullScreenQuad(this.material);
+  }
+
+  setSize(width, height) {
+    this.uniforms.uTexel.value.set(1 / Math.max(1, width), 1 / Math.max(1, height));
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(/** @type {any} */ (this).renderToScreen ? null : writeBuffer);
     this.fsQuad.render(renderer);
   }
 }
@@ -331,16 +533,22 @@ export function initPostFx() {
   /* ---------- Composer ---------- */
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
+  const brightnessPass = new BrightnessPass();
+  const hdrPlusPass = new HDRPlusPass();
   const godRaysPass = new GodRaysPass();
   const motionBlurPass = new MotionBlurPass();
+  const sharpenPass = new SharpenPass();
   const outputPass = new OutputPass();
 
   composer.addPass(renderPass);
+  composer.addPass(brightnessPass);
+  composer.addPass(hdrPlusPass);
   composer.addPass(godRaysPass);
   composer.addPass(motionBlurPass);
+  composer.addPass(sharpenPass);
   composer.addPass(outputPass);
 
-  G.postFx = { composer, renderPass, godRaysPass, motionBlurPass, outputPass };
+  G.postFx = { composer, renderPass, brightnessPass, hdrPlusPass, godRaysPass, motionBlurPass, sharpenPass, outputPass };
   G.postFxLevel = 1;
 
   function applySize() {
@@ -418,6 +626,19 @@ export function initPostFx() {
 
   function updateRenderFrame(dt) {
     updateAutoQuality(dt);
+
+    const g = G.graphics;
+    if (g) {
+      const b = (g.brightness || 0) / 100;
+      brightnessPass.uniforms.uAmount.value = b;
+      brightnessPass.enabled = Math.abs(b) > 0.001;
+
+      hdrPlusPass.enabled = !!g.hdrPlus;
+
+      const sh = (g.sharpness || 0) / 100;
+      sharpenPass.uniforms.uAmount.value = sh;
+      sharpenPass.enabled = Math.abs(sh) > 0.001;
+    }
 
     if (G.visual) {
       const paused = G.paused || G.uiModal;

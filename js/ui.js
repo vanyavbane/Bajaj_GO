@@ -93,10 +93,32 @@ export function initUi() {
         ${field('Тени', option('shadows', 'off', 'Нет') + option('shadows', 'low', 'Рядом') + option('shadows', 'high', 'Чётче'))}
         ${field('Масштаб кадра', option('scale', 0.75, '0.75') + option('scale', 1, '1') + option('scale', 1.25, '1.25'))}
         ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4') + option('lamps', 6, '6'))}
-        ${note('Отражения перенесены во вкладку «Освещение».')}
+        <div class="cam-slider-block">
+          <div class="cam-slider-head">
+            <span>РЕЗКОСТЬ</span>
+            <b><span id="gfx-sharp-val">${Math.round(g.sharpness || 0)}</span></b>
+          </div>
+          <input type="range" id="gfx-sharp-range" min="-100" max="100" step="1" value="${Math.round(g.sharpness || 0)}">
+          <div class="cam-slider-hint">0 — как сейчас · &lt; 0 мягче · &gt; 0 чётче. Двойной тап по значению — сброс в 0.</div>
+        </div>
+        <div class="cam-slider-block">
+          <div class="cam-slider-head">
+            <span>ЯРКОСТЬ</span>
+            <b><span id="gfx-bright-val">${Math.round(g.brightness || 0)}</span></b>
+          </div>
+          <input type="range" id="gfx-bright-range" min="-100" max="100" step="1" value="${Math.round(g.brightness || 0)}">
+          <div class="cam-slider-hint">0 — как сейчас · мягкая регулировка без пересветов. Двойной тап по значению — сброс в 0.</div>
+        </div>
+        ${note('Отражения и HDR+ — во вкладке «Освещение».')}
       `;
     } else if (tab === 'lighting') {
       body = `
+        ${inline('HDR+', button({
+          id: 'fx-toggle-hdr',
+          variant: 'compact',
+          label: fxState(!!g.hdrPlus),
+          pressed: !!g.hdrPlus
+        }))}
         ${inline('🪞 Отражения', button({
           id: 'fx-toggle-reflections',
           variant: 'compact',
@@ -209,12 +231,52 @@ export function initUi() {
         fxOpenModal(() => renderGodRaysSettings(() => renderSettings('lighting', from), from === 'pause'));
       });
     }
+    const toggleHdr = document.getElementById('fx-toggle-hdr');
+    if (toggleHdr) {
+      toggleHdr.addEventListener('click', () => {
+        G.chooseGraphics('hdrPlus', g.hdrPlus ? 'false' : 'true');
+        renderSettings('lighting', from);
+      });
+    }
     const toggleReflections = document.getElementById('fx-toggle-reflections');
     if (toggleReflections) {
       toggleReflections.addEventListener('click', () => {
         G.chooseGraphics('reflections', g.reflections ? 'false' : 'true');
         renderSettings('lighting', from);
       });
+    }
+
+    const sharpRange = /** @type {HTMLInputElement|null} */ (document.getElementById('gfx-sharp-range'));
+    if (sharpRange) {
+      const valEl = document.getElementById('gfx-sharp-val');
+      sharpRange.addEventListener('input', () => {
+        const v = G.clamp(Number(sharpRange.value), -100, 100);
+        if (valEl) valEl.textContent = String(Math.round(v));
+        if (G.setGraphicsValue) G.setGraphicsValue('sharpness', v);
+      });
+      if (valEl) {
+        valEl.addEventListener('dblclick', () => {
+          sharpRange.value = '0';
+          valEl.textContent = '0';
+          if (G.setGraphicsValue) G.setGraphicsValue('sharpness', 0);
+        });
+      }
+    }
+    const brightRange = /** @type {HTMLInputElement|null} */ (document.getElementById('gfx-bright-range'));
+    if (brightRange) {
+      const valEl = document.getElementById('gfx-bright-val');
+      brightRange.addEventListener('input', () => {
+        const v = G.clamp(Number(brightRange.value), -100, 100);
+        if (valEl) valEl.textContent = String(Math.round(v));
+        if (G.setGraphicsValue) G.setGraphicsValue('brightness', v);
+      });
+      if (valEl) {
+        valEl.addEventListener('dblclick', () => {
+          brightRange.value = '0';
+          valEl.textContent = '0';
+          if (G.setGraphicsValue) G.setGraphicsValue('brightness', 0);
+        });
+      }
     }
     const cam = document.getElementById('settings-cam');
     if (cam) {

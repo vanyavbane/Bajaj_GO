@@ -34,12 +34,59 @@ export function initRoad() {
   const _qRoad = new THREE.Quaternion();
   const _qExtra = new THREE.Quaternion();
   const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const _pA = new THREE.Vector3();
+  const _pB = new THREE.Vector3();
+
+  /** Смещение полосы: число либо функция от s — тогда тангенс идёт по линии полосы. */
+  function latAt(lat, s) {
+    return typeof lat === 'function' ? lat(s) : lat;
+  }
+
+  /** Мировая точка дороги со сдвигом оси развилки — та же формула, что и у позиции. */
+  function roadPoint(out, s, lat, heightOffset) {
+    const dx = roadDX(s);
+    const lh = Math.hypot(dx, 1) || 1;
+    const total = lat + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
+    out.set(roadX(s) + total / lh, roadY(s) + heightOffset, -s + total * dx / lh);
+    return out;
+  }
+
+  /**
+   * Мировое смещение для касательной. Числовой world-offset callers обычно
+   * считают в точке s и он уже включает разъезд ветки (splitLateralShiftAtS).
+   * Чтобы касательная шла вдоль ветки, а не вдоль оси, переносим вклад
+   * разъезда на sSample: lat + forkSide(lat)*(spread(sSample) - spread(s)).
+   * Сдвиг оси (centerShift) добавляется отдельно в roadPoint.
+   */
+  function latForTangent(lat, sSample, sRef) {
+    if (typeof lat === 'function') return lat(sSample);
+    if (!G.forkSpreadAtS) return lat;
+    const spreadRef = G.forkSpreadAtS(sRef);
+    const spreadSample = G.forkSpreadAtS(sSample);
+    if (spreadRef <= 0.001 && spreadSample <= 0.001) return lat;
+    const side = lat <= 0 ? -1 : 1;
+    return lat + side * (spreadSample - spreadRef);
+  }
 
   function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
     const dx = roadDX(s);
     const dy = roadDY(s);
-    // Касательная пути: ds даёт (roadDX, roadDY, -1). Нос модели смотрит в −Z.
-    _forward.set(dx, dy, -1).normalize();
+    const shift = G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0;
+    const spread = G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
+    if (shift !== 0 || spread > 0.001) {
+      // На разъезде ось уезжает вбок, а лента ещё и сжимается: касательную
+      // берём по фактическому пути объекта. Иначе байк, трафик и отбойник
+      // едут боком (до ~30° поперёк своей полосы).
+      const h = 0.8;
+      roadPoint(_pA, s - h, latForTangent(lateralOffset, s - h, s), 0);
+      roadPoint(_pB, s + h, latForTangent(lateralOffset, s + h, s), 0);
+      _forward.subVectors(_pB, _pA);
+      if (_forward.lengthSq() < 1e-8) _forward.set(dx, dy, -1);
+      _forward.normalize();
+    } else {
+      // Касательная пути: ds даёт (roadDX, roadDY, -1). Нос модели смотрит в −Z.
+      _forward.set(dx, dy, -1).normalize();
+    }
     _right.set(-_forward.z, 0, _forward.x);
     if (_right.lengthSq() < 1e-8) _right.set(1, 0, 0);
     else _right.normalize();
@@ -56,7 +103,7 @@ export function initRoad() {
 
     // Смещение по полосе — в горизонтали, как у ленты асфальта. Дорога без крена.
     const lh = Math.hypot(dx, 1) || 1;
-    const lat = lateralOffset + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
+    const lat = latAt(lateralOffset, s) + shift;
     obj.position.set(
       roadX(s) + lat / lh,
       roadY(s) + heightOffset,

@@ -17,7 +17,8 @@ import { G } from './state.js';
  * ========================================================================= */
 
 const ZONE_M = 1500;              // длина одной локации
-const FADE_M = 150;              // кросс-фейд после границы зоны, метров
+const FADE_M = 150;              // кросс-фейд развязки (сход выбранной ветки)
+const ROAD_FADE_M = 350;         // плавный переход профиля/ширины дороги между биомами после границы зоны, метров
 const SPLIT_LEAD = FORK_LEAD;
 const SPLIT_AUTO_D = 30;         // авто-выбор после центра развилки
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
@@ -398,12 +399,12 @@ function blendMetersAt(s) {
 }
 
 function fadeWeights(local) {
-  if (!(local < FADE_M)) return { t: 1, t1: 0, t2: 0 };
-  const u = Math.max(0, Math.min(1, local / FADE_M));
+  if (!(local < ROAD_FADE_M)) return { t: 1, t1: 0, t2: 0 };
+  const u = Math.max(0, Math.min(1, local / ROAD_FADE_M));
   return {
     t: u * u * (3 - 2 * u),
-    t1: (6 * u * (1 - u)) / FADE_M,
-    t2: (6 - 12 * u) / (FADE_M * FADE_M)
+    t1: (6 * u * (1 - u)) / ROAD_FADE_M,
+    t2: (6 - 12 * u) / (ROAD_FADE_M * ROAD_FADE_M)
   };
 }
 
@@ -540,7 +541,7 @@ function splitCenterS(playerS) {
 
 function roadBiomeAtS(s) {
   const r = roadAtMeters(blendMetersAt(s));
-  return r.t < 0.5 ? r.a : r.b;
+  return r.b;
 }
 
 /** Наибольшее |смещение| полос биома. Нужно для масштаба разметки. */
@@ -1270,7 +1271,10 @@ function updateBiome(dt) {
   const live = liveAtMeters(meters);
   const weights = fillWeights(live);
 
-  const dominant = live.t < 0.5 ? live.a : live.b;
+  // Конфиг/идентичность биома — по зоне (b). Профиль дороги плавно морфит
+  // от a к b по t, но переключение логики на середине перехода давало резкую
+  // «перестройку» биома после выезда с развязки.
+  const dominant = live.b;
   const zone = live.zone;
   const cityWeight = weights[CITY];
   const mkadWeight = weights[MKAD];
@@ -1414,6 +1418,7 @@ function resetBiomeRun() {
   hideBiomeBanner();
   hideSplitBanner();
   G.splitState = null;
+  if (G.resetBiomeScenery) G.resetBiomeScenery();
   applyLaneConfig(zoneBiomeAt(zone), G.playerS);
 }
 
