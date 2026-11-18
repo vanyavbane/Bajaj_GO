@@ -8,6 +8,7 @@ import { initControls } from './controls.js';
 import { initDebug } from './debug.js';
 import { initEconomy } from './economy.js';
 import { initEffects } from './effects.js';
+import { initForkPark } from './forkPark.js';
 import { initGraphics } from './graphics.js';
 import { initHighbeam } from './highbeam.js';
 import { initInput } from './input.js';
@@ -39,6 +40,8 @@ initBiomeWorld();
 initSky();
 initWeather();
 initRoadSurface();
+// Парк стоит на островке развилки: ему нужны и полотно, и материалы сцены.
+initForkPark();
 // Реклама стартует до roadside: модуль уже существует, а файлы догружаются
 // асинхронно и в любой момент увеличивают version — слоты перевыберут баннер.
 initAdManager();

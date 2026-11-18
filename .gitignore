@@ -18,3 +18,5 @@ desktop.ini
 # Временное
 *.log
 *.tmp
+.tmp-build/
+.tmp-verify/

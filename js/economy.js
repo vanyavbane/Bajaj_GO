@@ -590,7 +590,7 @@ export function initEconomy() {
     for (let i = 0; i < exitPool.length; i++) {
       const e = exitPool[i];
       e.type = rotation[i % rotation.length];
-      e.side = (i % 2 === 0) ? 1 : -1;
+      e.side = exitSideAt(e.s);
       e.s = s;
       e.used = false;
       e.zoneFlash = 0;
@@ -602,7 +602,23 @@ export function initEconomy() {
 
   let exitPrevS = null;
 
-/** Попутная полоса у обочины. Слева это ближайшая своя полоса, не встречная. */
+/** На какой обочине стоят точки интереса. 'right' — все на правой обочине:
+ *  маркер «левой» точки падал на внутреннюю попутную полосу посреди дороги.
+ *  Значения: 'right' | 'left' | 'both' (чередование, как раньше). */
+const POI_SIDES = /** @type {'right' | 'left' | 'both'} */ ('right');
+
+/**
+ * Сторона точки интереса в точке s. На развилке берём ветку игрока:
+ * на невыбранной ветке roadOuterLat схлопывается, и модель уехала бы на асфальт.
+ */
+function exitSideAt(s) {
+  if (POI_SIDES === 'left') return -1;
+  if (POI_SIDES !== 'right') return Math.random() < 0.5 ? 1 : -1;
+  const chosen = G.forkChosenSideAtS ? G.forkChosenSideAtS(s) : 0;
+  return chosen !== 0 ? chosen : 1;
+}
+
+/** Попутная полоса у обочины. Справа это крайняя попутная полоса, слева — ближайшая своя, не встречная. */
 function exitLane(s, side) {
   const cfg = G.lanesAtS(s);
   return side >= 0 ? cfg.offsets[cfg.count - 1] : cfg.offsets[cfg.oncomingCount];
@@ -625,7 +641,7 @@ function exitLane(s, side) {
       if (e.s < G.playerS - 50) {
         maxS += EXIT_MIN_GAP + Math.random() * (EXIT_MAX_GAP - EXIT_MIN_GAP);
         e.s = maxS;
-        e.side = Math.random() < 0.5 ? 1 : -1;
+        e.side = exitSideAt(e.s);
         e.type = chooseExitType();
         e.used = false;
         e.zoneFlash = 0;

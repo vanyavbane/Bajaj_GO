@@ -184,13 +184,16 @@ export function initTraffic() {
     const menuDemo = !G.started && !G.ended;
     const dominant = G.roadBiomeAtS(G.playerS + 240);
     const mask = activeMask[dominant] || activeMask[0];
+    // Окно разъезда: новые машины не спавним и не рециклим —
+    // уже ехавшие доезжают по своим траекториям.
+    const choosing = !!(G.splitState && G.splitState.active);
     for (let i = 0; i < G.trafficPool.length; i++) {
       const car = G.trafficPool[i];
       const where = car.active ? car.s : G.playerS + 240;
       const wantActive = (activeMask[G.roadBiomeAtS(where)] || mask)[i] === 1;
 
       if (!car.active) {
-        if (!wantActive) continue;
+        if (!wantActive || choosing) continue;
         // Машина возвращается в биом далеко впереди, вне видимости игрока.
         car.active = true;
         car.retiring = false;
@@ -233,13 +236,7 @@ export function initTraffic() {
       }
 
       const recycle = trafficRecycle(car.s, G.playerS);
-      if (recycle) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
-
-      const choosing = !!(G.splitState && G.splitState.active);
-      if (choosing && car.active && car.s > G.playerS - 20 && car.s < G.playerS + 180) {
-        // На развилке полоса выбора должна быть пустой: машины уводятся вперёд.
-        car.s = G.playerS + 240 + Math.random() * 70;
-      }
+      if (recycle && !choosing) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
 
       const oncoming = isOncomingLane(car.laneIdx, road.oncomingCount);
       holdForRepair(car, oncoming);
@@ -254,9 +251,7 @@ export function initTraffic() {
 
       const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
       G.placeOnRoad(car.model.root, car.s, carWorldLat, 0, vehicleYaw);
-      car.model.root.visible = !choosing;
-
-      if (choosing) continue;
+      car.model.root.visible = true;
 
       // Машины, выбывшие из биома, доезжают и скрываются вдали.
       if (car.retiring && Math.abs(car.s - G.playerS) > 150) {

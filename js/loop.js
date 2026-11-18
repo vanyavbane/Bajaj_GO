@@ -400,6 +400,7 @@ export function initLoop() {
     G.updateExitWorld(dt);
     G.updateDeliveryMarker();
     G.updatePedestrians(dt, now);
+    if (G.updateForkPark) G.updateForkPark(dt, now);
     G.updateTraffic(dt, now, isQute);
     updateHud(now);
     if (G.renderFrame) G.renderFrame(realDt);

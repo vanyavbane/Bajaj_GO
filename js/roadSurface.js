@@ -131,6 +131,9 @@ export function initRoadSurface() {
   roadRightMat.polygonOffsetFactor = 1;
   roadRightMat.polygonOffsetUnits = 1;
   const roadRightMesh = makeRibbon(1, roadRightMat);
+  // Обе ленты асфальта — основная и правая половина на развилке — мокнут
+  // вместе: погода красит весь список через js/weather.js.
+  G.roadWetMats = [G.M.road, roadRightMat];
   const gapMat = G.M.grass.clone();
   gapMat.polygonOffset = true;
   gapMat.polygonOffsetFactor = 1;
@@ -520,37 +523,8 @@ export function initRoadSurface() {
     return geo;
   }
 
-  const signTex = G.createCanvasTexture(256, 256, (ctx, w, h) => {
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#c62828';
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, w * 0.46, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 10;
-    ctx.stroke();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 22;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(w * 0.28, h * 0.66);
-    ctx.lineTo(w * 0.5, h * 0.34);
-    ctx.lineTo(w * 0.72, h * 0.66);
-    ctx.stroke();
-  });
-  const signBoard = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.36, 1.36),
-    new THREE.MeshBasicMaterial({ map: signTex, transparent: true, side: THREE.DoubleSide })
-  );
-  signBoard.position.y = 1.34;
-  const signPost = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.05, 0.1), G.M.metalDark || G.M.concrete);
-  signPost.position.y = 0.52;
-  const signGroup = new THREE.Group();
-  signGroup.add(signBoard, signPost);
-  signGroup.frustumCulled = false;
-  signGroup.visible = false;
-  G.scene.add(signGroup);
+  /* Красный знак «∧» из центра развилки убран: там лесопарковая зона
+   * (js/forkPark.js). Стрелки и цветные линии остались на асфальте. */
 
   function arrowTexture() {
     return G.createCanvasTexture(128, 256, (ctx, w, h) => {
@@ -624,7 +598,6 @@ export function initRoadSurface() {
     const splitS = splitCenterS(playerS);
     const amount = G.splitAmountAtS(splitS);
     const active = amount > 0.01;
-    signGroup.visible = active;
 
     const choices = G.splitState && G.splitState.choices ? G.splitState.choices : null;
     const leftBiome = choices ? G.BIOMES[choices[0]] : null;
@@ -667,10 +640,6 @@ export function initRoadSurface() {
         a.side * hintLatAt(a.s + 2.4),
         2.4, 0.055
       );
-    }
-
-    if (active) {
-      G.placeOnRoad(signGroup, splitS - 8, 0, 0.075);
     }
   }
 

@@ -34,6 +34,12 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
+    // В каталоге проекта работают инструменты с собственным профилем браузера
+    // (.tmp-build/bajaj-probe-*): Windows держит его файлы залоченными,
+    // и вотчер падает с EBUSY, убивая dev-сервер.
+    watch: {
+      ignored: ['**/.tmp-build/**', '**/dist/**'],
+    },
   },
   build: {
     outDir: 'dist',

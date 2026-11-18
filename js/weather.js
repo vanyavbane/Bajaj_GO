@@ -147,19 +147,32 @@ export function initWeather() {
 
   /* ---------- Дорога: влажный асфальт ---------- */
   function applyRoadWetness() {
-    const road = G.M && G.M.road;
-    if (!road) return;
+    // Мочим всё покрытие: основную ленту и правую половину на развилке.
+    const mats = (G.roadWetMats && G.roadWetMats.length)
+      ? G.roadWetMats
+      : (G.M && G.M.road ? [G.M.road] : []);
+    if (!mats.length) return;
+    const road = mats[0];
     const baseRough = road.userData.baseRoughness ?? 0.86;
     const baseMetal = road.userData.baseMetalness ?? 0.04;
     const baseEnv = road.userData.baseEnvIntensity ?? road.envMapIntensity ?? 0.35;
     road.userData.baseRoughness = baseRough;
     road.userData.baseMetalness = baseMetal;
     road.userData.baseEnvIntensity = baseEnv;
+    // Базовый цвет запоминаем один раз: в дождь асфальт темнеет,
+    // а не светлеет от буста окружения.
+    if (!road.userData.baseColor) road.userData.baseColor = road.color.clone();
+    const baseColor = road.userData.baseColor;
 
     const w = state.wet;
-    road.roughness = baseRough - 0.44 * w;
-    road.metalness = baseMetal + 0.32 * w;
-    road.envMapIntensity = baseEnv * (1 + 1.55 * w);
+    for (const mat of mats) {
+      mat.roughness = baseRough - 0.44 * w;
+      mat.metalness = baseMetal + 0.32 * w;
+      // Еле заметное отражение неба: умеренный буст плюс затемнение цвета,
+      // иначе полотно просто белеет.
+      mat.envMapIntensity = baseEnv * (1 + 0.8 * w);
+      mat.color.copy(baseColor).multiplyScalar(1 - 0.35 * w);
+    }
   }
 
   /* ---------- Капли вокруг игрока ---------- */
