@@ -4,7 +4,7 @@ import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
 import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
-import { RIGHT_FORK, courseVector, createVectorField } from './engine/vectors.js';
+import { RIGHT_FORK, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -481,69 +481,34 @@ function clearBranchPaths() {
   vectors.clear();
 }
 
-function noseOfZone(zone) {
+function courseLayout() {
   const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  return (zone + 1) * ZONE_M - FORK_LEAD - offset;
-}
-
-function zoneIndexAt(s) {
-  const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  return Math.floor(Math.max(0, offset + s) / ZONE_M);
-}
-
-/** Спавн одного вектора курса. Прямая с нулевым углом путь не ответвляет. */
-function vectorSpawn(zone, vector) {
-  const nose = noseOfZone(zone);
   return {
-    key: `${zone}:${vector.id}`,
-    nose,
-    yaw: vector.yaw,
-    ownsFrom: nose + EXIT_CHOICE + EXIT_END,
+    zoneLength: ZONE_M,
+    lead: FORK_LEAD,
+    ownAfter: EXIT_CHOICE + EXIT_END,
+    offset,
   };
 }
 
-function chosenCourse(zone) {
-  return courseVector(RIGHT_FORK, chosenExit[zone] === 1 ? 1 : 0);
-}
-
-function ownedSpawns(s) {
-  const zone = zoneIndexAt(s);
-  const list = [];
-  for (let z = 0; z <= zone; z++) {
-    const vector = chosenCourse(z);
-    if (vector.yaw === 0) continue;
-    const spawn = vectorSpawn(z, vector);
-    if (s >= spawn.ownsFrom - 0.01) list.push(spawn);
-  }
-  return list;
-}
-
-function branchSpawns(s) {
-  const nose = splitCenterS(s);
-  if (!(s > nose)) return [];
-  const zone = zoneIndexAt(s);
-  const list = [];
-  for (const vector of RIGHT_FORK.vectors) {
-    if (vector.yaw === 0) continue;
-    list.push(vectorSpawn(zone, vector));
-  }
-  return list;
+function coursePick(zone) {
+  return chosenExit[zone] === 1 ? 1 : 0;
 }
 
 function embedRoad(s, lat) {
+  const layout = courseLayout();
   const nose = splitCenterS(s);
-  const zone = zoneIndexAt(s);
   return vectors.embed({
     s,
     lat,
     y: biomeRoadY(s),
     nose,
     edges: roadEdgesAt(s),
-    owned: ownedSpawns(s),
-    branches: branchSpawns(s),
+    owned: ownedCourse(RIGHT_FORK, s, layout, coursePick),
+    branches: openCourse(RIGHT_FORK, s, layout),
     origin: frameAt(s).origin,
     turn: EXIT_DIVERGE,
-    ownedHere: chosenCourse(zone).yaw !== 0 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01,
+    ownedHere: courseOwns(RIGHT_FORK, coursePick(zoneAt(s, layout)), s, nose, layout.ownAfter),
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u) }));
 }
 

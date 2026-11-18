@@ -44,6 +44,72 @@ export function branchVectors(course: ForkCourse): readonly CourseVector[] {
   return course.vectors.filter((vector) => vector.yaw !== 0);
 }
 
+/** Как зоны лежат на оси s. Биом подставляет свои длины, курс их не знает. */
+export interface CourseLayout {
+  zoneLength: number;
+  /** Нос развилки стоит на столько метров раньше конца зоны. */
+  lead: number;
+  /** Через столько метров после носа взятый вектор становится дорогой. */
+  ownAfter: number;
+  offset: number;
+}
+
+export function zoneAt(s: number, layout: CourseLayout): number {
+  const along = Math.max(0, layout.offset + (Number.isFinite(s) ? s : 0));
+  if (!(layout.zoneLength > 0)) return 0;
+  return Math.floor(along / layout.zoneLength);
+}
+
+export function zoneNose(zone: number, layout: CourseLayout): number {
+  return (zone + 1) * layout.zoneLength - layout.lead - layout.offset;
+}
+
+/** Спавн вектора. Прямая с нулевым углом путь не ответвляет — её не возвращают. */
+export function vectorSpawnOf(zone: number, vector: CourseVector, layout: CourseLayout): VectorSpawn | null {
+  if (vector.yaw === 0) return null;
+  const nose = zoneNose(zone, layout);
+  return {
+    key: `${zone}:${vector.id}`,
+    nose,
+    yaw: vector.yaw,
+    ownsFrom: nose + layout.ownAfter,
+  };
+}
+
+/** Уже взятые векторы, которые к метке s владеют дорогой. */
+export function ownedCourse(
+  course: ForkCourse,
+  s: number,
+  layout: CourseLayout,
+  pickAt: (zone: number) => number,
+): VectorSpawn[] {
+  const zone = zoneAt(s, layout);
+  const list: VectorSpawn[] = [];
+  for (let z = 0; z <= zone; z++) {
+    const spawn = vectorSpawnOf(z, courseVector(course, pickAt(z)), layout);
+    if (spawn && s >= spawn.ownsFrom - 0.01) list.push(spawn);
+  }
+  return list;
+}
+
+/** Открытые ответвления зоны, в которой лежит s. До носа список пуст. */
+export function openCourse(course: ForkCourse, s: number, layout: CourseLayout): VectorSpawn[] {
+  const zone = zoneAt(s, layout);
+  const nose = zoneNose(zone, layout);
+  if (!(s > nose)) return [];
+  const list: VectorSpawn[] = [];
+  for (const vector of branchVectors(course)) {
+    const spawn = vectorSpawnOf(zone, vector, layout);
+    if (spawn) list.push(spawn);
+  }
+  return list;
+}
+
+/** Взятый ненулевой вектор этой зоны уже стал дорогой. */
+export function courseOwns(course: ForkCourse, pick: number, s: number, nose: number, ownAfter: number): boolean {
+  return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter - 0.01;
+}
+
 /** Один включённый вектор на маршруте. */
 export interface VectorSpawn {
   /** Ключ кэша. Один нос и один угол — один ключ. */
