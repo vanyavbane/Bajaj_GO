@@ -445,6 +445,10 @@ function liveAtMeters(meters) {
 
 let roadCacheM = NaN;
 let roadCache = null;
+/** Стабильная сторона превью развилки: не даёт дороге/биому перескакивать
+ *  от мелкого рыскания у центра, пока выбор ещё не зафиксирован. */
+let previewStableZone = -1;
+let previewStableSide = 0;
 
 function roadAtMeters(meters) {
   if (meters === roadCacheM && roadCache) return roadCache;
@@ -1299,8 +1303,19 @@ function updateBiome(dt) {
   const splitD = meters - splitM;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
   splitChoices[zone] = choices;
-  const previewSide = G.laneOffset <= 0 ? 0 : 1;
+
+  // Превью развилки с гистерезисом: мелкое рыскание у центра не должно
+  // перекидывать дорогу/биом следующей зоны туда-сюда. Смена стороны возможна
+  // только при явном смещении в другую полосу.
+  if (zone !== previewStableZone) {
+    previewStableZone = zone;
+    previewStableSide = zoneBiomes[zone + 1] === choices[1] ? 1 : 0;
+  }
+  let previewSide = previewStableSide;
+  if (G.laneOffset < -1.2) previewSide = 0;
+  else if (G.laneOffset > 1.2) previewSide = 1;
   const chosenBefore = chosenZones.has(zone);
+  const previewActive = !chosenBefore && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD;
 
   // Авто-выбор, если игрок не ушёл на ветку до sSplit + 30.
   if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
@@ -1310,10 +1325,25 @@ function updateBiome(dt) {
   // увидеть решение сразу, а не следующим кадром.
   const chosen = chosenZones.has(zone);
   // Пока следующая зона ещё не попала в кадр, её профиль едет за той стороной,
-  // где байк. После закрепления геометрия больше не перескакивает.
+  // где байк. Закрепляем выбор превью: повторно меняем биом следующей зоны
+  // только при уверенном уходе на другую сторону, иначе дорога/объекты впереди
+  // резко перестраиваются на глазах у игрока.
   if (!chosen && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD) {
-    zoneBiomes[zone + 1] = choices[previewSide];
-    dropRoadCache();
+    const desired = choices[previewSide];
+    if (zoneBiomes[zone + 1] !== desired) {
+      const strongOther = previewSide !== previewStableSide && Math.abs(G.laneOffset) > 3.0;
+      if (!previewActive || previewSide === previewStableSide || strongOther || splitD < -SPLIT_BANNER_AHEAD + 20) {
+        zoneBiomes[zone + 1] = desired;
+        previewStableSide = previewSide;
+        dropRoadCache();
+      } else {
+        previewSide = previewStableSide;
+      }
+    } else {
+      previewStableSide = previewSide;
+    }
+  } else if (chosen) {
+    previewStableSide = chosenZones.has(zone) ? (G.pendingBiome === choices[1] ? 1 : 0) : previewSide;
   }
   const forkAhead = splitM - meters;
   G.forkView = forkAhead < 340 && forkAhead > -90 ? 1 : 0;
@@ -1363,15 +1393,19 @@ function updateBiome(dt) {
   updateBiomeChip(G.currentBiome);
   applyLaneConfig(roadBiomeAtS(G.playerS), G.playerS);
 
-  // Lane-assist после развилки: левая ветка уводила байк на встречные полосы.
+  // Lane-assist после развилки: съезд должен мягко вывести байк в ближайшую
+  // попутную полосу объединённой дороги, а не бросать «как поедет».
   if (G.started && !G.ended) {
     const cfg = lanesAtS(G.playerS);
-    if (lastSplitSide === 0 && lastSplitZone >= 0) {
+    if (lastSplitZone >= 0) {
       const since = meters - (lastSplitZone + 1) * ZONE_M;
-      if (since > 20 && since < 520) {
-        const runFirst = cfg.offsets[cfg.oncomingCount];
-        if (G.laneOffset < runFirst - 0.45) G.laneAssistTarget = runFirst;
-      } else if (since >= 520) {
+      // Сход сдвига ветки идёт ~FADE_M в начале новой зоны; ведём в попутную
+      // полосу на всём участке слияния и чуть дальше для стабилизации.
+      if (since > -20 && since < 420) {
+        const target = nearestRunLane(G.laneOffset, cfg);
+        if (Math.abs(G.laneOffset - target) > 0.35) G.laneAssistTarget = target;
+      } else if (since >= 420) {
+        lastSplitZone = -1;
         lastSplitSide = -1;
       }
     }
@@ -1421,6 +1455,8 @@ function resetBiomeRun() {
   lastLaneBiome = -1;
   lastSplitZone = -1;
   lastSplitSide = -1;
+  previewStableZone = -1;
+  previewStableSide = 0;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
