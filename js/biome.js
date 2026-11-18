@@ -574,12 +574,30 @@ function embedRoad(s, lat) {
   const ribbon = (edges.rightInner + edges.rightOuter) * 0.5;
   const zone = Math.floor(Math.max(0, (G.biomeOffsetM || 0) + s) / ZONE_M);
   const ownedHere = chosenExit[zone] === 1 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01;
-  if (exit && !ownedHere && width > 0.8 && gap > 0.5 && lat >= edges.rightInner - 0.2) {
+  if (exit && !ownedHere && width > 0.8 && lat >= edges.rightInner - 0.2) {
     const local = lat - ribbon;
+    const base = centerline(s, nose);
+    const peelT = Math.max(0, Math.min(1, (s - nose) / EXIT_DIVERGE));
+    const peel = peelT * peelT * (3 - 2 * peelT);
+    // Внешний край уходит сразу. Внутренний догоняет, только когда клин открылся,
+    // иначе общая кромка прямой оторвалась бы от полотна.
+    const separated = Math.max(0, Math.min(1, gap / 4));
+    const outer = Math.max(0, Math.min(1, (lat - edges.rightInner) / Math.max(width, 0.5)));
+    const weight = peel * Math.max(separated, outer);
+    const sx = base.x + base.rx * lat;
+    const sz = base.z + base.rz * lat;
+    const bx = exit.x + exit.rx * local;
+    const bz = exit.z + exit.rz * local;
+    const fx = base.fx + (exit.fx - base.fx) * weight;
+    const fz = base.fz + (exit.fz - base.fz) * weight;
+    const len = Math.hypot(fx, fz) || 1;
+    const nfx = fx / len;
+    const nfz = fz / len;
     return {
-      x: exit.x + exit.rx * local, y, z: exit.z + exit.rz * local,
-      rx: exit.rx, rz: exit.rz, fx: exit.fx, fz: exit.fz,
-      curvature: exit.curvature, branched: true,
+      x: sx + (bx - sx) * weight, y, z: sz + (bz - sz) * weight,
+      rx: -nfz, rz: nfx, fx: nfx, fz: nfz,
+      curvature: base.curvature + (exit.curvature - base.curvature) * weight,
+      branched: weight > 0.04,
     };
   }
   const path = centerline(s, null);

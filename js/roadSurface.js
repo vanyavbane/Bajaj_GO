@@ -495,6 +495,18 @@ export function initRoadSurface() {
       posR.setXYZ(idx + 1, r1.x, y, r1.z);
       posG.setXYZ(idx, l1.x, y, l1.z);
       posG.setXYZ(idx + 1, r0.x, y, r0.z);
+      // На стыке «сплайн → ветка» один сегмент иначе тянется на десятки метров.
+      if (idx >= 2) {
+        const breakJump = (pos, slot) => {
+          const jump = Math.hypot(pos.getX(slot) - pos.getX(slot - 2), pos.getZ(slot) - pos.getZ(slot - 2));
+          if (jump > 16) {
+            pos.setXYZ(slot - 2, pos.getX(slot), pos.getY(slot - 2), pos.getZ(slot));
+            pos.setXYZ(slot - 1, pos.getX(slot + 1), pos.getY(slot - 1), pos.getZ(slot + 1));
+          }
+        };
+        breakJump(posL, idx);
+        breakJump(posR, idx);
+      }
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
