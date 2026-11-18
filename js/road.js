@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { frameFromSpline } from './engine/branch.js';
 import { readLanes } from './engine/lanes.js';
 import { G } from './state.js';
 
@@ -67,10 +68,9 @@ export function initRoad() {
       obj.position.set(here.x, here.y + heightOffset, here.z);
       return;
     }
-    const dx = roadDX(s);
-    const lh = Math.hypot(dx, 1) || 1;
-    orient(obj, dx / lh, dy, -1 / lh, 1 / lh, dx / lh, extraYaw, extraPitch, extraRoll);
-    obj.position.set(roadX(s) + lat / lh, roadY(s) + heightOffset, -s + lat * dx / lh);
+    const pose = frameFromSpline(roadX(s), roadDX(s), s);
+    orient(obj, pose.fx, dy, pose.fz, pose.rx, pose.rz, extraYaw, extraPitch, extraRoll);
+    obj.position.set(pose.x + pose.rx * lat, roadY(s) + heightOffset, pose.z + pose.rz * lat);
   }
   G.placeOnRoad = placeOnRoad;
 }

@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { carriageLanes, laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
 import { RIGHT_FORK, carriageWay, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
@@ -433,11 +433,6 @@ function biomeRoadDDY(s) {
 }
 
 /* ---------- Ширина дороги и развилка ---------- */
-function splitAmountAtMeters(meters) {
-  const layout = courseLayout();
-  return forkAmountAt(meters, layout.zoneLength, layout.lead);
-}
-
 function baseRoadWidthAtMeters(meters) {
   const r = roadAtMeters(meters);
   const wa = LANE_CONFIG[r.a].width;
@@ -445,18 +440,15 @@ function baseRoadWidthAtMeters(meters) {
   return wa + (wb - wa) * r.t;
 }
 
-function forkSpreadAtMeters(meters) {
-  const layout = courseLayout();
-  return forkSpreadAt(meters, layout.zoneLength, layout.lead, layout.spread);
-}
-
-function liveForkAtS(s, rawAtMeters) {
+function liveForkAtS(s, peak) {
   const frame = frameAt(s);
-  return liveForkAmount(rawAtMeters(blendMetersAt(s)), frame.phase.kind, frame.chosen);
+  const layout = courseLayout();
+  const raw = forkSpreadAt(blendMetersAt(s), layout.zoneLength, layout.lead, peak);
+  return liveForkAmount(raw, frame.phase.kind, frame.chosen);
 }
 
 function forkSpreadAtS(s) {
-  return liveForkAtS(s, forkSpreadAtMeters);
+  return liveForkAtS(s, courseLayout().spread);
 }
 
 /** Ширина одной ветки. Зазор между ветками сюда не входит: его рисует полотно отдельно. */
@@ -465,7 +457,7 @@ function roadWidthAtS(s) {
 }
 
 function splitAmountAtS(s) {
-  return liveForkAtS(s, splitAmountAtMeters);
+  return liveForkAtS(s, 1);
 }
 
 const EXIT_CLOCK = exitClock();

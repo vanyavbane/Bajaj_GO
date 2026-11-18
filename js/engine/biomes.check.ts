@@ -1,7 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
 import { carriageLanes } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitEdges, exitLaneWorld, exitPhase, exitReserved, exitRibbonMid, exitSeam, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -42,8 +42,18 @@ assert(straightRoad.rightOuter === straightRoad.rightInner, 'без разъез
 const openExit = branchEdges(10, 26);
 assert(openExit.leftOuter === -10 && openExit.leftInner === 10, 'на съезде прямая лента не уезжает влево');
 assert(openExit.rightInner > openExit.leftInner && openExit.rightOuter > openExit.rightInner, 'съезд открывается справа от дороги');
-const declined = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, -1);
-assert(Math.abs(declined.rightOuter - declined.rightInner) < 1e-9, 'отказ от съезда закрывает правую ленту');
+const roadAt = (d: number, chosen: -1 | 0 | 1) => sampleRoad({
+  forkDistance: d,
+  half: 10,
+  chosen,
+  baseOrigin: 0,
+  carriedOrigin: chosen === 1 ? exitCarryOrigin(10, 0) : null,
+  endWeight: 1,
+}).local;
+const atSeal = exitClock().ownAfter - 0.001;
+const afterSeal = exitClock().ownAfter + 10;
+const declined = roadAt(atSeal, -1);
+assert(Math.abs(declined.rightOuter - declined.rightInner) < 1e-4, 'отказ от съезда закрывает правую ленту');
 assert(declined.leftOuter === -10 && declined.leftInner === 10, 'отказ не двигает прямую дорогу');
 const carriedFrame = sampleRoad({
   forkDistance: FORK_LEAD - 1,
@@ -61,6 +71,15 @@ const earlyChoice = sampleRoad({
   carriedOrigin: exitCarryOrigin(10, 4),
 });
 assert(earlyChoice.origin === 4, 'до развилки записанный съезд не переносит центр');
+assert(forkOffset(100, 0) === 0 && forkOffset(Number.NaN, 1500) === forkOffset(0, 1500), 'пустая или битая длина зоны не роняет развилку');
+const brokenOrigin = sampleRoad({
+  forkDistance: 10,
+  half: 10,
+  chosen: 0,
+  baseOrigin: Number.NaN,
+  carriedOrigin: null,
+});
+assert(brokenOrigin.origin === 0 && brokenOrigin.world.leftOuter === -10, 'битый центр не разъезжает кромки');
 const afterFork = sampleRoad({
   forkDistance: FORK_LEAD + 8,
   half: 10,
@@ -123,27 +142,27 @@ assert(forkSpreadAt(noseM + EXIT_DIVERGE + 30, zone) === FORK_SPREAD, 'на ра
 assert(forkSpreadAt(noseM + EXIT_CHOICE + 10, zone) === FORK_SPREAD, 'после выбора съезд не вливается обратно');
 assert(forkSpreadAt(noseM + FORK_LEAD - 1, zone) === FORK_SPREAD, 'до границы зоны ветка ещё считается открытой');
 assert(forkSpreadAt(noseM + FORK_LEAD, zone) === 0, 'за границей зоны съезда уже нет');
-const endedExit = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, -1);
+const endedExit = roadAt(atSeal, -1);
 const endedMid = exitRibbonMid(endedExit);
 assert(Math.abs(endedExit.rightOuter - endedExit.rightInner) < 1e-6, 'отказанная ветка сходит на нет');
 assert(endedMid > 12, 'отказанная ветка заканчивается в стороне, не на прямой дороге');
-const taken = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
+const taken = roadAt(atSeal, 1);
 assert(Math.abs(taken.leftOuter - taken.leftInner) < 1e-6, 'взятый съезд заканчивает прямую ветку');
 assert(taken.rightOuter - taken.rightInner > 10, 'взятый съезд остаётся дорогой');
 
-const stillOpen = exitEdges(10, { kind: 'settle', t: 1, spread: FORK_SPREAD }, 0);
+const stillOpen = roadAt(afterSeal, 0);
 assert(stillOpen.rightOuter - stillOpen.rightInner > 10, 'до выбора съезд впереди не обрывается');
-const settled = exitEdges(10, { kind: 'settle', t: 1, spread: FORK_SPREAD }, 1);
-const plain = exitEdges(10, exitPhase(-1), 0);
+const settled = roadAt(afterSeal, 1);
+const plain = roadAt(-1, 0);
 assert(settled.leftOuter === plain.leftOuter && settled.leftInner === plain.leftInner, 'после съезда локальная дорога снова прямая');
 assert(exitCarryOrigin(10, 0) > 10, 'мировой центр взятого съезда остаётся справа от оси');
-const declinedSettle = exitEdges(10, { kind: 'settle', t: 0.4, spread: FORK_SPREAD }, -1);
+const declinedSettle = roadAt(afterSeal, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.rightOuter === declinedSettle.rightInner, 'после отказа к границе остаётся только прямая');
 const openRibbon = branchEdges(10, FORK_SPREAD);
 assert(roadLateral(9, 10, openRibbon, false) === 9, 'вне съезда полоса и есть метры от оси');
 const ride = roadLateral(9, 10, openRibbon, true);
 assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк на ленте съезда, не в клине');
-const carried = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
+const carried = roadAt(atSeal, 1);
 const carriedRide = roadLateral(9, 10, carried, true);
 assert(carriedRide > carried.rightInner && carriedRide < carried.rightOuter, 'на взятом съезде байк остаётся на его ленте');
 const straightZone = { tookExit: false, half: 8 };

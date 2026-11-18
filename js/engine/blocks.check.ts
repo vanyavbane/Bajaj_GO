@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitCarryOrigin, exitChain, exitClock, exitEdges, exitPhase, sampleRoad } from './fork.ts';
+import { exitCarryOrigin, exitChain, exitClock, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -39,24 +39,6 @@ assert(placedBlock(plan, 0, 1) == null && placedBlock(plan, 430, 1) == null, 'в
 assert(builtChain(plan, 0).join() === 'split,fork', 'до выбора построено только подход');
 assert(builtChain(plan, 1).join() === 'split,fork,seal-main,carry', 'съезд достраивает свою цепочку');
 assert(exitChain(1).join() === builtChain(plan, 1).join(), 'игра читает ту же цепочку, что рецепт');
-
-function sameEdges(a: AsphaltEdges, b: AsphaltEdges): boolean {
-  return close(a.leftOuter, b.leftOuter)
-    && close(a.leftInner, b.leftInner)
-    && close(a.rightInner, b.rightInner)
-    && close(a.rightOuter, b.rightOuter);
-}
-
-for (const chosen of [-1, 0, 1] as const) {
-  for (const endWeight of [0, 0.35, 1]) {
-    for (let d = -5; d <= 440; d += 7) {
-      const frame = frameAtWeighted(d, chosen, endWeight);
-      const phase = exitPhase(d);
-      const weighted = phase.kind === 'end' && chosen !== 0 ? { ...phase, t: phase.t * endWeight } : phase;
-      assert(sameEdges(frame.local, exitEdges(10, weighted, chosen)), `блок и фаза дают одни кромки, d=${d}, выбор ${chosen}`);
-    }
-  }
-}
 
 const broken: ExitRecipe = {
   id: 'broken',

@@ -1,4 +1,4 @@
-import { asphaltSpan, branchEdges, carriageEdge, exitEdges, mainRoadOpen } from './fork.ts';
+import { asphaltSpan, branchEdges, carriageEdge, mainRoadOpen } from './fork.ts';
 import {
   besidePose,
   medianFits,
@@ -48,7 +48,7 @@ assert(Math.abs(medianRoom(highway) - (highway.rightInner - highway.leftInner) *
 const inGore = medianPose(highway, { halfWidth: 1, gap: 1 });
 assert(inGore.lateral != null && inGore.lateral > highway.leftInner && inGore.lateral < highway.rightInner, 'островок стоит в клине, не на асфальте');
 
-const settled = exitEdges(10, { kind: 'settle', t: 1, spread: 22 }, 1);
+const settled = branchEdges(10, 0);
 assert(outerEdge(settled, -1) === -10 && outerEdge(settled, 1) === 10, 'когда съезд стал дорогой, кромки у него');
 assert(sideOpen(1, -1) && sideOpen(-1, 1), 'выбор не прячет обочину живой дороги');
 const carried: AsphaltEdges = { leftOuter: 22, leftInner: 42, rightInner: 42, rightOuter: 42 };

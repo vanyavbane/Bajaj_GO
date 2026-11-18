@@ -158,17 +158,12 @@ function smooth01(v: number): number {
 /** Метры до центра развилки текущей зоны. Отрицательные — ещё не доехали. */
 export function forkOffset(meters: number, zoneLength: number, lead = FORK_LEAD): number {
   const m = Number.isFinite(meters) ? meters : 0;
-  const zone = Math.floor(m / zoneLength);
-  const splitM = (zone + 1) * zoneLength - lead;
+  const length = Number.isFinite(zoneLength) && zoneLength > 0 ? zoneLength : 0;
+  if (length === 0) return 0;
+  const shift = Number.isFinite(lead) ? lead : FORK_LEAD;
+  const zone = Math.floor(m / length);
+  const splitM = (zone + 1) * length - shift;
   return m - splitM;
-}
-
-/** 0, пока ветки ещё обе живы. 1, когда ненужная ветка уже закончилась. */
-export function forkClose(meters: number, zoneLength: number, lead = FORK_LEAD): number {
-  const phase = exitPhase(forkOffset(meters, zoneLength, lead));
-  if (phase.kind === 'settle') return 1;
-  if (phase.kind === 'end') return phase.t;
-  return 0;
 }
 
 /**
@@ -185,11 +180,6 @@ export function forkSpreadAt(
   const phase = exitPhase(forkOffset(meters, zoneLength, lead));
   if (phase.kind === 'none' || FORK_SPREAD <= 0) return 0;
   return phase.spread * (peak / FORK_SPREAD);
-}
-
-/** 0…1 той же кривой. Пороги геймплея больше не живут на другой форме. */
-export function forkAmountAt(meters: number, zoneLength: number, lead = FORK_LEAD): number {
-  return forkSpreadAt(meters, zoneLength, lead, 1);
 }
 
 /**
@@ -322,33 +312,6 @@ export function exitCarryOrigin(roadHalf: number, base = 0): number {
   return from + exitRibbonMid(branchEdges(half, FORK_SPREAD));
 }
 
-/**
- * Кромки в локальных метрах дороги.
- * Невыбранная ветка сходится в свою точку и пропадает.
- * Взятый съезд не уезжает обратно на ось: после развилки это уже сама дорога,
- * а её мировой центр хранит вызывающий (`exitCarryOrigin`).
- */
-export function exitEdges(half: number, phase: ExitPhase, chosen: ChosenSide): AsphaltEdges {
-  const road = Math.max(0, Number.isFinite(half) ? half : 0);
-  if (phase.kind === 'none') return branchEdges(road, 0);
-  // До выбора съезд впереди остаётся лентой. Иначе полотно обрывается
-  // за 350 м до байка, хотя решение ещё не принято.
-  if (phase.kind === 'settle') {
-    if (chosen === 0) return branchEdges(road, phase.spread);
-    return branchEdges(road, 0);
-  }
-  if (phase.kind === 'diverge' || phase.kind === 'run') return branchEdges(road, phase.spread);
-  const edge = branchEdges(road, phase.spread);
-  if (chosen === 0) return edge;
-  const keep = 1 - Math.max(0, Math.min(1, phase.t));
-  if (chosen === -1) {
-    [edge.rightInner, edge.rightOuter] = pinchSpan(edge.rightInner, edge.rightOuter, keep);
-  } else {
-    [edge.leftOuter, edge.leftInner] = pinchSpan(edge.leftOuter, edge.leftInner, keep);
-  }
-  return edge;
-}
-
 /** Один кадр дороги: локальные кромки, мировой центр и те же кромки в мире. */
 export interface RoadFrame {
   origin: number;
@@ -369,8 +332,12 @@ export interface RoadQuery {
   endWeight?: number;
 }
 
+function finiteOrigin(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
 function translateEdges(edges: AsphaltEdges, origin: number): AsphaltEdges {
-  if (!origin) return edges;
+  if (origin === 0) return edges;
   return {
     leftOuter: edges.leftOuter + origin,
     leftInner: edges.leftInner + origin,
@@ -382,7 +349,10 @@ function translateEdges(edges: AsphaltEdges, origin: number): AsphaltEdges {
 /** Единственная сборка дороги в точке. Кромки берёт поставленный блок. */
 export function sampleRoad(query: RoadQuery): RoadFrame {
   const chosen = query.chosen;
-  const endWeight = query.endWeight ?? 1;
+  const givenWeight = query.endWeight;
+  const endWeight = typeof givenWeight === 'number' && Number.isFinite(givenWeight)
+    ? Math.max(0, Math.min(1, givenWeight))
+    : 1;
   const block = exitBlockAt(query.forkDistance, chosen);
   const phase = exitPhase(query.forkDistance);
   const weighted: ExitPhase = phase.kind === 'end' && chosen !== 0
@@ -392,8 +362,8 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   const onCarry = block != null && block.built && block.kind === 'carry';
   // До носа фазы тоже none: уже записанный выбор не должен переносить центр заранее.
   const afterFork = query.forkDistance >= EXIT_PLAN.length;
-  const carried = chosen === 1 && stored != null && (onCarry || afterFork);
-  const origin = carried && stored != null ? stored : query.baseOrigin;
+  const carried = chosen === 1 && stored != null && Number.isFinite(stored) && (onCarry || afterFork);
+  const origin = finiteOrigin(carried && stored != null ? stored : query.baseOrigin);
   const local = blockEdges(query.half, block, chosen, endWeight);
   return {
     origin,
