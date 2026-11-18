@@ -561,7 +561,7 @@ function laneDisplayScaleAtS(s) {
 /** Штрихи между полосами в точке s. На стыке биомов оба набора живут
  *  одновременно и плавно перетекают: вес 1 — полный штрих, 0 — растворяется.
  *  Совпавшие штрихи сливаются, чтобы общая линия не укорачивалась. */
-function laneMarksAtS(s) {
+function laneMarksAtS(s, way) {
   const r = roadAtMeters(blendMetersAt(s));
   const ca = LANE_CONFIG[r.a];
   const cb = LANE_CONFIG[r.b];
@@ -578,9 +578,9 @@ function laneMarksAtS(s) {
     }
     list.push({ lat, w });
   };
-  const way = roadWayAt(s);
-  const aCount = way === 'one-way' ? 0 : ca.oncomingCount;
-  const bCount = way === 'one-way' ? 0 : cb.oncomingCount;
+  const carriage = way === 'one-way' || way === 'two-way' ? way : roadWayAt(s);
+  const aCount = carriage === 'one-way' ? 0 : ca.oncomingCount;
+  const bCount = carriage === 'one-way' ? 0 : cb.oncomingCount;
   for (const lat of laneDashOffsets(ca.offsets, aCount)) add(lat, 1 - r.t);
   for (const lat of laneDashOffsets(cb.offsets, bCount)) add(lat, r.t);
   for (const m of list) if (m.w > 1) m.w = 1;
@@ -1252,7 +1252,7 @@ let lastSplitSide = -1;
 
 function applyLaneConfig(dominant, playerS) {
   const base = LANE_CONFIG[dominant];
-  const cfg = carriageLanes(base, roadWayAt(playerS));
+  const cfg = carriageLanes(base, roadWayAt(playerS, exitHold));
   G.laneCount = cfg.count;
   G.oncomingCount = cfg.oncomingCount;
   G.LANE_OFFSETS = cfg.offsets.slice();
@@ -1610,6 +1610,7 @@ export function initBiome() {
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
+  G.roadWayAt = roadWayAt;
   G.laneMarksAtS = laneMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
   G.dominantBiomeAtS = dominantBiomeAtS;

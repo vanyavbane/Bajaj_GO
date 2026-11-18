@@ -82,7 +82,9 @@ export function initLoop() {
     // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
     if (!G.jumpState.airborne) {
       const demoLanes = G.lanesAtS(G.playerS);
-      const demoTarget = demoLanes.offsets[demoLanes.oncomingCount];
+      const demoTarget = demoLanes.oncomingCount > 0
+        ? demoLanes.offsets[demoLanes.oncomingCount]
+        : demoLanes.offsets[demoLanes.offsets.length - 1];
       G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;

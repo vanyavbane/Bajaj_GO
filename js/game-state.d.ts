@@ -356,7 +356,8 @@ export interface GameState {
   splitAmountAtS: (s: number) => number;
   laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
   laneDisplayScaleAtS: (s: number) => number;
-  laneMarksAtS: (s: number) => { lat: number; w: number }[];
+  roadWayAt: (s: number, onRamp?: boolean) => 'one-way' | 'two-way';
+  laneMarksAtS: (s: number, way?: 'one-way' | 'two-way') => { lat: number; w: number }[];
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
   biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;

@@ -321,7 +321,14 @@ export function initRoadSurface() {
         const back = toWorld(s - DASH_HALF, mark.lat);
         const ahead = toWorld(s + DASH_HALF, mark.lat);
         paint(s, back, ahead, mark.w);
-        if (shift != null) paint(s, back + shift, ahead + shift, mark.w);
+      }
+      // Лента съезда односторонняя: штрих есть и там, где на шоссе жёлтая ось.
+      if (shift != null) {
+        for (const mark of G.laneMarksAtS(s, 'one-way')) {
+          const back = toWorld(s - DASH_HALF, mark.lat) + shift;
+          const ahead = toWorld(s + DASH_HALF, mark.lat) + shift;
+          paint(s, back, ahead, mark.w);
+        }
       }
     }
     for (let i = used; i < MAX_DASHES; i++) dashMesh.setMatrixAt(i, hidden);
@@ -339,6 +346,7 @@ export function initRoadSurface() {
     const weight = G.mkadWeightAtS(s);
     const split = G.splitAmountAtS(s);
     if (weight < 0.55 || split > 0.05 || barrierGapAt(s)) return 0;
+    if (G.roadWayAt && G.roadWayAt(s) === 'one-way') return 0;
     const reach = BARRIER_HALF_W + halfPlayer;
     return Math.abs(worldLat - roadCenter(s)) < reach ? reach : 0;
   };
@@ -353,7 +361,8 @@ export function initRoadSurface() {
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       const weight = G.mkadWeightAtS(s);
       const split = G.splitAmountAtS(s);
-      const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) ? weight : 0;
+      const oneWay = G.roadWayAt && G.roadWayAt(s) === 'one-way';
+      const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) && !oneWay ? weight : 0;
       if (vis <= 0.02) continue;
       dummy.scale.set(1, vis, 1);
       G.placeOnRoad(dummy, s, roadCenter(s), 0.46 * vis);
@@ -522,6 +531,13 @@ export function initRoadSurface() {
       const lat = latAt(r);
       const s = sampleS[r];
       const y = sampleY[r] + yOffset;
+      if (lat == null) {
+        const c = G.embedRoad(s, roadCenter(s));
+        const idx = r * 2;
+        pos.setXYZ(idx, c.x, y, c.z);
+        pos.setXYZ(idx + 1, c.x, y, c.z);
+        continue;
+      }
       const a = G.embedRoad(s, lat - halfW);
       const b = G.embedRoad(s, lat + halfW);
       const idx = r * 2;
@@ -757,13 +773,15 @@ export function initRoadSurface() {
     updateCityStrip(sidewalkLeftMesh, -1, 0.35, 3.2, 0.11);
     updateCityStrip(sidewalkRightMesh, 1, 0.35, 3.2, 0.11);
 
-    // Осевая на одной дороге — пара жёлтых вокруг её центра, в том числе
-    // после съезда. Пока ленты разделены, каждая линия на внутреннем крае.
+    // Жёлтая ось есть только у двусторонней дороги. На одностороннем съезде
+    // её нет: все полосы попутные. Пока ленты разделены, линия стоит на клине.
     const yellowAt = (s, side) => {
       const edge = G.roadEdgesAt(s);
       const gap = edge.rightInner - edge.leftInner;
       const exitW = edge.rightOuter - edge.rightInner;
-      if (exitW > 1.2 && gap > 0.8) return innerLineLat(s, side, 0.38);
+      const split = exitW > 1.2 && gap > 0.8;
+      if (!split && G.roadWayAt && G.roadWayAt(s) === 'one-way') return null;
+      if (split) return innerLineLat(s, side, 0.38);
       return roadCenter(s) + (side < 0 ? -0.22 : 0.22);
     };
     updateLateralStrip(centerDoubleLine1, (r) => yellowAt(sampleS[r], -1), 0.13, 0.08);
