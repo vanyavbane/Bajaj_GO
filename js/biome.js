@@ -541,7 +541,7 @@ function splitCenterS(playerS) {
 
 function roadBiomeAtS(s) {
   const r = roadAtMeters(blendMetersAt(s));
-  return r.b;
+  return r.t >= 1 ? r.b : r.a;
 }
 
 /** Наибольшее |смещение| полос биома. Нужно для масштаба разметки. */
@@ -608,7 +608,9 @@ function routeAt(s) {
 function previousChoice(route) {
   if (route.zone <= 0) return { side: 0, close: 0 };
   const side = forkChosenSideForZone(route.zone - 1);
-  const close = side === 0 ? 0 : 1 - forkHandoff(route.local, FADE_M);
+  // Несём смещение выбранной ветки через весь морфинг профиля дороги (ROAD_FADE_M),
+  // иначе ветка «съезжает» к оси за 150 м, пока дорога ещё перестраивается.
+  const close = side === 0 ? 0 : 1 - forkHandoff(route.local, ROAD_FADE_M);
   return { side, close };
 }
 
@@ -678,7 +680,7 @@ function laneWorldOffsetAtS(s, lateralOffset) {
 /** Доминирующий биом в точке s (без массива весов). */
 function dominantBiomeAtS(s) {
   const live = liveAtMeters(blendMetersAt(s));
-  return live.t < 0.5 ? live.a : live.b;
+  return live.t >= 1 ? live.b : live.a;
 }
 
 /** Ближайшая попутная полоса текущего биома к логическому смещению. */
@@ -1271,10 +1273,10 @@ function updateBiome(dt) {
   const live = liveAtMeters(meters);
   const weights = fillWeights(live);
 
-  // Конфиг/идентичность биома — по зоне (b). Профиль дороги плавно морфит
-  // от a к b по t, но переключение логики на середине перехода давало резкую
-  // «перестройку» биома после выезда с развязки.
-  const dominant = live.b;
+  // Конфиг/идентичность биома переключаем только когда профиль дороги уже
+  // полностью стал новым (t>=1). Иначе логика (полосы, трафик, лимиты) резко
+  // перестраивается, пока визуально дорога ещё прежняя/морфит — это даёт дёрганье.
+  const dominant = live.t >= 1 ? live.b : live.a;
   const zone = live.zone;
   const cityWeight = weights[CITY];
   const mkadWeight = weights[MKAD];
