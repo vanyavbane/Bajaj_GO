@@ -286,25 +286,40 @@ export function holdLaneMin(edges: AsphaltEdges, roadHalf: number): number | nul
   return edges.leftInner - 1.5;
 }
 
-/**
- * Сдвиг логической позиции на ленту съезда.
- * Якорь — правая кромка прямой дороги, поэтому байк едет вместе с центром ветки,
- * а когда ветка уже стала дорогой на оси, лишний сдвиг пропадает.
- */
-export function exitRiderShift(logical: number, roadHalf: number, edges: AsphaltEdges): number {
+function riderOnExit(logical: number, roadHalf: number, edges: AsphaltEdges): number | null {
   const width = exitWidth(edges);
-  if (width < 1) return 0;
+  if (width < 1) return null;
   const center = (edges.rightInner + edges.rightOuter) * 0.5;
   const anchor = Math.max(roadHalf, 0.001);
-  const span = anchor + FORK_SPREAD;
-  // 1 — съезд ещё в стороне, 0 — он уже лёг на ось и байк снова в своей полосе.
-  const along = Math.max(0, Math.min(1, center / span));
   const parked = center + (logical - anchor);
-  const world = logical + along * (parked - logical);
   const pad = Math.min(0.7, width * 0.25);
   const inner = edges.rightInner + pad;
   const outer = Math.max(inner, edges.rightOuter - pad);
-  return Math.max(inner, Math.min(outer, world)) - logical;
+  return Math.max(inner, Math.min(outer, parked));
+}
+
+/**
+ * Сдвиг на ленту съезда. Байк остаётся на ветке всё время, пока она сбоку:
+ * его не тянет обратно к полосе прямой дороги.
+ */
+export function exitRiderShift(logical: number, roadHalf: number, edges: AsphaltEdges): number {
+  const world = riderOnExit(logical, roadHalf, edges);
+  if (world == null) return 0;
+  return world - logical;
+}
+
+/**
+ * Когда ветка уже легла на ось, это новое значение полосы.
+ * Его надо записать вместо сдвига в том же кадре, иначе байк прыгнет.
+ * null — ветка ещё сбоку, сдвиг остаётся.
+ */
+export function exitRebaseLane(logical: number, roadHalf: number, edges: AsphaltEdges): number | null {
+  const width = exitWidth(edges);
+  if (width < 1) return null;
+  const center = (edges.rightInner + edges.rightOuter) * 0.5;
+  const anchor = Math.max(roadHalf, 0.001);
+  if (!(Math.abs(center) < anchor * 0.2 && edges.rightInner < 0)) return null;
+  return riderOnExit(logical, roadHalf, edges);
 }
 
 /**

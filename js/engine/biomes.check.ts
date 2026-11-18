@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitEdges, exitPhase, exitReserved, exitRiderShift, forkCenterShift, forkSpreadAt, logicalRoadLimits, pickToSide, splitPick } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, exitRiderShift, forkCenterShift, forkSpreadAt, logicalRoadLimits, pickToSide, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -71,8 +71,12 @@ assert(declinedSettle.leftOuter === -10 && declinedSettle.rightOuter === decline
 const openRibbon = branchEdges(10, FORK_SPREAD);
 const ride = 9 + exitRiderShift(9, 10, openRibbon);
 assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк на ленте съезда, не в клине');
+const mid = exitEdges(10, { kind: 'settle', t: 0.5, spread: FORK_SPREAD }, 1);
+const midRide = 9 + exitRiderShift(9, 10, mid);
+assert(midRide > mid.rightInner && midRide < mid.rightOuter, 'пока ветка едет к оси, байка не сбрасывает на прямую');
 const centered = exitEdges(10, { kind: 'settle', t: 1, spread: FORK_SPREAD }, 1);
-assert(exitRiderShift(9, 10, centered) === 0, 'когда ветка легла на ось, байк снова в своей полосе');
+const handed = exitRebaseLane(9, 10, centered);
+assert(handed != null && Math.abs(handed - (9 + exitRiderShift(9, 10, centered))) < 1e-6, 'в конце съезда полоса перенимает место байка без скачка');
 const joined = branchEdges(10, 4);
 const joinedLimits = logicalRoadLimits(joined, 1, false);
 assert(joinedLimits.max > joined.leftInner, 'пока съезд приклеен, правая стена стоит за ним, а не на кромке прямой');

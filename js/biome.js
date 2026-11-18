@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitReserved, exitRiderShift, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
+import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, exitRiderShift, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -148,6 +148,8 @@ function getBiomeChoices(currentBiome, visitCounts) {
 let zoneBiomes = Object.create(null);   // zone → biome index
 let splitChoices = Object.create(null); // zone → [left, right]
 const chosenZones = new Set();
+/** Зона → 1 если взят съезд, -1 если поехали прямо. Не выводится из индекса биома. */
+const chosenExit = Object.create(null);
 /** Метр, на котором выбор развилки зоны был зафиксирован. Нужен, чтобы
  *  схлопывание чужой ветки и сдвиг оси вводились плавно, а не рывком. */
 const splitCommitMeters = Object.create(null);
@@ -233,6 +235,13 @@ function readPlan() {
         if (Number.isFinite(Number(zone))) chosenZones.add(Math.round(Number(zone)));
       }
     }
+    if (parsed.exits && typeof parsed.exits === 'object') {
+      for (const key of Object.keys(parsed.exits)) {
+        const zone = Number(key);
+        const side = parsed.exits[key];
+        if (Number.isFinite(zone) && (side === 1 || side === -1)) chosenExit[zone] = side;
+      }
+    }
   } catch {
     /* сохранение недоступно — план соберётся заново */
   }
@@ -280,11 +289,12 @@ function persistBiome() {
     else localStorage.setItem(PENDING_KEY, String(biomeIndex(G.pendingBiome)));
 
     const zone = currentZone();
-    const plan = { zones: {}, choices: {}, chosen: [] };
+    const plan = { zones: {}, choices: {}, chosen: [], exits: {} };
     for (let z = Math.max(0, zone - 2); z <= zone + 4; z++) {
       if (zoneBiomes[z] != null) plan.zones[z] = biomeIndex(zoneBiomes[z]);
       if (splitChoices[z]) plan.choices[z] = splitChoices[z].slice(0, 2);
       if (chosenZones.has(z)) plan.chosen.push(z);
+      if (chosenExit[z] === 1 || chosenExit[z] === -1) plan.exits[z] = chosenExit[z];
     }
     localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
   } catch {
@@ -503,9 +513,11 @@ function laneMarksAtS(s) {
 /** Сторона оси: -1 слева, +1 справа, 0 пока развилка этой зоны не выбрана. */
 function forkChosenSideForZone(zone) {
   if (!chosenZones.has(zone)) return chosenSideOf(0);
+  const stored = chosenExit[zone];
+  if (stored === 1 || stored === -1) return chosenSideOf(stored);
   const choices = splitChoices[zone];
   const next = zoneBiomes[zone + 1];
-  if (!choices || next == null) return chosenSideOf(0);
+  if (!choices || next == null) return chosenSideOf(-1);
   return chosenSideOf(biomeIndex(next) === biomeIndex(choices[1]) ? 1 : -1);
 }
 
@@ -574,28 +586,38 @@ function exitReservedAt(s) {
   return exitReserved(forkOffset(Math.max(0, blendMetersAt(s)), ZONE_M));
 }
 
-/** Сдвиг байка на съезд. Считается от кромок в этой точке, не от «прибавить spread». */
-function exitShiftAt(s) {
+/** Сдвиг конкретной полосы на съезд в точке s. Камера передаёт свою, не полосу байка. */
+function exitShiftAt(s, laneOffset) {
   if (!exitHold) return 0;
-  const span = laneSpanAt(s);
-  return exitRiderShift(G.laneOffset * span, roadWidthAtS(s) * 0.5, roadEdgesAt(s));
+  const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
+  return exitRiderShift(lane * laneSpanAt(s), roadWidthAtS(s) * 0.5, roadEdgesAt(s));
 }
 
 /** Съезд берётся только с правой кромки, пока ленты ещё соединены.
  *  После клина вернуться на прямую уже нельзя, и руль не уводит байка в траву. */
 function updateExitHold(meters, zone) {
+  const edge = roadEdgesAt(G.playerS);
+  const half = roadWidthAtS(G.playerS) * 0.5;
+  const span = laneSpanAt(G.playerS);
+  const lat = G.laneOffset * span;
+  if (exitHold) {
+    const rebased = exitRebaseLane(lat, half, edge);
+    if (rebased != null) {
+      G.laneOffset = rebased / span;
+      G.lateralVelocity = 0;
+      exitHold = false;
+      return;
+    }
+  }
   if (!exitReserved(forkOffset(meters, ZONE_M))) {
     exitHold = false;
     return;
   }
-  const edge = roadEdgesAt(G.playerS);
-  const span = laneSpanAt(G.playerS);
-  const lat = G.laneOffset * span;
   if (!chosenZones.has(zone)) {
     if (canGrabExit(lat, edge)) exitHold = true;
     if (canReleaseExit(lat, edge)) exitHold = false;
   }
-  const minWorld = holdLaneMin(edge, roadWidthAtS(G.playerS) * 0.5);
+  const minWorld = holdLaneMin(edge, half);
   if (exitHold && minWorld != null) {
     const minLogical = minWorld / span;
     if (G.laneOffset < minLogical) {
@@ -1145,6 +1167,7 @@ function commitSplit(zone, side, commitMeters) {
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts);
   const chosen = choices[side === 1 ? 1 : 0];
   chosenZones.add(zone);
+  chosenExit[zone] = side === 1 ? 1 : -1;
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
   lastSplitZone = zone;
   lastSplitSide = side === 1 ? 1 : 0;
@@ -1569,13 +1592,14 @@ export function initBiomeWorld() {
         for (const entry of list) {
           const bw = w[entry.biome] || 0;
           const s = slot.s + entry.ds;
-          const onExit = side > 0 && exitReservedAt(s);
-          const visible = bw > 0.12 && !onExit;
+          const visible = bw > 0.12;
           entry.group.visible = visible;
           if (!visible) continue;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
-          const lat = Math.max(entry.lat, Math.abs(roadOuterLat(s, side)) + 8);
+          const edge = roadEdgesAt(s);
+          const outside = Math.abs(worldEdge(edge, side < 0 ? -1 : 1));
+          const lat = Math.max(entry.lat, outside + 8);
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;

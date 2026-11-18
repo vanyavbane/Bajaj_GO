@@ -307,7 +307,7 @@ export interface GameState {
   forkSpreadAtS: (s: number) => number;
   forkCenterShiftAtS: (s: number) => number;
   /** Метры, на которые байк уехал на съезд. 0 — он на прямой дороге. */
-  exitShiftAt: (s: number) => number;
+  exitShiftAt: (s: number, laneOffset?: number) => number;
   /** Справа на этом метре стоит съезд: дома и деревья туда не ставятся. */
   exitReservedAt: (s: number) => boolean;
   forkChosenSideAtS: (s: number) => ChosenSide;

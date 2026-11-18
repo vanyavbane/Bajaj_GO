@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { worldEdge } from './engine/fork.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -384,8 +385,12 @@ export function initRoadside() {
 
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
-      const leftEdge = Math.abs(G.roadOuterLat(slot.s, -1));
-      const rightEdge = G.roadOuterLat(slot.s, 1);
+      const edgeAt = (at, side) => {
+        const edge = G.roadEdgesAt ? G.roadEdgesAt(at) : null;
+        return edge ? Math.abs(worldEdge(edge, side)) : Math.abs(G.roadOuterLat(at, side));
+      };
+      const leftEdge = edgeAt(slot.s, -1);
+      const rightEdge = edgeAt(slot.s, 1);
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
       slot.lastDom = dom;
@@ -399,7 +404,7 @@ export function initRoadside() {
         if (slot.billboard) {
           const bb = slot.billboard;
           const boardS = slot.s + 6;
-          const boardLat = Math.abs(G.roadOuterLat(boardS, bb.side)) + 4.8;
+          const boardLat = edgeAt(boardS, bb.side < 0 ? -1 : 1) + 4.8;
           G.placeOnRoad(bb.group, boardS, bb.side * boardLat, G.groundOffset(boardLat, boardS), bb.side * -0.18);
         }
         if (slot.portal) {
@@ -424,11 +429,6 @@ export function initRoadside() {
       for (const grp of [slot.leftLamp, slot.rightLamp, slot.leftProp, slot.rightProp]) {
         grp.visible = infraVisible;
       }
-      const exitOpen = G.exitReservedAt && G.exitReservedAt(slot.s);
-      if (exitOpen) {
-        slot.rightLamp.visible = false;
-        slot.rightProp.visible = false;
-      }
       if (infraVisible) {
         // На МКАД мачты выше и с двумя головами.
         const lampScale = infraScale * (1 + 0.18 * mw);
@@ -449,7 +449,7 @@ export function initRoadside() {
       if (slot.billboard) {
         const bb = slot.billboard;
         const show = inMetro ? slot.idx % 10 === 5 : slot.idx === 7;
-        bb.group.visible = show && !(bb.side > 0 && exitOpen);
+        bb.group.visible = show;
         if (show) {
           const list = billboardIndexByBiome[dom] || billboardIndexByBiome[0];
           const rot = Math.floor(roadM / 200) + (inMetro && bb.side > 0 ? 1 : 0);
