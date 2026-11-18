@@ -72,21 +72,15 @@ export function initRoad() {
     const dx = roadDX(s);
     const dy = roadDY(s);
     const shift = G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0;
-    const spread = G.forkSpreadAtS ? G.forkSpreadAtS(s) : 0;
-    if (shift !== 0 || spread > 0.001) {
-      // На разъезде ось уезжает вбок, а лента ещё и сжимается: касательную
-      // берём по фактическому пути объекта. Иначе байк, трафик и отбойник
-      // едут боком (до ~30° поперёк своей полосы).
-      const h = 0.8;
-      roadPoint(_pA, s - h, latForTangent(lateralOffset, s - h, s), 0);
-      roadPoint(_pB, s + h, latForTangent(lateralOffset, s + h, s), 0);
-      _forward.subVectors(_pB, _pA);
-      if (_forward.lengthSq() < 1e-8) _forward.set(dx, dy, -1);
-      _forward.normalize();
-    } else {
-      // Касательная пути: ds даёт (roadDX, roadDY, -1). Нос модели смотрит в −Z.
-      _forward.set(dx, dy, -1).normalize();
-    }
+    // Касательную берём по фактическому пути объекта (с учётом сдвига/разъезда),
+    // иначе на развязке и при сходе сдвига после неё байк, трафик и декорации
+    // едут боком. На обычной дороге это даёт ту же ориентацию.
+    const h = 0.8;
+    roadPoint(_pA, s - h, latForTangent(lateralOffset, s - h, s), 0);
+    roadPoint(_pB, s + h, latForTangent(lateralOffset, s + h, s), 0);
+    _forward.subVectors(_pB, _pA);
+    if (_forward.lengthSq() < 1e-8) _forward.set(dx, dy, -1);
+    _forward.normalize();
     _right.set(-_forward.z, 0, _forward.x);
     if (_right.lengthSq() < 1e-8) _right.set(1, 0, 0);
     else _right.normalize();

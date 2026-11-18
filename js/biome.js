@@ -604,7 +604,7 @@ function routeAt(s) {
   return { meters, zone, local: meters - zone * ZONE_M };
 }
 
-/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за ROAD_FADE_M. */
+/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за FADE_M. */
 function previousChoice(route) {
   if (route.zone <= 0) return { side: 0, close: 0 };
   const side = forkChosenSideForZone(route.zone - 1);
@@ -615,9 +615,10 @@ function previousChoice(route) {
   // оказывались на полотне.
   const boundaryM = route.zone * ZONE_M;
   const w = splitDecisionWeight(route.zone - 1, boundaryM);
-  // Несём смещение выбранной ветки через весь морфинг профиля дороги (ROAD_FADE_M),
-  // иначе ветка «съезжает» к оси за 150 м, пока дорога ещё перестраивается.
-  const close = w * (1 - forkHandoff(route.local, ROAD_FADE_M));
+  // Сдвиг/закрытие ветки гасим за FADE_M сразу после развязки. Дольше держать
+  // их не нужно: при spread=0 дорога уже единая, а затяжной сход сдвига даёт
+  // ощущение перестройки и смещает дорогу относительно расставленных объектов.
+  const close = w * (1 - forkHandoff(route.local, FADE_M));
   return { side, close };
 }
 
