@@ -303,14 +303,10 @@ export function createVectorField() {
     const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
     const peel = peelT * peelT * (3 - 2 * peelT);
     const separated = Math.max(0, Math.min(1, gap / 4));
-    const rightSpawn = branches.find((item) => item.yaw > 0) ?? null;
-    const leftSpawn = branches.find((item) => item.yaw < 0) ?? null;
-    const right = rightSpawn && s > rightSpawn.nose
-      ? pathFrom(rightSpawn, s, turn, (u) => frame(owned, u, spline, turn, rightSpawn.nose))
-      : null;
-    const left = leftSpawn && s > leftSpawn.nose
-      ? pathFrom(leftSpawn, s, turn, (u) => frame(owned, u, spline, turn, leftSpawn.nose))
-      : null;
+    const branchAt = (spawn: VectorSpawn | null): PathFrame | null => {
+      if (!spawn || !(s > spawn.nose)) return null;
+      return pathFrom(spawn, s, turn, (u) => frame(owned, u, spline, turn, spawn.nose));
+    };
     const parent = frame(owned, s, spline, turn);
     return {
       y,
@@ -324,8 +320,8 @@ export function createVectorField() {
       peel,
       separated,
       parent,
-      right,
-      left,
+      right: branchAt(branches.find((item) => item.yaw > 0) ?? null),
+      left: branchAt(branches.find((item) => item.yaw < 0) ?? null),
     };
   }
 

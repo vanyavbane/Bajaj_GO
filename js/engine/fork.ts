@@ -178,8 +178,8 @@ export function forkSpreadAt(
   peak = FORK_SPREAD,
 ): number {
   const phase = exitPhase(forkOffset(meters, zoneLength, lead));
-  if (phase.kind === 'none' || FORK_SPREAD <= 0) return 0;
-  return phase.spread * (peak / FORK_SPREAD);
+  if (phase.kind === 'none' || !(peak > 0)) return 0;
+  return phase.open * peak;
 }
 
 /**
@@ -204,19 +204,18 @@ export type ExitKind = 'none' | 'diverge' | 'run' | 'end' | 'settle';
 export interface ExitPhase {
   kind: ExitKind;
   t: number;
-  spread: number;
+  /** 0…1, насколько лента съезда открыта. Метры получаются умножением на разъезд. */
+  open: number;
 }
 
 /** Фаза по блоку под этой меткой. До носа и после последнего блока съезда нет. */
 export function exitPhase(d: number): ExitPhase {
   const span = spanAt(EXIT_PLAN, d);
-  if (!span) return { kind: 'none', t: 0, spread: 0 };
-  if (span.kind === 'split') {
-    return { kind: 'diverge', t: span.u, spread: FORK_SPREAD * smooth01(span.u) };
-  }
-  if (span.kind === 'fork') return { kind: 'run', t: 1, spread: FORK_SPREAD };
-  if (span.kind === 'seal') return { kind: 'end', t: smooth01(span.u), spread: FORK_SPREAD };
-  return { kind: 'settle', t: smooth01(span.u), spread: FORK_SPREAD };
+  if (!span) return { kind: 'none', t: 0, open: 0 };
+  if (span.kind === 'split') return { kind: 'diverge', t: span.u, open: smooth01(span.u) };
+  if (span.kind === 'fork') return { kind: 'run', t: 1, open: 1 };
+  if (span.kind === 'seal') return { kind: 'end', t: smooth01(span.u), open: 1 };
+  return { kind: 'settle', t: smooth01(span.u), open: 1 };
 }
 
 /** Какой блок стоит в этой метке и выбран ли уже его хвост. */
