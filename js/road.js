@@ -60,12 +60,14 @@ export function initRoad() {
    */
   function latForTangent(lat, sSample, sRef) {
     if (typeof lat === 'function') return lat(sSample);
-    if (!G.forkSpreadAtS) return lat;
-    const spreadRef = G.forkSpreadAtS(sRef);
-    const spreadSample = G.forkSpreadAtS(sSample);
-    if (spreadRef <= 0.001 && spreadSample <= 0.001) return lat;
-    const side = lat <= 0 ? -1 : 1;
-    return lat + side * (spreadSample - spreadRef);
+    if (!G.forkSpreadAtS || !G.roadEdgesAt) return lat;
+    const edge = G.roadEdgesAt(sRef);
+    const width = edge.rightOuter - edge.rightInner;
+    if (width < 0.8 || lat < edge.rightInner - 0.4 || lat > edge.rightOuter + 0.4) return lat;
+    const ahead = G.roadEdgesAt(sSample);
+    const centerRef = (edge.rightInner + edge.rightOuter) * 0.5;
+    const centerSample = (ahead.rightInner + ahead.rightOuter) * 0.5;
+    return lat + (centerSample - centerRef);
   }
 
   function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {

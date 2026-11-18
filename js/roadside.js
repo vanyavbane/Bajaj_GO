@@ -424,6 +424,11 @@ export function initRoadside() {
       for (const grp of [slot.leftLamp, slot.rightLamp, slot.leftProp, slot.rightProp]) {
         grp.visible = infraVisible;
       }
+      const exitOpen = G.exitReservedAt && G.exitReservedAt(slot.s);
+      if (exitOpen) {
+        slot.rightLamp.visible = false;
+        slot.rightProp.visible = false;
+      }
       if (infraVisible) {
         // На МКАД мачты выше и с двумя головами.
         const lampScale = infraScale * (1 + 0.18 * mw);
@@ -444,7 +449,7 @@ export function initRoadside() {
       if (slot.billboard) {
         const bb = slot.billboard;
         const show = inMetro ? slot.idx % 10 === 5 : slot.idx === 7;
-        bb.group.visible = show;
+        bb.group.visible = show && !(bb.side > 0 && exitOpen);
         if (show) {
           const list = billboardIndexByBiome[dom] || billboardIndexByBiome[0];
           const rot = Math.floor(roadM / 200) + (inMetro && bb.side > 0 ? 1 : 0);

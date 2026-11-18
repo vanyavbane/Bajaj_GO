@@ -607,15 +607,11 @@ export function initEconomy() {
  *  Значения: 'right' | 'left' | 'both' (чередование, как раньше). */
 const POI_SIDES = /** @type {'right' | 'left' | 'both'} */ ('right');
 
-/**
- * Сторона точки интереса в точке s. На развилке берём ветку игрока:
- * на невыбранной ветке roadOuterLat схлопывается, и модель уехала бы на асфальт.
- */
-function exitSideAt(s) {
+/** Сторона точки интереса. Съезд не переносит их на другую обочину. */
+function exitSideAt(_s) {
   if (POI_SIDES === 'left') return -1;
   if (POI_SIDES !== 'right') return Math.random() < 0.5 ? 1 : -1;
-  const chosen = G.forkChosenSideAtS ? G.forkChosenSideAtS(s) : 0;
-  return chosen !== 0 ? chosen : 1;
+  return 1;
 }
 
 /** Попутная полоса у обочины. Справа это крайняя попутная полоса, слева — ближайшая своя, не встречная. */
@@ -759,7 +755,8 @@ function exitLane(s, side) {
     G.scene.add(deliveryMarker);
   })();
 
-  let deliveryParkS = NaN;
+  /** Ключ постановки: число s без позы и строка «s|поза», когда кромка сдвинулась. */
+  let deliveryParkS = /** @type {number | string} */ (NaN);
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
@@ -1182,7 +1179,7 @@ function exitLane(s, side) {
         pendingAccidentCar.lateralOffset = lanes.offsets[idx];
         pendingAccidentCar.changingLane = false;
       }
-      const playerLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
+      const playerLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
       for (const c of G.trafficPool) {
         const carLat = G.laneWorldOffsetAtS(c.s, c.lateralOffset);
         if (Math.abs(c.s - G.playerS) < 32 && Math.abs(carLat - playerLat) < 6) {

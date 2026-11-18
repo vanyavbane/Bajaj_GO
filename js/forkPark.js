@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { FORK_LEAD, FORK_SPREAD } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, FORK_SPREAD } from './engine/fork.js';
 import { box, cylinder } from './geom.js';
 import { G } from './state.js';
 
 /* =========================================================================
  * 5b. ЛЕСОПАРКОВАЯ ЗОНА В ЦЕНТРЕ РАЗЪЕЗДА
  * -------------------------------------------------------------------------
- * Вместо красного знака «∧» между двумя ветками развилки стоит парк:
- * берёзы, ели, кусты, лавочки и гуляющие пешеходы. Он закрывает то, что за
- * разъездом, но не залезает на асфальт: полуширина островка в точке d —
- * та же кривая, что у травяного зазора полотна (`forkSpreadAt`).
+ * Парк стоит в клине между прямой дорогой и съездом вправо: берёзы, ели,
+ * кусты, лавочки и пешеходы. На асфальт он не выходит — только в зазор,
+ * который открывает `forkSpreadAt`.
  *
  * Всё живёт в InstancedMesh: 12 вызовов отрисовки на всю зону. Позиции
  * статичных объектов не зависят от кадра — они пересчитываются только при
@@ -22,7 +21,7 @@ const BUSH_COUNT = 40;
 const BENCH_COUNT = 4;
 const WALKER_COUNT = 8;
 /** Крайние метры развилки, где островок ещё слишком узкий для деревьев. */
-const PARK_EDGE = FORK_LEAD - 26;
+const PARK_EDGE = EXIT_RUN * 0.5 - 8;
 /** Отступ от кромки асфальта до ствола и лавочки, метров. */
 const PARK_MARGIN = 3.2;
 /** Сколько метров до/после центра развилки парк вообще виден. */
@@ -46,10 +45,10 @@ function smooth01(v) {
   return t * t * (3 - 2 * t);
 }
 
-/** Полуширина островка в метрах от центра развилки. */
+/** Полуширина клина на раздельном участке. d считается от его середины. */
 function islandHalfWidth(d) {
-  if (Math.abs(d) >= FORK_LEAD) return 0;
-  return FORK_SPREAD * smooth01(1 - Math.abs(d) / FORK_LEAD);
+  if (Math.abs(d) >= PARK_EDGE) return 0;
+  return FORK_SPREAD * smooth01(1 - Math.abs(d) / PARK_EDGE);
 }
 
 export function initForkPark() {
@@ -145,7 +144,7 @@ export function initForkPark() {
     if (half < 2.4) continue;
     bushSpots.push({
       d,
-      lat: rand(-1, 1) * (half - 1.6),
+      u: rand(-1, 1),
       scale: rand(0.7, 1.5),
       yaw: rand(0, Math.PI * 2)
     });
@@ -157,7 +156,7 @@ export function initForkPark() {
     const half = islandHalfWidth(d);
     if (half < PARK_MARGIN + 1.4) continue;
     const side = i % 2 === 0 ? -1 : 1;
-    benches.push({ d, lat: side * Math.min(half - PARK_MARGIN, 7.5), yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+    benches.push({ d, u: side * 0.72, yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
   }
 
   const walkers = [];
@@ -173,6 +172,17 @@ export function initForkPark() {
   }
   if (walkTorso.instanceColor) walkTorso.instanceColor.needsUpdate = true;
 
+  /** Точка внутри клина. u = -1 у прямой дороги, +1 у съезда. */
+  function goreLat(s, u) {
+    const edge = G.roadEdgesAt(s);
+    const inner = edge.leftInner;
+    const width = edge.rightInner - inner;
+    if (width < 1) return inner;
+    const pad = Math.min(PARK_MARGIN, width * 0.3);
+    const t = (Math.max(-1, Math.min(1, u)) + 1) * 0.5;
+    return inner + pad + t * Math.max(0, width - pad * 2);
+  }
+
   const dummy = new THREE.Object3D();
   let lastCenter = NaN;
   let visible = false;
@@ -185,7 +195,8 @@ export function initForkPark() {
     let firConeI = 0;
     for (const t of kept) {
       const s = center + t.d;
-      G.placeOnRoad(dummy, s, t.lat, 0);
+      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < PARK_MARGIN * 2) continue;
+      G.placeOnRoad(dummy, s, goreLat(s, t.u), 0);
       const x0 = dummy.position.x;
       const y0 = dummy.position.y;
       const z0 = dummy.position.z;
@@ -237,7 +248,9 @@ export function initForkPark() {
   function placeBushes(center) {
     let i = 0;
     for (const b of bushSpots) {
-      G.placeOnRoad(dummy, center + b.d, b.lat, 0);
+      const s = center + b.d;
+      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < 2.4) continue;
+      G.placeOnRoad(dummy, s, goreLat(s, b.u), 0);
       dummy.rotation.set(0, b.yaw, 0);
       dummy.position.y += b.scale * 0.45;
       dummy.scale.set(b.scale * 1.5, b.scale * 0.9, b.scale * 1.5);
@@ -253,7 +266,9 @@ export function initForkPark() {
     let backI = 0;
     let legI = 0;
     for (const b of benches) {
-      G.placeOnRoad(dummy, center + b.d, b.lat, 0);
+      const s = center + b.d;
+      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < PARK_MARGIN * 2) continue;
+      G.placeOnRoad(dummy, s, goreLat(s, b.u), 0);
       const x0 = dummy.position.x;
       const y0 = dummy.position.y;
       const z0 = dummy.position.z;
@@ -290,13 +305,11 @@ export function initForkPark() {
       const th = w.phase;
       const d = w.d0 + Math.cos(th) * w.rd;
       const s = center + d;
-      const half = islandHalfWidth(d);
-      const latLimit = Math.max(0.8, half - PARK_MARGIN + 0.8);
-      const lat = w.u * latLimit * Math.abs(Math.sin(th));
+      const lat = goreLat(s, w.u * Math.abs(Math.sin(th)));
 
       // Направление шага — производная пути, чтобы пешеход смотрел вперёд.
       const dd = -Math.sin(th) * w.rd * Math.sign(w.speed);
-      const dl = w.u * latLimit * Math.cos(th) * Math.sign(w.speed);
+      const dl = w.u * Math.cos(th) * Math.sign(w.speed);
       const yaw = Math.atan2(-dl, dd) || 0;
       const bob = Math.sin(now * 0.006 + i) * 0.04;
       const stride = Math.sin(now * 0.009 + i * 1.7) * 0.2;
@@ -348,7 +361,7 @@ export function initForkPark() {
 
   function updateForkPark(dt, now) {
     if (!G.splitCenterS || !G.forkSpreadAtS) return;
-    const center = G.splitCenterS(G.playerS);
+    const center = G.splitCenterS(G.playerS) + EXIT_DIVERGE + EXIT_RUN * 0.5;
     const dNow = G.playerS - center;
     setVisible(dNow > -VIEW_BEHIND && dNow < VIEW_AHEAD);
     if (!visible) return;

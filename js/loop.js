@@ -104,7 +104,7 @@ export function initLoop() {
     }
 
     const toWorld = G.laneWorldOffsetAtS;
-    const bikeLat = toWorld(G.playerS, G.laneOffset);
+    const bikeLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
     let deckHeight = 0;
     for (const ramp of G.rampsPool) {
       // Флаг мог остаться с прошлого заезда: пока трамплин впереди, сбрасываем.
@@ -197,15 +197,6 @@ export function initLoop() {
     G.jumpState.wobbleTimer = steered.wobbleTimer;
     if (steered.scraped) G.speed = scrapeSpeed(G.speed, dt);
 
-    // Ноль — левая ветка, как и авто-выбор. Выталкивание начинается вместе
-    // с видимым зазором, а не по отдельной кривой «островка».
-    const spreadNow = G.forkSpreadAtS(G.playerS);
-    if (spreadNow > 1.5 && Math.abs(G.laneOffset) < 1.1) {
-      const dir = forkSide(G.laneOffset);
-      G.laneOffset = dir * Math.min(1.1, Math.abs(G.laneOffset) + dt * 8);
-      G.lateralVelocity *= 0.6;
-    }
-
     for (const fp of G.quteFrontPivots) fp.rotation.y = -G.steerVisual * 0.42;
     G.quteSteeringWheelPivot.rotation.z = -G.steerVisual * 0.88;
 
@@ -222,7 +213,7 @@ export function initLoop() {
     const toWorld = G.laneWorldOffsetAtS;
     let surfaceRampHeight = 0;
     for (const ramp of G.rampsPool) {
-      const bikeLat = toWorld(G.playerS, G.laneOffset);
+      const bikeLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
       const rampLat = toWorld(ramp.s, ramp.lateralOffset);
       const contact = !G.jumpState.airborne && rampUnderBike(G.playerS, prevS, bikeLat, {
         s: ramp.s,
@@ -303,7 +294,7 @@ export function initLoop() {
     let reach = 0;
     for (let i = 0; i <= 4; i++) {
       const s = prevS + (G.playerS - prevS) * (i / 4);
-      const hit = G.medianBlocksBike(s, toWorld(s, G.laneOffset), halfPlayer);
+      const hit = G.medianBlocksBike(s, toWorld(s, G.laneOffset) + G.exitShiftAt(s), halfPlayer);
       if (hit) {
         reach = hit;
         break;
@@ -320,7 +311,7 @@ export function initLoop() {
   function placePlayer(isQute) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
-    const worldLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
+    const worldLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
     G.placeOnRoad(
       G.bikeRoot,
       G.playerS,

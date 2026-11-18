@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
+import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { FORK_LEAD, FORK_SPREAD, collapsedEdges, forkAmountAt, forkClose, forkHandoff, forkSide, forkSpreadAt, logicalRoadLimits, shoulderHeight, shoulderLats } from './engine/fork.js';
+import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitReserved, exitRiderShift, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
+import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -13,14 +15,13 @@ import { G } from './state.js';
  * небо) и закреплённый профиль дороги читают одну точку маршрута, но разные
  * индексы. Замок зоны ставится в момент выбора ветки, не раньше: до выбора
  * профиль едет за стороной байка. Полосы на асфальте читают тот же индекс.
- * Развилка — две ленты из js/engine/fork.js, не островок посреди полотна.
+ * Развилка — прямой ход и необязательный съезд вправо. Ось дороги не переезжает.
  * ========================================================================= */
 
 const ZONE_M = 1500;              // длина одной локации
-const FADE_M = 150;              // кросс-фейд развязки (сход выбранной ветки)
 const ROAD_FADE_M = 350;         // плавный переход профиля/ширины дороги между биомами после границы зоны, метров
 const SPLIT_LEAD = FORK_LEAD;
-const SPLIT_AUTO_D = 30;         // авто-выбор после центра развилки
+const SPLIT_AUTO_D = EXIT_CHOICE; // выбор в конце раздельного участка, не на носу съезда
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
 const STORAGE_KEY = 'bajajGO_biomeKm';
 const CURRENT_KEY = 'bajajGO_currentBiome';
@@ -31,90 +32,9 @@ const SCENERY_SLOTS = 20;
 const SCENERY_STEP = 28;
 const SCENERY_SPAN = SCENERY_SLOTS * SCENERY_STEP;
 
-const BIOMES = [
-  {
-    id: 'city', name: 'ГОРОД', icon: '🏙️',
-    sub: 'МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ',
-    short: 'Город', accent: 0x4fc3f7,
-    lanes: 4, oncoming: 2, laneWidth: 4.75,
-    speeds: [40, 60, 70, 55],
-    sceneryScale: 1,
-    traffic: {
-      count: 18,
-      pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck']
-    }
-  },
-  {
-    id: 'field', name: 'ПОЛЯ', icon: '🌾',
-    sub: 'ПШЕНИЦА · ВЕТРЯКИ · АМБАРЫ',
-    short: 'Поля', accent: 0xffb300,
-    lanes: 4, oncoming: 2, laneWidth: 4.75,
-    speeds: [40, 55, 65, 55],
-    sceneryScale: 1,
-    traffic: {
-      count: 12,
-      pref: ['gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck', 'bus', 'sedan', 'taxi', 'crossover', 'suv', 'hatchback', 'qute_traffic']
-    }
-  },
-  {
-    id: 'forest', name: 'ЛЕС', icon: '🌲',
-    sub: 'ЕЛИ · ВАЛУНЫ · ЛЕСНАЯ ДОРОГА',
-    short: 'Лес', accent: 0x66bb6a,
-    lanes: 4, oncoming: 2, laneWidth: 4.75,
-    speeds: [35, 50, 60, 50],
-    sceneryScale: 1,
-    traffic: {
-      count: 9,
-      pref: ['sedan', 'hatchback', 'crossover', 'suv', 'taxi', 'qute_traffic', 'bus', 'gazelle_van', 'gazelle_flatbed', 'kamaz', 'truck']
-    }
-  },
-  {
-    id: 'mountain', name: 'ГОРЫ', icon: '🏔️',
-    sub: 'СЕРПАНТИН · СКАЛЫ · ПЕРЕВАЛ',
-    short: 'Горы', accent: 0xb0bec5,
-    lanes: 2, oncoming: 1, laneWidth: 4.6,
-    speeds: [40, 55],
-    sceneryScale: 2.15,
-    traffic: {
-      count: 10,
-      pref: ['truck', 'kamaz', 'gazelle_flatbed', 'gazelle_van', 'bus', 'suv', 'crossover', 'sedan', 'hatchback', 'taxi', 'qute_traffic']
-    }
-  },
-  {
-    id: 'mkad', name: 'МКАД', icon: '🛣️',
-    sub: '8 ПОЛОС · ЭСТАКАДЫ · РАЗВЯЗКИ',
-    short: 'МКАД', accent: 0xff7043,
-    lanes: 8, oncoming: 4, laneWidth: 4.3,
-    speeds: [50, 65, 75, 85, 85, 75, 65, 55],
-    sceneryScale: 1.45,
-    traffic: {
-      // Плотность вдвое выше города: 36 машин против 18.
-      count: 36,
-      pref: ['sedan', 'crossover', 'suv', 'taxi', 'hatchback', 'bus', 'gazelle_van', 'kamaz', 'truck', 'gazelle_flatbed', 'qute_traffic']
-    }
-  }
-];
-
-const CITY = BIOMES.findIndex((biome) => biome.id === 'city');
-const MKAD = BIOMES.findIndex((biome) => biome.id === 'mkad');
-if (CITY < 0 || MKAD < 0) throw new Error('В BIOMES нет city или mkad');
-
-const TRANSITION_IDS = {
-  city: ['mountain', 'mkad'],
-  field: ['city', 'forest'],
-  forest: ['field', 'mountain'],
-  mountain: ['city', 'forest'],
-  mkad: ['city', 'field']
-};
-const TRANSITIONS = BIOMES.map((biome) => {
-  const next = TRANSITION_IDS[biome.id];
-  if (!next || next.length !== 2) throw new Error(`Нет двух переходов из биома ${biome.id}`);
-  return next.map((id) => {
-    const index = BIOMES.findIndex((item) => item.id === id);
-    if (index < 0) throw new Error(`Переход ${biome.id} → ${id} указывает на неизвестный биом`);
-    return index;
-  });
-});
+const CITY = biomeIndexOf('city');
+const MKAD = biomeIndexOf('mkad');
+const TRANSITIONS = transitionIndexes();
 
 /* -------------------------------------------------------------------------
  * Профили дороги. Волны и производные считаются в js/engine/profile.js.
@@ -149,6 +69,9 @@ const TERRAIN_COLORS = [
   new THREE.Color(0x5a6066), // mountain
   new THREE.Color(0x3a4048)  // mkad
 ];
+if (PROFILES.length !== BIOMES.length || TERRAIN_COLORS.length !== BIOMES.length) {
+  throw new Error('Профиль и цвет земли должны идти в том же порядке и количестве, что каталог биомов');
+}
 
 /* ---------- Конфигурация полос ---------- */
 function clampInt(value, min, max, fallback) {
@@ -161,23 +84,7 @@ function biomeIndex(value) {
   return clampInt(value, 0, BIOMES.length - 1, 0);
 }
 
-function makeLaneConfig(biome) {
-  const offsets = [];
-  const half = (biome.lanes - 1) * 0.5;
-  for (let i = 0; i < biome.lanes; i++) offsets.push((i - half) * biome.laneWidth);
-  return {
-    id: biome.id,
-    count: biome.lanes,
-    oncomingCount: biome.oncoming,
-    laneWidth: biome.laneWidth,
-    width: biome.lanes * biome.laneWidth,
-    offsets,
-    speeds: biome.speeds.slice(),
-    startLane: offsets[biome.lanes - 1]
-  };
-}
-
-const LANE_CONFIG = BIOMES.map(makeLaneConfig);
+const LANE_CONFIG = BIOMES.map(laneLayoutOf);
 
 /** Публичный конфиг полос биома. Принимает id строкой или индекс. */
 function getLaneConfig(biomeId) {
@@ -447,8 +354,8 @@ let roadCacheM = NaN;
 let roadCache = null;
 /** Стабильная сторона превью развилки: не даёт дороге/биому перескакивать
  *  от мелкого рыскания у центра, пока выбор ещё не зафиксирован. */
-let previewStableZone = -1;
-let previewStableSide = 0;
+/** Игрок удерживает съезд, пока лента не вернётся к дороге. */
+let exitHold = false;
 
 function roadAtMeters(meters) {
   if (meters === roadCacheM && roadCache) return roadCache;
@@ -593,13 +500,13 @@ function laneMarksAtS(s) {
   return list;
 }
 
-/** -1 слева, +1 справа, 0 пока развилка этой зоны не выбрана. */
+/** Сторона оси: -1 слева, +1 справа, 0 пока развилка этой зоны не выбрана. */
 function forkChosenSideForZone(zone) {
-  if (!chosenZones.has(zone)) return 0;
+  if (!chosenZones.has(zone)) return chosenSideOf(0);
   const choices = splitChoices[zone];
   const next = zoneBiomes[zone + 1];
-  if (!choices || next == null) return 0;
-  return biomeIndex(next) === biomeIndex(choices[1]) ? 1 : -1;
+  if (!choices || next == null) return chosenSideOf(0);
+  return chosenSideOf(biomeIndex(next) === biomeIndex(choices[1]) ? 1 : -1);
 }
 
 function routeAt(s) {
@@ -608,30 +515,8 @@ function routeAt(s) {
   return { meters, zone, local: meters - zone * ZONE_M };
 }
 
-/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за FADE_M. */
-function previousChoice(route) {
-  if (route.zone <= 0) return { side: 0, close: 0 };
-  const side = forkChosenSideForZone(route.zone - 1);
-  if (side === 0) return { side: 0, close: 0 };
-  // Вес решения фиксируем на границе зоны: собственный вклад зоны Z-1 домножен
-  // на splitDecisionWeight (плавный ввод выбора). Без этого на границе зон был
-  // скачок (own*weight -> prev*1), из-за чего дорога перестраивалась и декорации
-  // оказывались на полотне.
-  const boundaryM = route.zone * ZONE_M;
-  const w = splitDecisionWeight(route.zone - 1, boundaryM);
-  // Сдвиг/закрытие ветки гасим за FADE_M сразу после развязки. Дольше держать
-  // их не нужно: при spread=0 дорога уже единая, а затяжной сход сдвига даёт
-  // ощущение перестройки и смещает дорогу относительно расставленных объектов.
-  const close = w * (1 - forkHandoff(route.local, FADE_M));
-  return { side, close };
-}
-
 function forkChosenSideAtS(s) {
-  const route = routeAt(s);
-  const own = forkChosenSideForZone(route.zone);
-  if (own !== 0) return own;
-  const prev = previousChoice(route);
-  return prev.close > 0 ? prev.side : 0;
+  return forkChosenSideForZone(routeAt(s).zone);
 }
 
 /** 0…1 — насколько выбор развилки уже введён в геометрию. В момент
@@ -644,45 +529,80 @@ function splitDecisionWeight(zone, meters) {
   return u * u * (3 - 2 * u);
 }
 
-function forkCenterShiftAtS(s) {
+function forkCenterShiftAtS(_s) {
+  return 0;
+}
+
+function exitPhaseAt(s) {
   const route = routeAt(s);
-  const prev = previousChoice(route);
-  const own = forkChosenSideForZone(route.zone);
-  const ownShift = own === 0 ? 0
-    : own * FORK_SPREAD * forkClose(route.meters, ZONE_M, SPLIT_LEAD)
-      * splitDecisionWeight(route.zone, route.meters);
-  return ownShift + prev.side * FORK_SPREAD * prev.close;
+  const phase = exitPhase(forkOffset(route.meters, ZONE_M));
+  if (phase.kind === 'end' && forkChosenSideForZone(route.zone) !== 0) {
+    phase.t *= splitDecisionWeight(route.zone, route.meters);
+  }
+  return phase;
 }
 
 function forkCloseAtS(s) {
-  const route = routeAt(s);
-  const own = forkChosenSideForZone(route.zone);
-  const ownClose = own === 0 ? 0
-    : forkClose(route.meters, ZONE_M, SPLIT_LEAD)
-      * splitDecisionWeight(route.zone, route.meters);
-  const prev = previousChoice(route);
-  return Math.max(ownClose, prev.close);
+  const phase = exitPhaseAt(s);
+  if (phase.kind === 'settle') return 1;
+  if (phase.kind === 'end') return phase.t;
+  return 0;
 }
 
-/** Кромки асфальта в точке s, уже со схлопыванием чужой ленты. Без сдвига оси. */
+/** Кромки асфальта в точке s. Выбор только этой зоны, прошлое решение сюда не течёт. */
 function roadEdgesAt(s) {
-  return collapsedEdges(
-    roadWidthAtS(s) * 0.5,
-    forkSpreadAtS(s),
-    forkChosenSideAtS(s),
-    forkCloseAtS(s)
-  );
+  const route = routeAt(s);
+  return exitEdges(roadWidthAtS(s) * 0.5, exitPhaseAt(s), forkChosenSideForZone(route.zone));
 }
 
+/** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
+ *  Когда съезд заменил прямую, кромки переходят на него. */
 function roadOuterLat(s, side) {
-  const edge = roadEdgesAt(s);
-  return side < 0 ? edge.leftOuter : edge.rightOuter;
+  return carriageEdge(roadEdgesAt(s), side < 0 ? -1 : 1);
 }
 
-function splitLateralShiftAtS(s, lateralOffset) {
-  const spread = forkSpreadAtS(s);
-  if (spread <= 0.001) return 0;
-  return forkSide(lateralOffset) * spread;
+function splitLateralShiftAtS(_s, _lateralOffset) {
+  return 0;
+}
+
+function laneSpanAt(s) {
+  const scale = laneDisplayScaleAtS(s);
+  return Number.isFinite(scale) && scale !== 0 ? scale : 1;
+}
+
+function exitReservedAt(s) {
+  return exitReserved(forkOffset(Math.max(0, blendMetersAt(s)), ZONE_M));
+}
+
+/** Сдвиг байка на съезд. Считается от кромок в этой точке, не от «прибавить spread». */
+function exitShiftAt(s) {
+  if (!exitHold) return 0;
+  const span = laneSpanAt(s);
+  return exitRiderShift(G.laneOffset * span, roadWidthAtS(s) * 0.5, roadEdgesAt(s));
+}
+
+/** Съезд берётся только с правой кромки, пока ленты ещё соединены.
+ *  После клина вернуться на прямую уже нельзя, и руль не уводит байка в траву. */
+function updateExitHold(meters, zone) {
+  if (!exitReserved(forkOffset(meters, ZONE_M))) {
+    exitHold = false;
+    return;
+  }
+  const edge = roadEdgesAt(G.playerS);
+  const span = laneSpanAt(G.playerS);
+  const lat = G.laneOffset * span;
+  if (!chosenZones.has(zone)) {
+    if (canGrabExit(lat, edge)) exitHold = true;
+    if (canReleaseExit(lat, edge)) exitHold = false;
+  }
+  const minWorld = holdLaneMin(edge, roadWidthAtS(G.playerS) * 0.5);
+  if (exitHold && minWorld != null) {
+    const minLogical = minWorld / span;
+    if (G.laneOffset < minLogical) {
+      G.laneOffset = minLogical;
+      if (G.lateralVelocity < 0) G.lateralVelocity = 0;
+    }
+  }
 }
 
 /** Логическое смещение полосы → позиция на дороге с учётом ширины и развилки. */
@@ -1196,7 +1116,7 @@ function applyLaneConfig(dominant, playerS) {
     }
     if (G.remapTrafficLanes) G.remapTrafficLanes(cfg);
   }
-  const limits = logicalRoadLimits(roadEdgesAt(playerS), laneDisplayScaleAtS(playerS), forkSpreadAtS(playerS));
+  const limits = logicalRoadLimits(roadEdgesAt(playerS), laneDisplayScaleAtS(playerS), exitHold);
   G.roadEdgeMin = limits.min;
   G.roadEdgeMax = limits.max;
   G.ROAD_EDGE = Math.max(Math.abs(limits.min), limits.max);
@@ -1306,39 +1226,19 @@ function updateBiome(dt) {
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
   splitChoices[zone] = choices;
 
-  // Превью развилки с гистерезисом: мелкое рыскание у центра не должно
-  // перекидывать дорогу/биом следующей зоны туда-сюда. Смена стороны возможна
-  // только при явном смещении в другую полосу.
-  if (zone !== previewStableZone) {
-    previewStableZone = zone;
-    previewStableSide = zoneBiomes[zone + 1] === choices[1] ? 1 : 0;
-  }
-  let previewSide = previewStableSide;
-  if (G.laneOffset < -1.2) previewSide = 0;
-  else if (G.laneOffset > 1.2) previewSide = 1;
-
+  updateExitHold(meters, zone);
   const chosenBefore = chosenZones.has(zone);
-  // Биом следующей зоны закрепляем заранее (пока её морфинг ещё вне видимости),
-  // чтобы впереди не было резкой перестройки дороги/объектов. Переключить можно
-  // только один раз и только при уверенном выборе другой стороны — иначе оставляем
-  // как есть до фактического коммита развилки.
-  const PREVIEW_LOCK_AHEAD = 420;
-  if (!chosenBefore && roadLock[zone + 1] == null && splitD > -PREVIEW_LOCK_AHEAD) {
-    const desired = choices[previewSide];
-    if (zoneBiomes[zone + 1] !== desired) {
-      // В самом начале окна позволяем выбрать сторону один раз; дальше — только
-      // при явном уходе на другую сторону, и не прямо перед развилкой.
-      const early = splitD < -PREVIEW_LOCK_AHEAD + 40;
-      const strongSwitch = previewSide !== previewStableSide && Math.abs(G.laneOffset) > 3.2 && splitD < -SPLIT_BANNER_AHEAD - 20;
-      if (early || strongSwitch) {
-        zoneBiomes[zone + 1] = desired;
-        previewStableSide = previewSide;
-        dropRoadCache();
-      } else {
-        previewSide = previewStableSide;
-      }
-    } else {
-      previewStableSide = previewSide;
+  const previewSide = chosenBefore
+    ? (G.pendingBiome === choices[1] ? 1 : 0)
+    : (exitHold ? 1 : 0);
+  // Дорогу впереди меняем один раз, когда клин уже не перейти.
+  // Касание кромки на подходе больше не пересобирает профиль.
+  if (!chosenBefore && exitHold) {
+    const gapNow = roadEdgesAt(G.playerS).rightInner - roadEdgesAt(G.playerS).leftInner;
+    if (gapNow >= 2.4 && zoneBiomes[zone + 1] !== choices[1]) {
+      zoneBiomes[zone + 1] = choices[1];
+      delete roadLock[zone + 1];
+      dropRoadCache();
     }
   }
 
@@ -1349,9 +1249,6 @@ function updateBiome(dt) {
   // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
   // увидеть решение сразу, а не следующим кадром.
   const chosen = chosenZones.has(zone);
-  if (chosen) {
-    previewStableSide = G.pendingBiome === choices[1] ? 1 : 0;
-  }
   const forkAhead = splitM - meters;
   G.forkView = forkAhead < 340 && forkAhead > -90 ? 1 : 0;
 
@@ -1377,16 +1274,17 @@ function updateBiome(dt) {
     t: live.t
   };
 
-  const chosenSide = chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1;
+  const chosenSide = splitPick(chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1);
+  const bannerSide = branchPick(previewSide);
   G.splitState = {
-    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < SPLIT_LEAD + 30,
+    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < SPLIT_AUTO_D + 40,
     zone,
     meters: splitM,
     splitMeters: splitM,
     s: splitM - G.biomeOffsetM,
     d: splitD,
-    side: previewSide,
-    previewSide,
+    side: bannerSide,
+    previewSide: bannerSide,
     chosen,
     chosenSide,
     choices: choices.slice(),
@@ -1404,10 +1302,10 @@ function updateBiome(dt) {
   // попутную полосу объединённой дороги, а не бросать «как поедет».
   if (G.started && !G.ended) {
     const cfg = lanesAtS(G.playerS);
-    if (lastSplitZone >= 0) {
+    if (exitHold) G.laneAssistTarget = null;
+    else if (lastSplitZone >= 0) {
       const since = meters - (lastSplitZone + 1) * ZONE_M;
-      // Сход сдвига ветки идёт ~FADE_M в начале новой зоны; ведём в попутную
-      // полосу на всём участке слияния и чуть дальше для стабилизации.
+      // После развилки мягко ведём байк в попутную полосу.
       if (since > -20 && since < 420) {
         const target = nearestRunLane(G.laneOffset, cfg);
         if (Math.abs(G.laneOffset - target) > 0.35) G.laneAssistTarget = target;
@@ -1462,8 +1360,7 @@ function resetBiomeRun() {
   lastLaneBiome = -1;
   lastSplitZone = -1;
   lastSplitSide = -1;
-  previewStableZone = -1;
-  previewStableSide = 0;
+  exitHold = false;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
@@ -1538,9 +1435,19 @@ export function initBiome() {
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.forkCenterShiftAtS = forkCenterShiftAtS;
+  G.exitShiftAt = exitShiftAt;
+  G.exitReservedAt = exitReservedAt;
   G.forkChosenSideAtS = forkChosenSideAtS;
   G.forkCloseAtS = forkCloseAtS;
   G.roadEdgesAt = roadEdgesAt;
+  G.roadsideFrameAt = (s) => ({
+    edges: roadEdgesAt(s),
+    chosenSide: forkChosenSideAtS(s),
+  });
+  G.besidePose = besidePose;
+  G.medianRoom = medianRoom;
+  G.medianFits = medianFits;
+  G.medianPose = medianPose;
   G.roadOuterLat = roadOuterLat;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
@@ -1624,6 +1531,7 @@ export function initBiomeWorld() {
   };
 
   for (let i = 0; i < SCENERY_SLOTS; i++) {
+    /** @type {import('./game-state.d.ts').ScenerySlot} */
     const slot = { s: i * SCENERY_STEP, placedS: NaN, left: [], right: [] };
     for (const side of [-1, 1]) {
       const list = side < 0 ? slot.left : slot.right;
@@ -1660,10 +1568,11 @@ export function initBiomeWorld() {
         const list = side < 0 ? slot.left : slot.right;
         for (const entry of list) {
           const bw = w[entry.biome] || 0;
-          const visible = bw > 0.12;
+          const s = slot.s + entry.ds;
+          const onExit = side > 0 && exitReservedAt(s);
+          const visible = bw > 0.12 && !onExit;
           entry.group.visible = visible;
           if (!visible) continue;
-          const s = slot.s + entry.ds;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
           const lat = Math.max(entry.lat, Math.abs(roadOuterLat(s, side)) + 8);

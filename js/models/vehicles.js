@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isTrafficModel } from '../engine/biomes.js';
 import { G } from '../state.js';
 import { box, cylinder } from '../geom.js';
 
@@ -845,8 +846,7 @@ function trailerColor(variant) {
 }
 
 export function createVehicleModel(type, colorHex, variant = 0) {
-  const known = ['sedan', 'hatchback', 'crossover', 'taxi', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck', 'bus', 'qute_traffic'];
-  if (!known.includes(type)) {
+  if (!isTrafficModel(type)) {
     console.warn('bajaj GO: неизвестный тип трафика «' + type + '», показан седан');
     type = 'sedan';
   }

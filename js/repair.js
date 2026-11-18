@@ -306,7 +306,7 @@ function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
 
     if (!G.started || G.ended || (G.jumpState && G.jumpState.airborne)) return;
     if (G.speed <= 8 || G.accidentCooldown > 0 || G.uiModal) return;
-    const bikeLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset);
+    const bikeLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
     const half = playerHalfWidth(!!(G.frameStats && G.frameStats.isQute));
     if (!checkRepairCollision(G.playerS, bikeLat, 1.7 + half)) return;
     G.accidentCooldown = 2.5;

@@ -1,10 +1,13 @@
 /** Правила заезда без Three.js и без DOM. Новые механики берут числа отсюда. */
 
 /** Середина между последней встречной и первой попутной. null — встречных нет. */
-export function laneSplitEdge(offsets, oncomingCount) {
+export function laneSplitEdge(offsets: number[] | null | undefined, oncomingCount: number): number | null {
   const n = oncomingCount | 0;
   if (n <= 0 || !offsets || n >= offsets.length) return null;
-  return (offsets[n - 1] + offsets[n]) * 0.5;
+  const left = offsets[n - 1];
+  const right = offsets[n];
+  if (left == null || right == null) return null;
+  return (left + right) * 0.5;
 }
 
 /** Светящаяся коробка на полосе. Меню открывается внутри неё только медленнее этого порога. */
@@ -13,12 +16,12 @@ export const EXIT_ZONE_WIDTH = 4.8;
 export const EXIT_ZONE_LENGTH = 5.4;
 export const EXIT_ZONE_OFFSET = 12.5;
 
-export function exitBoxCenter(exitS) {
+export function exitBoxCenter(exitS: number): number {
   return exitS - EXIT_ZONE_OFFSET;
 }
 
 /** Отрезок fromS→toS пересёк коробку, и байк стоит в её ширине. */
-export function crossedExitBox(fromS, toS, lane, exitS, targetLane) {
+export function crossedExitBox(fromS: number, toS: number, lane: number, exitS: number, targetLane: number): boolean {
   const center = exitBoxCenter(exitS);
   const halfL = EXIT_ZONE_LENGTH * 0.5;
   const lo = Math.min(fromS, toS);
@@ -28,16 +31,16 @@ export function crossedExitBox(fromS, toS, lane, exitS, targetLane) {
   return along && across;
 }
 
-export function oncomingMultiplier(lane, edge) {
+export function oncomingMultiplier(lane: number, edge: number | null): number {
   return edge != null && lane < edge ? 2 : 1;
 }
 
-export function comboDistanceMultiplier(comboCount) {
+export function comboDistanceMultiplier(comboCount: number): number {
   if (comboCount <= 0) return 1;
   return 1 + Math.min(comboCount, 5) * 0.2;
 }
 
-export function overflyMultiplier(count) {
+export function overflyMultiplier(count: number): number {
   if (count >= 3) return 2;
   if (count === 2) return 1.5;
   return 1;
@@ -46,11 +49,11 @@ export function overflyMultiplier(count) {
 export const HARD_LANDING_PITCH = 0.34;
 export const HARD_LANDING_WOBBLE = 0.55;
 
-export function hardLandingSpeed(speed) {
+export function hardLandingSpeed(speed: number): number {
   return speed * 0.72;
 }
 
-export function jumpBonus(count, jumpDist, softLanding) {
+export function jumpBonus(count: number, jumpDist: number, softLanding: boolean): number {
   const base = count * 50 * overflyMultiplier(count);
   const distBonus = Math.max(0, Math.floor((jumpDist - 12) / 10) * 20);
   let total = base + distBonus;
@@ -58,21 +61,59 @@ export function jumpBonus(count, jumpDist, softLanding) {
   return total;
 }
 
-export function distancePoints(speed, dt, lane, comboCount, edge) {
+export function distancePoints(speed: number, dt: number, lane: number, comboCount: number, edge: number | null): number {
   return (speed * dt / 6) * oncomingMultiplier(lane, edge) * comboDistanceMultiplier(comboCount);
 }
 
 export const COMBO_WINDOW = 4;
 
-export function nearMissPoints(comboCount, lane, edge) {
+export function nearMissPoints(comboCount: number, lane: number, edge: number | null): number {
   return 25 * comboCount * oncomingMultiplier(lane, edge);
 }
 
-export function scrapeSpeed(speed, dt) {
+export function scrapeSpeed(speed: number, dt: number): number {
   return Math.max(0, speed - (22 + speed * 0.28) * dt);
 }
 
-export function blankJumpState() {
+export interface BlankJump {
+  airborne: boolean;
+  height: number;
+  vy: number;
+  pitch: number;
+  startS: number;
+  carsJumped: number;
+  liveBonus: number;
+  wobbleTimer: number;
+}
+
+export interface RunKeys {
+  left: boolean;
+  right: boolean;
+  gas: boolean;
+  brake: boolean;
+}
+
+export interface RunTarget {
+  speed: number;
+  distance: number;
+  score: number;
+  totalJumpBonusRun: number;
+  totalCarsJumpedRun: number;
+  comboCount: number;
+  comboTimer: number;
+  playerS: number;
+  laneOffset: number;
+  lateralVelocity: number;
+  steerVisual: number;
+  slipDriftVel: number;
+  accelPitchOffset: number;
+  highBeamTimer: number;
+  highBeamCooldown: number;
+  jumpState: BlankJump;
+  keys?: RunKeys;
+}
+
+export function blankJumpState(): BlankJump {
   return {
     airborne: false,
     height: 0,
@@ -81,12 +122,12 @@ export function blankJumpState() {
     startS: 0,
     carsJumped: 0,
     liveBonus: 0,
-    wobbleTimer: 0
+    wobbleTimer: 0,
   };
 }
 
 /** Обнуляет поля одного заезда. Полосу старта передают снаружи: это крайняя попутная. */
-export function resetRun(target, startLane) {
+export function resetRun(target: RunTarget, startLane: number): void {
   target.speed = 0;
   target.distance = 0;
   target.score = 0;

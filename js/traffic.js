@@ -17,6 +17,7 @@ export function initTraffic() {
   const HEAVY_TYPES = new Set(['kamaz', 'truck', 'bus']);
   G.trafficPool = [];
   const vehicleColors = [0xd8dee9, 0xb71c1c, 0x1565c0, 0x2e7d32, 0x455a64, 0x6d4c41, 0x37474f, 0xf5f5f5];
+  /** @type {import('./engine/biomes.js').TrafficModel[]} */
   const vehicleTypes = [
     'sedan', 'sedan', 'sedan',
     'hatchback', 'hatchback',
@@ -244,7 +245,7 @@ export function initTraffic() {
       // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
       const toWorld = G.laneWorldOffsetAtS;
       const carWorldLat = toWorld(car.s, car.lateralOffset);
-      const playerWorldLat = toWorld(G.playerS, G.laneOffset);
+      const playerWorldLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
 
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;

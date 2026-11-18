@@ -1,21 +1,35 @@
 /** Шаг байка без Three.js и без DOM. Кадр только применяет результат и рисует. */
 
-function clamp(v, a, b) {
+function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
 
-function lerp(a, b, t) {
+function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
 /** Мировой метр чуть длиннее реального: и меню, и байк, и трафик едут одним масштабом. */
 export const WORLD_SPEED_SCALE = 1.45;
 
-export function worldMeters(speedKmh, dt) {
+export function worldMeters(speedKmh: number, dt: number): number {
   return (speedKmh / 3.6) * dt * WORLD_SPEED_SCALE;
 }
 
-export function stepSpeed(speed, dt, spec) {
+export interface SpeedSpec {
+  gas: boolean;
+  brake: boolean;
+  maxSpeed: number;
+  accel: number;
+  brakeDecel: number;
+  isQute: boolean;
+}
+
+export interface SpeedStep {
+  speed: number;
+  accelDelta: number;
+}
+
+export function stepSpeed(speed: number, dt: number, spec: SpeedSpec): SpeedStep {
   const { gas, brake, maxSpeed, accel, brakeDecel, isQute } = spec;
   let next = speed;
   if (gas && !brake) {
@@ -30,14 +44,43 @@ export function stepSpeed(speed, dt, spec) {
   if (next > maxSpeed) next = Math.max(maxSpeed, next - 60 * dt);
   return {
     speed: next,
-    accelDelta: (next - speed) / Math.max(dt, 0.001)
+    accelDelta: (next - speed) / Math.max(dt, 0.001),
   };
 }
 
-export function stepSteer(body, dt, now, spec) {
+export interface SteerBody {
+  laneOffset: number;
+  lateralVelocity: number;
+  steerVisual: number;
+  slipDriftVel: number;
+  wobbleTimer: number;
+}
+
+export interface SteerSpec {
+  left: boolean;
+  right: boolean;
+  steer?: number;
+  brake: boolean;
+  speed: number;
+  airborne: boolean;
+  curvature: number;
+  isYura: boolean;
+  wideTires: boolean;
+  upgradedBrakes: boolean;
+  roadEdge: number;
+  roadEdgeMin?: number;
+  roadEdgeMax?: number;
+}
+
+export interface SteerStep extends SteerBody {
+  scraped: boolean;
+}
+
+export function stepSteer(body: SteerBody, dt: number, now: number, spec: SteerSpec): SteerStep {
   // В режиме наклона приходит готовое значение −1…1; кнопки и свайп дают
   // дискретные −1/0/1, поэтому старый расчёт остаётся запасным.
-  const analog = Number.isFinite(spec.steer) ? clamp(spec.steer, -1, 1) : null;
+  const steer = spec.steer;
+  const analog = typeof steer === 'number' && Number.isFinite(steer) ? clamp(steer, -1, 1) : null;
   const dir = analog !== null ? analog : (spec.right ? 1 : 0) - (spec.left ? 1 : 0);
   const air = spec.airborne ? 0.36 : 1;
   let wobbleTimer = body.wobbleTimer;
@@ -61,8 +104,10 @@ export function stepSteer(body, dt, now, spec) {
   const slipDriftVel = lerp(body.slipDriftVel, (centrifugal + slip) * air, dt * 4.5);
   let laneOffset = body.laneOffset + (lateralVelocity + slipDriftVel + wobblePenalty) * dt;
 
-  const minEdge = Number.isFinite(spec.roadEdgeMin) ? spec.roadEdgeMin : -spec.roadEdge;
-  const maxEdge = Number.isFinite(spec.roadEdgeMax) ? spec.roadEdgeMax : spec.roadEdge;
+  const minGiven = spec.roadEdgeMin;
+  const maxGiven = spec.roadEdgeMax;
+  const minEdge = typeof minGiven === 'number' && Number.isFinite(minGiven) ? minGiven : -spec.roadEdge;
+  const maxEdge = typeof maxGiven === 'number' && Number.isFinite(maxGiven) ? maxGiven : spec.roadEdge;
   if (laneOffset > maxEdge || laneOffset < minEdge) {
     const side = laneOffset > maxEdge ? 1 : -1;
     return {
@@ -71,14 +116,28 @@ export function stepSteer(body, dt, now, spec) {
       steerVisual,
       slipDriftVel: 0,
       wobbleTimer,
-      scraped: true
+      scraped: true,
     };
   }
   return { laneOffset, lateralVelocity, steerVisual, slipDriftVel, wobbleTimer, scraped: false };
 }
 
+export interface RampDeck {
+  s: number;
+  length: number;
+  width: number;
+  height: number;
+  lateralOffset: number;
+}
+
+export interface RampContact {
+  progress: number;
+  height: number;
+  launch: boolean;
+}
+
 /** null, если байк не на трамплине. launch — нос дошёл до гребня или пересёк его за кадр. */
-export function rampUnderBike(playerS, prevS, lane, ramp) {
+export function rampUnderBike(playerS: number, prevS: number, lane: number, ramp: RampDeck): RampContact | null {
   const halfL = ramp.length * 0.5;
   const dLat = Math.abs(lane - ramp.lateralOffset);
   if (dLat >= ramp.width * 0.5 + 0.35) return null;
@@ -94,16 +153,26 @@ export function rampUnderBike(playerS, prevS, lane, ramp) {
   return {
     progress: onDeck ? progress : 1,
     height: (onDeck ? progress : 1) * ramp.height,
-    launch: to >= launchAt && from <= end
+    launch: to >= launchAt && from <= end,
   };
 }
 
-export function jumpLaunchVy(speed, massFactor) {
+export function jumpLaunchVy(speed: number, massFactor: number): number {
   const speedFactor = clamp((speed - 60) / 140, 0.22, 1.85);
   return (7.4 + speedFactor * 6.4) * (massFactor || 1);
 }
 
-export function stepJump(jump, dt, gas, brake) {
+export interface JumpMotion {
+  vy: number;
+  height: number;
+  pitch: number;
+}
+
+export interface JumpStep extends JumpMotion {
+  landed: boolean;
+}
+
+export function stepJump(jump: JumpMotion, dt: number, gas: boolean, brake: boolean): JumpStep {
   const vy = jump.vy - 20.5 * dt;
   const height = jump.height + vy * dt;
   const pitchInput = (gas ? 1 : 0) - (brake ? 1 : 0);
@@ -111,22 +180,22 @@ export function stepJump(jump, dt, gas, brake) {
   return { vy, height, pitch: lerp(jump.pitch, target, dt * 5.5), landed: height <= 0 };
 }
 
-export function stepGroundedPose(jump, dt, surfaceHeight, accelPitch) {
+export function stepGroundedPose(jump: JumpMotion, dt: number, surfaceHeight: number, accelPitch: number): { height: number; pitch: number } {
   return {
     height: lerp(jump.height, surfaceHeight, dt * 18),
-    pitch: lerp(jump.pitch, surfaceHeight > 0.05 ? 0.15 : accelPitch, dt * 10)
+    pitch: lerp(jump.pitch, surfaceHeight > 0.05 ? 0.15 : accelPitch, dt * 10),
   };
 }
 
-export function playerHalfWidth(isQute) {
+export function playerHalfWidth(isQute: boolean): number {
   return isQute ? 0.66 : 0.38;
 }
 
-export function crashOverlap(dS, dLat, halfLength, halfWidth, halfPlayer) {
+export function crashOverlap(dS: number, dLat: number, halfLength: number, halfWidth: number, halfPlayer: number): boolean {
   return dS < halfLength + 0.85 && dLat < halfWidth + halfPlayer;
 }
 
-export function overflyOverlap(dS, dLat, halfLength, halfWidth) {
+export function overflyOverlap(dS: number, dLat: number, halfLength: number, halfWidth: number): boolean {
   return dS < halfLength + 1.1 && dLat < halfWidth + 0.95;
 }
 
@@ -135,19 +204,37 @@ export function overflyOverlap(dS, dLat, halfLength, halfWidth) {
  * Число приходит из конфига: у города и полей их две, у гор одна, у МКАД четыре.
  * Значение по умолчанию не подставляется — иначе горы и МКАД тихо становятся городом.
  */
-export function isOncomingLane(laneIdx, oncomingCount) {
+export function isOncomingLane(laneIdx: number, oncomingCount: number): boolean {
   if (!Number.isInteger(oncomingCount) || oncomingCount < 0) {
     throw new Error(`oncomingCount должен прийти из биома, получено ${oncomingCount}`);
   }
   return laneIdx < oncomingCount;
 }
 
-export function nearMissOverlap(dS, dLat, halfWidth) {
+export function nearMissOverlap(dS: number, dLat: number, halfWidth: number): boolean {
   return dS < 2.2 && dLat < halfWidth + 1.15;
 }
 
+export interface CarContact {
+  airborne: boolean;
+  height: number;
+  roofHeight: number;
+  oncoming: boolean;
+  alreadyJumped: boolean;
+  dS: number;
+  dLat: number;
+  halfLength: number;
+  halfWidth: number;
+  playerHalfW: number;
+  speed: number;
+  cooldown: number;
+  nearMissAwarded: boolean;
+}
+
+export type CarContactKind = 'overfly' | 'crash' | 'near';
+
 /** 'overfly' | 'crash' | 'near' | null. Ветки те же, что были в кадре: высокий прыжок не бьёт машину. */
-export function classifyCarContact(hit) {
+export function classifyCarContact(hit: CarContact): CarContactKind | null {
   if (hit.airborne && hit.height >= hit.roofHeight * 0.58) {
     if (!hit.oncoming && !hit.alreadyJumped && overflyOverlap(hit.dS, hit.dLat, hit.halfLength, hit.halfWidth)) {
       return 'overfly';
@@ -163,8 +250,30 @@ export function classifyCarContact(hit) {
   return null;
 }
 
+export interface TrafficMotion {
+  laneIdx: number;
+  targetLaneIdx: number;
+  lateralOffset: number;
+  s: number;
+  speedKmh: number;
+  changingLane: boolean;
+  flashReactTimer: number;
+  steerAngle: number;
+}
+
+export interface TrafficStep {
+  s: number;
+  lateralOffset: number;
+  steerAngle: number;
+  laneIdx: number;
+  changingLane: boolean;
+  flashReactTimer: number;
+  move: number;
+  oncoming: boolean;
+}
+
 /** Шаг чужой машины: ход, перестроение, затухание реакции на свет. Направление берётся до смены полосы. */
-export function stepTrafficCar(car, dt, laneOffsets, oncomingCount) {
+export function stepTrafficCar(car: TrafficMotion, dt: number, laneOffsets: number[], oncomingCount: number): TrafficStep {
   const oncoming = isOncomingLane(car.laneIdx, oncomingCount);
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
@@ -174,7 +283,7 @@ export function stepTrafficCar(car, dt, laneOffsets, oncomingCount) {
   const flashReactTimer = car.flashReactTimer > 0 ? car.flashReactTimer - dt : car.flashReactTimer;
 
   if (changingLane) {
-    const target = laneOffsets[car.targetLaneIdx];
+    const target = laneOffsets[car.targetLaneIdx] ?? Number.NaN;
     const diff = target - lateralOffset;
     lateralOffset += Math.sign(diff) * Math.min(Math.abs(diff), 4.2 * dt);
     steerAngle = clamp(diff * 0.25, -0.35, 0.35);
@@ -196,26 +305,45 @@ export function stepTrafficCar(car, dt, laneOffsets, oncomingCount) {
     changingLane,
     flashReactTimer,
     move,
-    oncoming
+    oncoming,
   };
 }
 
+export interface TrafficRecycle {
+  base: number;
+  spread: number;
+}
+
 /** Куда вернуть машину, если она уехала из окна вокруг игрока. spread добивает случайный разброс. */
-export function trafficRecycle(carS, playerS) {
+export function trafficRecycle(carS: number, playerS: number): TrafficRecycle | null {
   if (carS < playerS - 28) return { base: playerS + 230, spread: 90 };
   if (carS > playerS + 340) return { base: playerS + 190, spread: 80 };
   return null;
 }
 
 /** В меню демо-байк не должен врезаться в стоящий в той же точке трафик. */
-export function menuTrafficNudge(carS, carLat, playerS, playerLat, menuDemo) {
+export function menuTrafficNudge(carS: number, carLat: number, playerS: number, playerLat: number, menuDemo: boolean): number | null {
   if (!menuDemo) return null;
   if (Math.abs(carS - playerS) < 9 && Math.abs(carLat - playerLat) < 2.5) return playerS + 45;
   return null;
 }
 
+export interface YieldCar {
+  laneIdx: number;
+  changingLane: boolean;
+  s: number;
+  lateralOffset: number;
+}
+
 /** Полоса, в которую попутная машина уходит от дальнего света. null — не реагирует. */
-export function highbeamYieldLane(car, playerS, playerLane, oncomingCount, laneCount, laneWidth) {
+export function highbeamYieldLane(
+  car: YieldCar,
+  playerS: number,
+  playerLane: number,
+  oncomingCount: number,
+  laneCount: number,
+  laneWidth: number,
+): number | null {
   if (!Number.isInteger(laneCount) || laneCount < 1) {
     throw new Error(`laneCount должен прийти из биома, получено ${laneCount}`);
   }

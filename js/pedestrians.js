@@ -56,6 +56,10 @@ export function initPedestrians() {
       // подтягиваются к кромке дороги и уменьшаются при переходе.
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
       const side = Math.sign(ped.lateralOffset) || 1;
+      if (side > 0 && G.exitReservedAt && G.exitReservedAt(ped.s)) {
+        ped.group.visible = false;
+        continue;
+      }
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
       const outer = Math.abs(G.roadOuterLat(ped.s, side));
       const lat = side * (outer + 1.15 + jitter * cw);

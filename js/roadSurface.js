@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { shoulderLats } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, shoulderLats, worldEdge } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -184,6 +184,11 @@ export function initRoadSurface() {
   slopeRightMesh.frustumCulled = false;
   G.scene.add(slopeRightMesh);
 
+  /** Внешний асфальт: за живой лентой, без умирающего съезда. */
+  function farAsphalt(s, side) {
+    return Math.abs(worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1));
+  }
+
   function shadeSlope(geo, side) {
     const norm = geo.attributes.normal.array;
     for (let r = 0; r < ROW; r++) {
@@ -208,7 +213,7 @@ export function initRoadSurface() {
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
       };
       const sh = G.shoulder;
-      const asphalt = Math.abs(G.roadOuterLat(sampleS[r], side));
+      const asphalt = farAsphalt(sampleS[r], side);
       const cityOuter = sh.cityEdge * sampleCity[r];
       const lat = shoulderLats(asphalt, cityOuter, sh);
       write(0, -lat.far, -lat.berm, sh.farY, sh.bermY);
@@ -411,10 +416,6 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Ленты с переменной шириной ---------------- */
-  function spreadAt(s) {
-    return G.forkSpreadAtS(s);
-  }
-
   function updateRoadRibbon() {
     roadRightMat.envMapIntensity = G.M.road.envMapIntensity;
     gapMat.color.copy(G.M.grass.color);
@@ -423,9 +424,9 @@ export function initRoadSurface() {
     const posG = forkGapMesh.geometry.attributes.position;
     let opened = 0;
     for (let r = 0; r < ROW; r++) {
-      const spread = spreadAt(sampleS[r]);
-      if (spread > opened) opened = spread;
       const edge = G.roadEdgesAt(sampleS[r]);
+      const gap = edge.rightInner - edge.leftInner;
+      if (gap > opened) opened = gap;
       const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
@@ -433,13 +434,13 @@ export function initRoadSurface() {
       posL.setXYZ(idx + 1, cx + rx * edge.leftInner, cy, cz + rz * edge.leftInner);
       posR.setXYZ(idx, cx + rx * edge.rightInner, cy, cz + rz * edge.rightInner);
       posR.setXYZ(idx + 1, cx + rx * edge.rightOuter, cy, cz + rz * edge.rightOuter);
-      posG.setXYZ(idx, cx - rx * spread, cy, cz - rz * spread);
-      posG.setXYZ(idx + 1, cx + rx * spread, cy, cz + rz * spread);
+      posG.setXYZ(idx, cx + rx * edge.leftInner, cy, cz + rz * edge.leftInner);
+      posG.setXYZ(idx + 1, cx + rx * edge.rightInner, cy, cz + rz * edge.rightInner);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
     posG.needsUpdate = true;
-    forkGapMesh.visible = opened > 0.02;
+    forkGapMesh.visible = opened > 0.35;
   }
 
   /** Лента, у которой центр и ширина в мировых метрах зависят от точки s. */
@@ -486,8 +487,8 @@ export function initRoadSurface() {
       const rx = rightX[r], rz = rightZ[r];
       const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
-      const left = shoulderLats(Math.abs(G.roadOuterLat(sampleS[r], -1)), cityOuter, sh);
-      const right = shoulderLats(G.roadOuterLat(sampleS[r], 1), cityOuter, sh);
+      const left = shoulderLats(farAsphalt(sampleS[r], -1), cityOuter, sh);
+      const right = shoulderLats(farAsphalt(sampleS[r], 1), cityOuter, sh);
       const idx = r * 3;
       posL.setXYZ(idx,     cx + rx * -left.far, cy + sh.farY, cz + rz * -left.far);
       posL.setXYZ(idx + 1, cx + rx * -left.berm, cy + sh.bermY, cz + rz * -left.berm);
@@ -575,8 +576,8 @@ export function initRoadSurface() {
   /** Цветная линия вдоль внутренней кромки ветки. inset 0.38 на прямой даёт ±0.22. */
   function updateIslandStrip(mesh, side) {
     const splitS = splitCenterS(G.playerS);
-    const from = splitS - 120;
-    const span = 240;
+    const from = splitS;
+    const span = EXIT_DIVERGE + EXIT_RUN;
     const halfW = 0.13;
     const pos = mesh.geometry.attributes.position;
     for (let r = 0; r < ISLAND_ROWS; r++) {
@@ -596,8 +597,8 @@ export function initRoadSurface() {
 
   function updateIsland(playerS) {
     const splitS = splitCenterS(playerS);
-    const amount = G.splitAmountAtS(splitS);
-    const active = amount > 0.01;
+    const amount = G.splitAmountAtS(splitS + EXIT_DIVERGE);
+    const active = amount > 0.2;
 
     const choices = G.splitState && G.splitState.choices ? G.splitState.choices : null;
     const leftBiome = choices ? G.BIOMES[choices[0]] : null;
@@ -617,29 +618,31 @@ export function initRoadSurface() {
       updateIslandStrip(accentLineR, 1);
     }
 
-    // Стрелки: по две на ветку до развилки. Боковое смещение считается от
-    // ширины в точке стрелки, иначе на узкой горной дороге они уезжают за
-    // кромку (ширина развилки там заметно больше обычной).
-    const hintLatAt = (s) => {
-      const spread = G.forkSpreadAtS(s);
-      const half = widthAt(s) * 0.5;
-      return spread + Math.max(1.6, Math.min(half * 0.45, half - 0.8));
+    // Прямые стрелки остаются на основной дороге. Стрелки съезда — на его ленте.
+    const exitCenterAt = (s) => {
+      const edge = G.roadEdgesAt(s);
+      const width = edge.rightOuter - edge.rightInner;
+      if (width < 1.2) return null;
+      return (edge.rightInner + edge.rightOuter) * 0.5;
     };
-    const arrows = [
-      { mesh: arrowLeftA, s: splitS - 95, side: -1 },
-      { mesh: arrowLeftB, s: splitS - 48, side: -1 },
-      { mesh: arrowRightA, s: splitS - 95, side: 1 },
-      { mesh: arrowRightB, s: splitS - 48, side: 1 }
+    const forward = [
+      { mesh: arrowLeftA, s: splitS + 40 },
+      { mesh: arrowLeftB, s: splitS + EXIT_DIVERGE * 0.7 }
     ];
-    for (const a of arrows) {
+    for (const a of forward) {
       a.mesh.visible = active;
       if (!active) continue;
-      placeAlongLane(
-        a.mesh, a.s,
-        a.side * hintLatAt(a.s - 2.4),
-        a.side * hintLatAt(a.s + 2.4),
-        2.4, 0.055
-      );
+      placeAlongLane(a.mesh, a.s, 0, 0, 2.4, 0.055);
+    }
+    const exiting = [
+      { mesh: arrowRightA, s: splitS + 40 },
+      { mesh: arrowRightB, s: splitS + EXIT_DIVERGE * 0.7 }
+    ];
+    for (const a of exiting) {
+      const lat = active ? exitCenterAt(a.s) : null;
+      a.mesh.visible = lat != null;
+      if (lat == null) continue;
+      placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
     }
   }
 

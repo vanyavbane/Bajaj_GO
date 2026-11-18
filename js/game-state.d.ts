@@ -1,4 +1,7 @@
 import type * as THREE from 'three';
+import type { BiomeDef, BiomeId, BiomeTraffic, LaneLayout, RoadSample, TrafficModel } from './engine/biomes.js';
+import type { AsphaltEdges, BranchPick, ChosenSide, ShoulderProfile, SplitPick } from './engine/fork.js';
+import type { BesideAsset, MedianAsset, RoadsideFrame, RoadsidePose } from './engine/roadside.js';
 
 export interface ColorSwatch {
   name: string;
@@ -83,7 +86,7 @@ export interface JumpState {
 
 export interface TrafficCar {
   model: {
-    type: string;
+    type: TrafficModel;
     root: THREE.Object3D;
     hiDetail: THREE.Object3D;
     loDetail: THREE.Object3D;
@@ -221,10 +224,12 @@ export interface SplitState {
   splitMeters: number;
   s: number;
   d: number;
-  side: number;
-  previewSide: number;
+  /** Слот баннера: 0 левый, 1 правый. Не сторона оси. */
+  side: BranchPick;
+  previewSide: BranchPick;
   chosen: boolean;
-  chosenSide: number;
+  /** -1 пока развилка не зафиксирована, иначе слот 0 или 1. */
+  chosenSide: SplitPick;
   choices: number[];
   chosenBiome: number | null;
   autoAt: number;
@@ -235,6 +240,30 @@ export interface BiomeTransition {
   from: number;
   to: number;
   t: number;
+}
+
+export interface ScenerySpin {
+  mesh: THREE.Object3D;
+  speed: number;
+}
+
+/** Один объект декора на стороне слота. Город сюда не входит. */
+export interface SceneryEntry {
+  biome: number;
+  group: THREE.Object3D;
+  meshes: THREE.Object3D[];
+  lodFar: boolean;
+  yaw: number;
+  lat: number;
+  ds: number;
+  spin: ScenerySpin | null;
+}
+
+export interface ScenerySlot {
+  s: number;
+  placedS: number;
+  left: SceneryEntry[];
+  right: SceneryEntry[];
 }
 
 /** Общее состояние игры. Известные поля типизированы, остальные пока any. */
@@ -261,6 +290,42 @@ export interface GameState {
   LANE_OFFSETS: number[];
   START_LANE: number;
   frameStats: EffectiveStats | null;
+  /** Кадр кромок в точке s и постановка декора относительно них. */
+  roadsideFrameAt: (s: number) => RoadsideFrame;
+  besidePose: (frame: RoadsideFrame, asset: BesideAsset) => RoadsidePose;
+  medianRoom: (edges: AsphaltEdges) => number;
+  medianFits: (edges: AsphaltEdges, asset: MedianAsset) => boolean;
+  medianPose: (edges: AsphaltEdges, asset: MedianAsset) => RoadsidePose;
+  biomeMetersAt: (s: number) => number;
+  biomeRoadX: (s: number) => number;
+  biomeRoadDX: (s: number) => number;
+  biomeRoadDDX: (s: number) => number;
+  biomeRoadY: (s: number) => number;
+  biomeRoadDY: (s: number) => number;
+  biomeRoadDDY: (s: number) => number;
+  nominalRoadWidth: number;
+  forkSpreadAtS: (s: number) => number;
+  forkCenterShiftAtS: (s: number) => number;
+  /** Метры, на которые байк уехал на съезд. 0 — он на прямой дороге. */
+  exitShiftAt: (s: number) => number;
+  /** Справа на этом метре стоит съезд: дома и деревья туда не ставятся. */
+  exitReservedAt: (s: number) => boolean;
+  forkChosenSideAtS: (s: number) => ChosenSide;
+  forkCloseAtS: (s: number) => number;
+  roadEdgesAt: (s: number) => AsphaltEdges;
+  roadOuterLat: (s: number, side: number) => number;
+  roadBiomeAtS: (s: number) => number;
+  splitCenterS: (playerS: number) => number;
+  shoulder: ShoulderProfile;
+  groundOffset: (lat: number, s: number) => number;
+  /** 1, пока развилка в окне камеры. */
+  forkView: 0 | 1;
+  biomeTraffic: BiomeTraffic;
+  roadEdgeMin: number;
+  roadEdgeMax: number;
+  biomeScenery: ScenerySlot[];
+  resetBiomeScenery: () => void;
+  updateBiomeScenery: () => void;
   roadX: (s: number) => number;
   roadY: (s: number) => number;
   roadDX: (s: number) => number;
@@ -283,19 +348,19 @@ export interface GameState {
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
   splitLateralShiftAtS: (s: number, lateralOffset: number) => number;
   dominantBiomeAtS: (s: number) => number;
-  nearestRunLane: (lateralOffset: number, cfg?: any) => number;
-  biomeProfile: (biomeId: number | string, s: number) => any;
-  getLaneConfig: (biomeId: number | string) => any;
+  nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
+  biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;
+  getLaneConfig: (biomeId: BiomeId | number) => LaneLayout;
   getBiomeChoices: (currentBiome: number, visitCounts: number[]) => number[];
   randomRunLane: (s?: number) => number;
-  lanesAtS: (s?: number) => { count: number; oncomingCount: number; offsets: number[]; speeds: number[] };
-  remapTrafficLanes: (cfg?: any) => void;
+  lanesAtS: (s?: number) => LaneLayout;
+  remapTrafficLanes: (cfg?: LaneLayout | null) => void;
   currentBiome: number;
   visitCounts: number[];
   pendingBiome: number | null;
   biomeTransition: BiomeTransition | null;
   splitState: SplitState | null;
-  BIOMES: any[];
+  BIOMES: readonly BiomeDef[];
   laneCount: number;
   oncomingCount: number;
   LANE_SPEEDS: number[];
@@ -323,8 +388,20 @@ export interface GameState {
   started: boolean;
   ended: boolean;
   speed: number;
+  distance: number;
+  score: number;
+  totalJumpBonusRun: number;
+  totalCarsJumpedRun: number;
+  comboCount: number;
+  comboTimer: number;
   playerS: number;
   laneOffset: number;
+  lateralVelocity: number;
+  steerVisual: number;
+  slipDriftVel: number;
+  accelPitchOffset: number;
+  highBeamTimer: number;
+  highBeamCooldown: number;
   keys: { left: boolean; right: boolean; gas: boolean; brake: boolean };
   /** Режим управления: экранные кнопки (по умолчанию) или наклон устройства. */
   controlMode: 'buttons' | 'tilt';

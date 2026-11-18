@@ -2,60 +2,87 @@
  * Полосы читаются только из конфига, который выставил биом.
  * Городские «4 полосы и 2 встречные» больше нигде не подставляются молча:
  * если конфига нет или он разошёлся сам с собой, игра падает сразу.
- *
- * @param {{
- *   laneCount?: number,
- *   oncomingCount?: number,
- *   LANE_OFFSETS?: number[],
- *   LANE_SPEEDS?: number[],
- *   START_LANE?: number
- * }} state
  */
-export function readLanes(state) {
-  const offsets = state && state.LANE_OFFSETS;
-  const count = state && state.laneCount;
-  const oncoming = state && state.oncomingCount;
-  const speeds = state && state.LANE_SPEEDS;
-  if (!Array.isArray(offsets) || !Number.isInteger(count) || count < 1 || offsets.length !== count) {
+
+export interface LaneSource {
+  laneCount?: number;
+  oncomingCount?: number;
+  LANE_OFFSETS?: number[];
+  LANE_SPEEDS?: number[];
+  START_LANE?: number;
+}
+
+export interface LaneConfig {
+  count: number;
+  oncoming: number;
+  offsets: number[];
+  speeds: number[];
+  startLane: number;
+}
+
+function finiteNumbers(values: readonly unknown[], count: number): number[] | null {
+  if (values.length !== count) return null;
+  const out: number[] = [];
+  for (const value of values) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    out.push(value);
+  }
+  return out;
+}
+
+export function readLanes(state: LaneSource | null | undefined): LaneConfig {
+  const offsets = state?.LANE_OFFSETS;
+  const count = state?.laneCount;
+  const oncoming = state?.oncomingCount;
+  const speeds = state?.LANE_SPEEDS;
+  const laneOffsets = Array.isArray(offsets) && typeof count === 'number' && Number.isInteger(count) && count >= 1
+    ? finiteNumbers(offsets, count)
+    : null;
+  if (!laneOffsets || typeof count !== 'number') {
     throw new Error('Полосы дороги не заданы. Их выставляет applyLaneConfig в js/biome.js до остальной сцены.');
   }
-  if (!Number.isInteger(oncoming) || oncoming < 0 || oncoming >= count) {
+  if (typeof oncoming !== 'number' || !Number.isInteger(oncoming) || oncoming < 0 || oncoming >= count) {
     throw new Error(`Встречных полос ${oncoming} при ${count} полосах. Проверь oncoming в BIOMES.`);
   }
-  if (!Array.isArray(speeds) || speeds.length !== count || speeds.some((speed) => !Number.isFinite(speed))) {
+  const laneSpeeds = Array.isArray(speeds) ? finiteNumbers(speeds, count) : null;
+  if (!laneSpeeds) {
     throw new Error('LANE_SPEEDS должен совпадать с числом полос текущего биома.');
   }
-  const startLane = Number.isFinite(state.START_LANE) ? state.START_LANE : offsets[count - 1];
-  return { count, oncoming, offsets, speeds, startLane };
+  const start = state?.START_LANE;
+  const fallback = laneOffsets[count - 1] ?? 0;
+  const startLane = typeof start === 'number' && Number.isFinite(start) ? start : fallback;
+  return { count, oncoming, offsets: laneOffsets, speeds: laneSpeeds, startLane };
 }
 
 /**
  * Штрихи между соседними полосами. Граница встречных и попутных сюда не входит:
  * её рисует жёлтая осевая. Смещения берутся из конфига, а не из «номер × ширина».
  */
-export function laneDashOffsets(offsets, oncomingCount) {
-  const marks = [];
+export function laneDashOffsets(offsets: number[] | null | undefined, oncomingCount: number): number[] {
+  const marks: number[] = [];
   if (!offsets || offsets.length < 2) return marks;
   const split = oncomingCount | 0;
   for (let i = 0; i < offsets.length - 1; i++) {
     if (i + 1 === split) continue;
-    marks.push((offsets[i] + offsets[i + 1]) * 0.5);
+    marks.push(((offsets[i] ?? Number.NaN) + (offsets[i + 1] ?? Number.NaN)) * 0.5);
   }
   return marks;
 }
 
 /** Одна и та же полоса, даже если у соседних биомов разный номер. Шаг полос от 4.3 м. */
-export function sameLaneOffset(a, b) {
+export function sameLaneOffset(a: number, b: number): boolean {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1.6;
 }
 
 /** Индекс полосы, чей центр ближе всего к смещению. Номер из другого биома не переносится. */
-export function nearestLaneIndex(offsets, lateral) {
+export function nearestLaneIndex(offsets: number[], lateral: number): number {
   let best = 0;
   let bestDist = Infinity;
   const target = Number.isFinite(lateral) ? lateral : 0;
   for (let i = 0; i < offsets.length; i++) {
-    const dist = Math.abs(offsets[i] - target);
+    const offset = offsets[i];
+    if (typeof offset !== 'number' || !Number.isFinite(offset)) continue;
+    const dist = Math.abs(offset - target);
     if (dist < bestDist) {
       bestDist = dist;
       best = i;
@@ -65,7 +92,7 @@ export function nearestLaneIndex(offsets, lateral) {
 }
 
 /** Индекс полосы внутри текущего конфига. Дробное и пустое значение прижимается к диапазону. */
-export function clampLaneIndex(index, count) {
+export function clampLaneIndex(index: number, count: number): number {
   const n = Math.round(Number(index));
   const raw = Number.isFinite(n) ? n : 0;
   return Math.max(0, Math.min(count - 1, raw));

@@ -10,7 +10,9 @@
     "strict": false,
     "skipLibCheck": true,
     "noImplicitAny": false,
+    "allowImportingTsExtensions": true,
     "types": []
   },
-  "include": ["js/**/*.js", "js/**/*.d.ts", "vite.config.js"]
+  "include": ["js/**/*.js", "js/**/*.d.ts", "js/**/*.ts", "vite.config.js"],
+  "exclude": ["js/**/*.check.ts"]
 }
