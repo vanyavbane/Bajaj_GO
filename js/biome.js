@@ -3,8 +3,8 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { BRANCH_YAW, frameFromSpline, stepBranch } from './engine/branch.js';
 import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { EXIT_RIGHT, createVectorField } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -475,16 +475,10 @@ function splitCenterS(playerS) {
   return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
 }
 
-const BRANCH_STEP = 2;
-/** @type {Map<number, { nose: number, samples: import('./engine/branch.js').PathFrame[], frozen: { fx: number, fz: number } | null }>} */
-const branchPaths = new Map();
+const vectors = createVectorField();
 
 function clearBranchPaths() {
-  branchPaths.clear();
-}
-
-function mainPath(s) {
-  return frameFromSpline(biomeRoadX(s), biomeRoadDX(s), s);
+  vectors.clear();
 }
 
 function noseOfZone(zone) {
@@ -492,122 +486,54 @@ function noseOfZone(zone) {
   return (zone + 1) * ZONE_M - FORK_LEAD - offset;
 }
 
-/** Взятые съезды, чей поворот уже кончился к точке s: дальше дорога идёт их вектором. */
-function ownedNoses(s) {
+function zoneIndexAt(s) {
   const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  const meters = Math.max(0, offset + s);
-  const zone = Math.floor(meters / ZONE_M);
-  const noses = [];
-  for (let z = 0; z <= zone; z++) {
-    if (chosenExit[z] !== 1) continue;
-    const nose = noseOfZone(z);
-    if (s >= nose + EXIT_CHOICE + EXIT_END - 0.01) noses.push(nose);
-  }
-  return noses;
+  return Math.floor(Math.max(0, offset + s) / ZONE_M);
 }
 
-function advanceBranch(rec, baseAt) {
-  const prev = rec.samples[rec.samples.length - 1];
-  const cursor = rec.nose + (rec.samples.length - 1) * BRANCH_STEP;
-  const mid = cursor + BRANCH_STEP * 0.5;
-  const stepped = stepBranch(prev, cursor, rec.nose, BRANCH_STEP, baseAt(mid), EXIT_DIVERGE, BRANCH_YAW, rec.frozen);
-  rec.frozen = stepped.frozen;
-  rec.samples.push(stepped.frame);
-}
-
-function pathFrom(nose, s, baseAt) {
-  if (!(s > nose)) return baseAt(s);
-  let rec = branchPaths.get(nose);
-  if (!rec) {
-    rec = { nose, samples: [baseAt(nose)], frozen: null };
-    branchPaths.set(nose, rec);
-  }
-  const need = Math.ceil((s - nose) / BRANCH_STEP);
-  while (rec.samples.length - 1 < need) advanceBranch(rec, baseAt);
-  const t = (s - nose) / BRANCH_STEP;
-  const i0 = Math.max(0, Math.min(rec.samples.length - 1, Math.floor(t)));
-  const i1 = Math.min(rec.samples.length - 1, i0 + 1);
-  const u = Math.max(0, Math.min(1, t - i0));
-  const a = rec.samples[i0];
-  const b = rec.samples[i1];
-  const fx = a.fx + (b.fx - a.fx) * u;
-  const fz = a.fz + (b.fz - a.fz) * u;
-  const len = Math.hypot(fx, fz) || 1;
-  const nfx = fx / len;
-  const nfz = fz / len;
+/** Спавн вектора зоны. Угол берётся из каталога, не из расчёта биома. */
+function vectorSpawn(zone) {
+  const nose = noseOfZone(zone);
   return {
-    x: a.x + (b.x - a.x) * u,
-    z: a.z + (b.z - a.z) * u,
-    fx: nfx,
-    fz: nfz,
-    rx: -nfz,
-    rz: nfx,
-    curvature: a.curvature + (b.curvature - a.curvature) * u,
+    key: `${zone}:${EXIT_RIGHT.id}`,
+    nose,
+    yaw: EXIT_RIGHT.yaw,
+    ownsFrom: nose + EXIT_CHOICE + EXIT_END,
   };
 }
 
-/** Центр дороги с учётом уже взятых съездов. Текущий поворот сюда не входит, пока он не стал дорогой. */
-function centerline(s, skipNose) {
-  const noses = ownedNoses(s);
-  let nose = null;
-  for (let i = noses.length - 1; i >= 0; i--) {
-    if (noses[i] !== skipNose) { nose = noses[i]; break; }
+function ownedSpawns(s) {
+  const zone = zoneIndexAt(s);
+  const list = [];
+  for (let z = 0; z <= zone; z++) {
+    if (chosenExit[z] !== 1) continue;
+    const spawn = vectorSpawn(z);
+    if (s >= spawn.ownsFrom - 0.01) list.push(spawn);
   }
-  if (nose == null) return mainPath(s);
-  return pathFrom(nose, s, (u) => centerline(u, nose));
+  return list;
 }
 
-/** Лента съезда этой зоны, даже если игрок ещё едет прямо. */
-function exitPath(s) {
+function exitSpawn(s) {
   const nose = splitCenterS(s);
   if (!(s > nose)) return null;
-  return pathFrom(nose, s, (u) => centerline(u, nose));
+  return vectorSpawn(zoneIndexAt(s));
 }
 
 function embedRoad(s, lat) {
-  const y = biomeRoadY(s);
-  const edges = roadEdgesAt(s);
   const nose = splitCenterS(s);
-  const exit = s > nose ? exitPath(s) : null;
-  const width = edges.rightOuter - edges.rightInner;
-  const gap = edges.rightInner - edges.leftInner;
-  const ribbon = (edges.rightInner + edges.rightOuter) * 0.5;
-  const zone = Math.floor(Math.max(0, (G.biomeOffsetM || 0) + s) / ZONE_M);
-  const ownedHere = chosenExit[zone] === 1 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01;
-  if (exit && !ownedHere && width > 0.8 && lat >= edges.rightInner - 0.2) {
-    const local = lat - ribbon;
-    const base = centerline(s, nose);
-    const peelT = Math.max(0, Math.min(1, (s - nose) / EXIT_DIVERGE));
-    const peel = peelT * peelT * (3 - 2 * peelT);
-    // Внешний край уходит сразу. Внутренний догоняет, только когда клин открылся,
-    // иначе общая кромка прямой оторвалась бы от полотна.
-    const separated = Math.max(0, Math.min(1, gap / 4));
-    const outer = Math.max(0, Math.min(1, (lat - edges.rightInner) / Math.max(width, 0.5)));
-    const weight = peel * Math.max(separated, outer);
-    const sx = base.x + base.rx * lat;
-    const sz = base.z + base.rz * lat;
-    const bx = exit.x + exit.rx * local;
-    const bz = exit.z + exit.rz * local;
-    const fx = base.fx + (exit.fx - base.fx) * weight;
-    const fz = base.fz + (exit.fz - base.fz) * weight;
-    const len = Math.hypot(fx, fz) || 1;
-    const nfx = fx / len;
-    const nfz = fz / len;
-    return {
-      x: sx + (bx - sx) * weight, y, z: sz + (bz - sz) * weight,
-      rx: -nfz, rz: nfx, fx: nfx, fz: nfz,
-      curvature: base.curvature + (exit.curvature - base.curvature) * weight,
-      branched: weight > 0.04,
-    };
-  }
-  const path = centerline(s, null);
-  const branched = ownedNoses(s).length > 0;
-  const local = branched ? lat - frameAt(s).origin : lat;
-  return {
-    x: path.x + path.rx * local, y, z: path.z + path.rz * local,
-    rx: path.rx, rz: path.rz, fx: path.fx, fz: path.fz,
-    curvature: path.curvature, branched,
-  };
+  const zone = zoneIndexAt(s);
+  return vectors.embed({
+    s,
+    lat,
+    y: biomeRoadY(s),
+    nose,
+    edges: roadEdgesAt(s),
+    owned: ownedSpawns(s),
+    exit: exitSpawn(s),
+    origin: frameAt(s).origin,
+    turn: EXIT_DIVERGE,
+    ownedHere: chosenExit[zone] === 1 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01,
+  }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u) }));
 }
 
 function roadCurvature(s) {

@@ -32,9 +32,9 @@ export function frameFromSpline(x: number, dx: number, s: number): PathFrame {
   return { x, z: -s, fx, fz, rx: -fz, rz: fx, curvature: 0 };
 }
 
-/** 0 до носа, полный угол после поворота. */
+/** 0 до носа, полный угол после поворота. Отрицательный угол — влево. */
 export function branchYaw(distance: number, turn: number, yaw = BRANCH_YAW): number {
-  if (!(distance > 0) || !(turn > 0) || !(yaw > 0)) return 0;
+  if (!(distance > 0) || !(turn > 0) || !Number.isFinite(yaw)) return 0;
   const t = Math.max(0, Math.min(1, distance / turn));
   const s = t * t * (3 - 2 * t);
   return yaw * s;
