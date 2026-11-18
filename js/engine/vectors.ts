@@ -203,19 +203,6 @@ interface PathRecord {
 
 const STEP = 2;
 
-/** Лента справа берёт вектор с положительным углом, слева — с отрицательным. */
-function pickBranch(branches: readonly VectorSpawn[], edges: RibbonEdges, lat: number): VectorSpawn | null {
-  const rightWidth = edges.rightOuter - edges.rightInner;
-  if (rightWidth > 0.8 && lat >= edges.rightInner - 0.2) {
-    return branches.find((item) => item.yaw > 0) ?? null;
-  }
-  const leftWidth = edges.leftInner - edges.leftOuter;
-  if (leftWidth > 0.8 && lat <= edges.leftOuter + 0.2) {
-    return branches.find((item) => item.yaw < 0) ?? null;
-  }
-  return null;
-}
-
 function splineFrame(sample: SplineSample, s: number): PathFrame {
   return frameFromSpline(sample.x, sample.dx, s, sample.ddx ?? 0);
 }
@@ -293,60 +280,102 @@ export function createVectorField() {
     return pathFrom(spawn, s, turn, (u) => frame(spawns, u, spline, turn, nose));
   }
 
-  function embed(query: EmbedQuery, spline: (s: number) => SplineSample): RoadEmbed {
-    const { s, lat, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
-    const exit = pickBranch(branches, edges, lat);
-    const exitFrame = exit && s > exit.nose
-      ? pathFrom(exit, s, turn, (u) => frame(owned, u, spline, turn, exit.nose))
-      : null;
+  interface Heading {
+    y: number;
+    origin: number;
+    ribbon: number;
+    width: number;
+    rightInner: number;
+    leftOuter: number;
+    ownedHere: boolean;
+    branched: boolean;
+    peel: number;
+    separated: number;
+    parent: PathFrame;
+    right: PathFrame | null;
+    left: PathFrame | null;
+  }
+
+  function heading(query: Omit<EmbedQuery, 'lat'>, spline: (s: number) => SplineSample): Heading {
+    const { s, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
     const width = edges.rightOuter - edges.rightInner;
     const gap = edges.rightInner - edges.leftInner;
-    const ribbon = exitRibbonMid(edges);
-    const onRibbon = !ownedHere && width > 0.8 && lat >= edges.rightInner - 0.2;
-    if (exitFrame && exit && onRibbon) {
-      const base = frame(owned, s, spline, turn, exit.nose);
-      const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
-      const peel = peelT * peelT * (3 - 2 * peelT);
-      const separated = Math.max(0, Math.min(1, gap / 4));
-      const outer = Math.max(0, Math.min(1, (lat - edges.rightInner) / Math.max(width, 0.5)));
-      const weight = peel * Math.max(separated, outer);
-      const fromCenter = courseLocal(lat, { kind: 'owned', center: origin });
-      const sx = base.x + base.rx * fromCenter;
-      const sz = base.z + base.rz * fromCenter;
-      const along = courseLocal(lat, { kind: 'ribbon', ribbon });
+    const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
+    const peel = peelT * peelT * (3 - 2 * peelT);
+    const separated = Math.max(0, Math.min(1, gap / 4));
+    const rightSpawn = branches.find((item) => item.yaw > 0) ?? null;
+    const leftSpawn = branches.find((item) => item.yaw < 0) ?? null;
+    const right = rightSpawn && s > rightSpawn.nose
+      ? pathFrom(rightSpawn, s, turn, (u) => frame(owned, u, spline, turn, rightSpawn.nose))
+      : null;
+    const left = leftSpawn && s > leftSpawn.nose
+      ? pathFrom(leftSpawn, s, turn, (u) => frame(owned, u, spline, turn, leftSpawn.nose))
+      : null;
+    const parent = frame(owned, s, spline, turn);
+    return {
+      y,
+      origin,
+      ribbon: exitRibbonMid(edges),
+      width,
+      rightInner: edges.rightInner,
+      leftOuter: edges.leftOuter,
+      ownedHere,
+      branched: owned.length > 0,
+      peel,
+      separated,
+      parent,
+      right,
+      left,
+    };
+  }
+
+  function place(head: Heading, lat: number): RoadEmbed {
+    const onRight = !head.ownedHere && head.width > 0.8 && lat >= head.rightInner - 0.2;
+    const onLeft = !head.ownedHere && head.left && lat <= head.leftOuter + 0.2;
+    const exitFrame = onRight ? head.right : onLeft ? head.left : null;
+    if (exitFrame) {
+      const outer = Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
+      const weight = head.peel * (head.separated > 0.75 ? 1 : Math.max(head.separated, onLeft ? 0 : outer));
+      const fromCenter = courseLocal(lat, { kind: 'owned', center: head.origin });
+      const sx = head.parent.x + head.parent.rx * fromCenter;
+      const sz = head.parent.z + head.parent.rz * fromCenter;
+      const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
       const bx = exitFrame.x + exitFrame.rx * along;
       const bz = exitFrame.z + exitFrame.rz * along;
-      const fx = base.fx + (exitFrame.fx - base.fx) * weight;
-      const fz = base.fz + (exitFrame.fz - base.fz) * weight;
+      const fx = head.parent.fx + (exitFrame.fx - head.parent.fx) * weight;
+      const fz = head.parent.fz + (exitFrame.fz - head.parent.fz) * weight;
       const len = Math.hypot(fx, fz) || 1;
       const nfx = fx / len;
       const nfz = fz / len;
       return {
         x: sx + (bx - sx) * weight,
-        y,
+        y: head.y,
         z: sz + (bz - sz) * weight,
         rx: -nfz,
         rz: nfx,
         fx: nfx,
         fz: nfz,
-        curvature: base.curvature + (exitFrame.curvature - base.curvature) * weight,
+        curvature: head.parent.curvature + (exitFrame.curvature - head.parent.curvature) * weight,
         branched: weight > 0.04,
       };
     }
-    const path = frame(owned, s, spline, turn);
-    const branched = owned.length > 0;
-    const local = courseLocal(lat, branched ? { kind: 'owned', center: origin } : { kind: 'free' });
+    const local = courseLocal(lat, head.branched ? { kind: 'owned', center: head.origin } : { kind: 'free' });
+    const path = head.parent;
     return {
       x: path.x + path.rx * local,
-      y,
+      y: head.y,
       z: path.z + path.rz * local,
       rx: path.rx,
       rz: path.rz,
       fx: path.fx,
       fz: path.fz,
       curvature: path.curvature,
-      branched,
+      branched: head.branched,
     };
+  }
+
+  function embed(query: EmbedQuery, spline: (s: number) => SplineSample): RoadEmbed {
+    return place(heading(query, spline), query.lat);
   }
 
   return {
@@ -354,6 +383,8 @@ export function createVectorField() {
       cache.clear();
     },
     frame,
+    heading,
+    place,
     embed,
   };
 }

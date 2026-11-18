@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { exitRibbonMid } from './engine/fork.js';
 import { readLanes } from './engine/lanes.js';
 import { G } from './state.js';
 
@@ -35,76 +34,16 @@ export function initRoad() {
   const _qRoad = new THREE.Quaternion();
   const _qExtra = new THREE.Quaternion();
   const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
-  const _pA = new THREE.Vector3();
-  const _pB = new THREE.Vector3();
-
-  /** Смещение полосы: число либо функция от s — тогда тангенс идёт по линии полосы. */
+  /** Смещение полосы: число либо функция от s. */
   function latAt(lat, s) {
     return typeof lat === 'function' ? lat(s) : lat;
   }
 
-  /** Мировая точка. lat уже в метрах от оси. */
-  function roadPoint(out, s, lat, heightOffset) {
-    const dx = roadDX(s);
-    const lh = Math.hypot(dx, 1) || 1;
-    const total = lat;
-    out.set(roadX(s) + total / lh, roadY(s) + heightOffset, -s + total * dx / lh);
-    return out;
-  }
-
-  /**
-   * Касательная вдоль ленты. lat уже в метрах от оси (`roadLateral`).
-   * Если точка лежит на съезде, соседний сэмпл едет за центром той же ленты.
-   */
-  function latForTangent(lat, sSample, sRef) {
-    if (typeof lat === 'function') return lat(sSample);
-    if (!G.forkSpreadAtS || !G.roadEdgesAt) return lat;
-    const edge = G.roadEdgesAt(sRef);
-    const width = edge.rightOuter - edge.rightInner;
-    if (width < 0.8 || lat < edge.rightInner - 0.4 || lat > edge.rightOuter + 0.4) return lat;
-    const ahead = G.roadEdgesAt(sSample);
-    const centerRef = exitRibbonMid(edge);
-    const centerSample = exitRibbonMid(ahead);
-    return lat + (centerSample - centerRef);
-  }
-
-  function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
-    const dx = roadDX(s);
-    const dy = roadDY(s);
-    const lat = latAt(lateralOffset, s);
-    const h = 0.8;
-    // Две точки по той же полосе: на ветке касательная — её вектор, не сплайн.
-    if (G.embedRoad) {
-      const behind = G.embedRoad(s - h, lat);
-      const ahead = G.embedRoad(s + h, lat);
-      const here = G.embedRoad(s, lat);
-      _pA.set(behind.x, behind.y, behind.z);
-      _pB.set(ahead.x, ahead.y, ahead.z);
-      _forward.subVectors(_pB, _pA);
-      if (_forward.lengthSq() < 1e-8) _forward.set(here.fx, dy, here.fz);
-      _forward.normalize();
-      _right.set(here.rx, 0, here.rz);
-      if (_right.lengthSq() < 1e-8) _right.set(1, 0, 0);
-      else _right.normalize();
-      _up.crossVectors(_right, _forward).normalize();
-      _zAxis.copy(_forward).negate();
-      _basis.makeBasis(_right, _up, _zAxis);
-      _qRoad.setFromRotationMatrix(_basis);
-      if (extraYaw !== 0 || extraPitch !== 0 || extraRoll !== 0) {
-        _euler.set(extraPitch, extraYaw, extraRoll);
-        _qExtra.setFromEuler(_euler);
-        _qRoad.multiply(_qExtra);
-      }
-      obj.quaternion.copy(_qRoad);
-      obj.position.set(here.x, here.y + heightOffset, here.z);
-      return;
-    }
-    roadPoint(_pA, s - h, lat, 0);
-    roadPoint(_pB, s + h, lat, 0);
-    _forward.subVectors(_pB, _pA);
-    if (_forward.lengthSq() < 1e-8) _forward.set(dx, dy, -1);
-    _forward.normalize();
-    _right.set(-_forward.z, 0, _forward.x);
+  function orient(obj, fx, fy, fz, rx, rz, extraYaw, extraPitch, extraRoll) {
+    _forward.set(fx, fy, fz);
+    if (_forward.lengthSq() < 1e-8) _forward.set(0, 0, -1);
+    else _forward.normalize();
+    _right.set(rx, 0, rz);
     if (_right.lengthSq() < 1e-8) _right.set(1, 0, 0);
     else _right.normalize();
     _up.crossVectors(_right, _forward).normalize();
@@ -117,12 +56,21 @@ export function initRoad() {
       _qRoad.multiply(_qExtra);
     }
     obj.quaternion.copy(_qRoad);
+  }
+
+  function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
+    const lat = latAt(lateralOffset, s);
+    const dy = roadDY(s);
+    if (G.embedRoad) {
+      const here = G.embedRoad(s, lat);
+      orient(obj, here.fx, dy, here.fz, here.rx, here.rz, extraYaw, extraPitch, extraRoll);
+      obj.position.set(here.x, here.y + heightOffset, here.z);
+      return;
+    }
+    const dx = roadDX(s);
     const lh = Math.hypot(dx, 1) || 1;
-    obj.position.set(
-      roadX(s) + lat / lh,
-      roadY(s) + heightOffset,
-      -s + lat * dx / lh
-    );
+    orient(obj, dx / lh, dy, -1 / lh, 1 / lh, dx / lh, extraYaw, extraPitch, extraRoll);
+    obj.position.set(roadX(s) + lat / lh, roadY(s) + heightOffset, -s + lat * dx / lh);
   }
   G.placeOnRoad = placeOnRoad;
 }

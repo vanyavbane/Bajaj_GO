@@ -22,9 +22,6 @@ export function initRoadSurface() {
 
   const toWorld = (s, lat) => G.laneWorldOffsetAtS(s, lat);
 
-  /* Точка на дороге со сдвигом оси развилки — как placeOnRoad, но без поворота. */
-  const _laneA = new THREE.Vector3();
-  const _laneB = new THREE.Vector3();
   const _laneDir = new THREE.Vector3();
   const _laneRight = new THREE.Vector3();
   const _laneUp = new THREE.Vector3();
@@ -59,26 +56,13 @@ export function initRoadSurface() {
     return outwardFrom(edge, origin, Math.max(0, fromCenter - edgeDist));
   }
 
-  function roadPointAt(out, s, lat, yOffset) {
-    if (G.embedRoad) {
-      const p = G.embedRoad(s, lat);
-      out.set(p.x, p.y + yOffset, p.z);
-      return out;
-    }
-    const dx = G.roadDX(s);
-    const lh = Math.hypot(dx, 1) || 1;
-    out.set(G.roadX(s) + lat / lh, G.roadY(s) + yOffset, -s + lat * dx / lh);
-    return out;
-  }
-
-  /* Кладёт плоский объект вдоль линии между двумя точками ветки (s ∓ halfLen).
-   * Касательная берётся по самой линии полосы, а не по оси дороги: на
-   * разъезде ветка уходит вбок, и штрих, повёрнутый по оси, стоял бы поперёк
-   * своей полосы (до ~33° и ~2 м ошибки на концах). */
-  function placeAlongLane(obj, s, latA, latB, halfLen, yOffset) {
-    roadPointAt(_laneA, s - halfLen, latA, 0);
-    roadPointAt(_laneB, s + halfLen, latB, 0);
-    _laneDir.subVectors(_laneB, _laneA);
+  /* Кладёт плоский объект вдоль курса в точке s.
+   * Направление берётся из заголовка этой полосы: на съезде это вектор ветки,
+   * а не ось шоссе, поэтому штрих не встаёт поперёк ленты. */
+  function placeAlongLane(obj, s, latA, latB, _halfLen, yOffset) {
+    const pose = G.embedRoad(s, (latA + latB) * 0.5);
+    const dy = G.roadDY ? G.roadDY(s) : 0;
+    _laneDir.set(pose.fx, dy, pose.fz);
     if (_laneDir.lengthSq() < 1e-8) _laneDir.set(0, 0, -1);
     else _laneDir.normalize();
     _laneRight.set(-_laneDir.z, 0, _laneDir.x);
@@ -89,11 +73,7 @@ export function initRoadSurface() {
     _laneBasis.makeBasis(_laneRight, _laneUp, _laneZ);
     _laneQuat.setFromRotationMatrix(_laneBasis);
     obj.quaternion.copy(_laneQuat);
-    obj.position.set(
-      (_laneA.x + _laneB.x) * 0.5,
-      (_laneA.y + _laneB.y) * 0.5 + yOffset,
-      (_laneA.z + _laneB.z) * 0.5
-    );
+    obj.position.set(pose.x, pose.y + yOffset, pose.z);
   }
 
   function sampleCenterline(playerS) {
@@ -296,16 +276,14 @@ export function initRoadSurface() {
       // Пока съезд отдельная лента, тот же набор рисуется и на ней.
       const shift = exitDashShift(s);
       for (const mark of G.laneMarksAtS(s)) {
-        const back = toWorld(s - DASH_HALF, mark.lat);
-        const ahead = toWorld(s + DASH_HALF, mark.lat);
-        paint(s, back, ahead, mark.w);
+        const lat = toWorld(s, mark.lat);
+        paint(s, lat, lat, mark.w);
       }
       // Лента съезда односторонняя: штрих есть и там, где на шоссе жёлтая ось.
       if (shift != null) {
         for (const mark of G.laneMarksAtS(s, 'one-way')) {
-          const back = toWorld(s - DASH_HALF, mark.lat) + shift;
-          const ahead = toWorld(s + DASH_HALF, mark.lat) + shift;
-          paint(s, back, ahead, mark.w);
+          const lat = toWorld(s, mark.lat) + shift;
+          paint(s, lat, lat, mark.w);
         }
       }
     }
@@ -482,18 +460,6 @@ export function initRoadSurface() {
       posR.setXYZ(idx + 1, r1.x, y, r1.z);
       posG.setXYZ(idx, l1.x, y, l1.z);
       posG.setXYZ(idx + 1, r0.x, y, r0.z);
-      // На стыке «сплайн → ветка» один сегмент иначе тянется на десятки метров.
-      if (idx >= 2) {
-        const breakJump = (pos, slot) => {
-          const jump = Math.hypot(pos.getX(slot) - pos.getX(slot - 2), pos.getZ(slot) - pos.getZ(slot - 2));
-          if (jump > 16) {
-            pos.setXYZ(slot - 2, pos.getX(slot), pos.getY(slot - 2), pos.getZ(slot));
-            pos.setXYZ(slot - 1, pos.getX(slot + 1), pos.getY(slot - 1), pos.getZ(slot + 1));
-          }
-        };
-        breakJump(posL, idx);
-        breakJump(posR, idx);
-      }
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -505,15 +471,22 @@ export function initRoadSurface() {
   function updateLateralStrip(mesh, latAt, width, yOffset) {
     const pos = mesh.geometry.attributes.position;
     const halfW = width * 0.5;
+    let hold = null;
     for (let r = 0; r < ROW; r++) {
       const lat = latAt(r);
       const s = sampleS[r];
       const y = sampleY[r] + yOffset;
       if (lat == null) {
-        const c = G.embedRoad(s, roadCenter(s));
         const idx = r * 2;
-        pos.setXYZ(idx, c.x, y, c.z);
-        pos.setXYZ(idx + 1, c.x, y, c.z);
+        if (hold) {
+          pos.setXYZ(idx, hold.x, y, hold.z);
+          pos.setXYZ(idx + 1, hold.x, y, hold.z);
+        } else {
+          const c = G.embedRoad(s, roadCenter(s));
+          pos.setXYZ(idx, c.x, y, c.z);
+          pos.setXYZ(idx + 1, c.x, y, c.z);
+          hold = c;
+        }
         continue;
       }
       const a = G.embedRoad(s, lat - halfW);
@@ -521,6 +494,7 @@ export function initRoadSurface() {
       const idx = r * 2;
       pos.setXYZ(idx, a.x, y, a.z);
       pos.setXYZ(idx + 1, b.x, y, b.z);
+      hold = { x: (a.x + b.x) * 0.5, z: (a.z + b.z) * 0.5 };
     }
     pos.needsUpdate = true;
   }
@@ -726,19 +700,9 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Главный апдейт ---------------- */
-  const flatStrips = [
-    curbLeftMesh, curbRightMesh, sidewalkLeftMesh, sidewalkRightMesh,
-    centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight
-  ];
-
   function shareRoadNormals() {
     shadeStrip(roadMesh.geometry);
     shadeStrip(roadRightMesh.geometry);
-    const from = roadMesh.geometry.attributes.normal.array;
-    for (const mesh of flatStrips) {
-      mesh.geometry.attributes.normal.array.set(from);
-      mesh.geometry.attributes.normal.needsUpdate = true;
-    }
   }
 
   function updateRoadSurface(playerS) {

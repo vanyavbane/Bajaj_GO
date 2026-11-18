@@ -389,6 +389,12 @@ function roadAtMeters(meters) {
 function dropRoadCache() {
   roadCacheM = NaN;
   roadCache = null;
+  layoutCache = null;
+  originPack.clear();
+  frameKey = NaN;
+  frameHit = null;
+  headKey = NaN;
+  headHit = null;
 }
 
 function roadProfiles(s) {
@@ -444,10 +450,13 @@ function forkSpreadAtMeters(meters) {
   return forkSpreadAt(meters, layout.zoneLength, layout.lead, layout.spread);
 }
 
-function forkSpreadAtS(s) {
+function liveForkAtS(s, rawAtMeters) {
   const frame = frameAt(s);
-  const raw = forkSpreadAtMeters(blendMetersAt(s));
-  return liveForkAmount(raw, frame.phase.kind, frame.chosen);
+  return liveForkAmount(rawAtMeters(blendMetersAt(s)), frame.phase.kind, frame.chosen);
+}
+
+function forkSpreadAtS(s) {
+  return liveForkAtS(s, forkSpreadAtMeters);
 }
 
 /** Ширина одной ветки. Зазор между ветками сюда не входит: его рисует полотно отдельно. */
@@ -456,13 +465,17 @@ function roadWidthAtS(s) {
 }
 
 function splitAmountAtS(s) {
-  const frame = frameAt(s);
-  const raw = splitAmountAtMeters(blendMetersAt(s));
-  return liveForkAmount(raw, frame.phase.kind, frame.chosen);
+  return liveForkAtS(s, splitAmountAtMeters);
 }
 
 const EXIT_CLOCK = exitClock();
 const vectors = createVectorField();
+let layoutCache = null;
+const originPack = new Map();
+let frameKey = NaN;
+let frameHit = null;
+let headKey = NaN;
+let headHit = null;
 
 function clearBranchPaths() {
   vectors.clear();
@@ -471,7 +484,9 @@ function clearBranchPaths() {
 /** @returns {import('./engine/vectors.js').CourseLayout} */
 function courseLayout() {
   const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  return courseLayoutOf(EXIT_CLOCK, ZONE_M, offset);
+  if (layoutCache && layoutCache.offset === offset) return layoutCache;
+  layoutCache = courseLayoutOf(EXIT_CLOCK, ZONE_M, offset);
+  return layoutCache;
 }
 
 /** Зона, нос развилки и выбранный вектор в точке s. */
@@ -492,12 +507,13 @@ function coursePick(zone) {
   return zoneTookExit(zone) ? 1 : 0;
 }
 
-function embedRoad(s, lat) {
+function roadHeading(s) {
+  if (s === headKey && headHit) return headHit;
   const at = layoutAt(s);
   const frame = frameAt(s);
-  return vectors.embed({
+  headKey = s;
+  headHit = vectors.heading({
     s,
-    lat,
     y: biomeRoadY(s),
     nose: at.nose,
     edges: frame.world,
@@ -507,6 +523,11 @@ function embedRoad(s, lat) {
     turn: at.layout.turn,
     ownedHere: courseOwns(RIGHT_FORK, at.pick, s, at.nose, at.layout.ownAfter),
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u), ddx: biomeRoadDDX(u) }));
+  return headHit;
+}
+
+function embedRoad(s, lat) {
+  return vectors.place(roadHeading(s), lat);
 }
 
 /** Односторонний съезд или двусторонняя дорога биома. */
@@ -656,21 +677,40 @@ function reconcileStoredOrigins() {
     if (storedOriginHolds(stored, fresh)) keptOrigins[zone] = stored;
   }
   storedOrigins = null;
+  originPack.clear();
+  frameKey = NaN;
+  frameHit = null;
+  headKey = NaN;
+  headHit = null;
 }
 
 /** Один кадр дороги в точке s. */
+function originsAt(zone) {
+  const hit = originPack.get(zone);
+  if (hit) return hit;
+  const previous = zonesBefore(zone);
+  const pack = {
+    base: originBeforeZones(previous),
+    carried: carriedOriginAt(previous, zoneRoad(zone)),
+  };
+  originPack.set(zone, pack);
+  return pack;
+}
+
 function frameAt(s) {
+  if (s === frameKey && frameHit) return frameHit;
   const route = routeAt(s);
-  const previous = zonesBefore(route.zone);
-  const carried = carriedOriginAt(previous, zoneRoad(route.zone));
-  return sampleRoad({
-    forkDistance: forkOffset(route.meters, ZONE_M),
+  const pack = originsAt(route.zone);
+  frameKey = s;
+  frameHit = sampleRoad({
+    forkDistance: forkOffset(route.meters, ZONE_M, EXIT_CLOCK.lead),
     half: roadWidthAtS(s) * 0.5,
     chosen: forkChosenSideForZone(route.zone),
-    baseOrigin: originBeforeZones(previous),
-    carriedOrigin: carried,
+    baseOrigin: pack.base,
+    carriedOrigin: pack.carried,
     endWeight: splitDecisionWeight(route.zone, route.meters),
   });
+  return frameHit;
 }
 
 function localEdgesAt(s) {
