@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { BiomeDef, BiomeId, BiomeTraffic, LaneLayout, RoadSample, TrafficModel } from './engine/biomes.js';
+import type { RoadEmbed } from './engine/branch.js';
 import type { AsphaltEdges, BranchPick, ChosenSide, PlacedBlock, ShoulderProfile, SplitPick } from './engine/fork.js';
 import type { BesideAsset, MedianAsset, RoadsideFrame, RoadsidePose } from './engine/roadside.js';
 
@@ -309,6 +310,9 @@ export interface GameState {
   forkSpreadAtS: (s: number) => number;
   /** Мировой центр дороги. После взятого съезда это его линия, не ось маршрута. */
   roadOriginAt: (s: number) => number;
+  /** Точка дороги в мире. На съезде это его собственный вектор, не параллель сплайна. */
+  embedRoad: (s: number, lat: number) => RoadEmbed;
+  roadCurvature: (s: number) => number;
   /** Блок рецепта съезда в точке s. null — здесь обычная дорога без съезда. */
   roadBlockAt: (s: number) => PlacedBlock | null;
   /** Блоки, которые выбор уже поставил в зоне точки s. До выбора здесь только подход. */

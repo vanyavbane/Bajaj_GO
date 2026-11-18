@@ -66,10 +66,14 @@ export function initRoadSurface() {
   }
 
   function roadPointAt(out, s, lat, yOffset) {
+    if (G.embedRoad) {
+      const p = G.embedRoad(s, lat);
+      out.set(p.x, p.y + yOffset, p.z);
+      return out;
+    }
     const dx = G.roadDX(s);
     const lh = Math.hypot(dx, 1) || 1;
-    const total = lat;
-    out.set(G.roadX(s) + total / lh, G.roadY(s) + yOffset, -s + total * dx / lh);
+    out.set(G.roadX(s) + lat / lh, G.roadY(s) + yOffset, -s + lat * dx / lh);
     return out;
   }
 
@@ -119,16 +123,19 @@ export function initRoadSurface() {
 
   /* ---------------- Геометрия лент ---------------- */
   function shadeStrip(geo) {
+    const pos = geo.attributes.position.array;
     const norm = geo.attributes.normal.array;
     for (let r = 0; r < ROW; r++) {
       const ahead = r < ROW - 1;
       const r2 = ahead ? r + 1 : r - 1;
       const sign = ahead ? 1 : -1;
-      const ax = (sampleX[r2] - sampleX[r]) * sign;
-      const ay = (sampleY[r2] - sampleY[r]) * sign;
-      const az = (sampleZ[r2] - sampleZ[r]) * sign;
-      const bx = rightX[r];
-      const bz = rightZ[r];
+      const a = r * 6;
+      const b = r2 * 6;
+      const ax = ((pos[b] + pos[b + 3]) * 0.5 - (pos[a] + pos[a + 3]) * 0.5) * sign;
+      const ay = ((pos[b + 1] + pos[b + 4]) * 0.5 - (pos[a + 1] + pos[a + 4]) * 0.5) * sign;
+      const az = ((pos[b + 2] + pos[b + 5]) * 0.5 - (pos[a + 2] + pos[a + 5]) * 0.5) * sign;
+      const bx = pos[a + 3] - pos[a];
+      const bz = pos[a + 5] - pos[a + 2];
       let nx = ay * bz;
       let ny = az * bx - ax * bz;
       let nz = -ay * bx;
@@ -410,19 +417,20 @@ export function initRoadSurface() {
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
       const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
-      const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
-      const rx = rightX[r], rz = rightZ[r];
+      const cy = sampleY[r];
+      const left = G.embedRoad(s, lat - half);
+      const right = G.embedRoad(s, lat + half);
       const o = r * 12;
-      const put = (slot, l, h) => {
+      const put = (slot, point, h) => {
         const p = o + slot * 3;
-        arr[p] = cx + rx * l;
+        arr[p] = point.x;
         arr[p + 1] = cy + h;
-        arr[p + 2] = cz + rz * l;
+        arr[p + 2] = point.z;
       };
-      put(0, lat - half, low);
-      put(1, lat + half, low);
-      put(2, lat + half, high);
-      put(3, lat - half, high);
+      put(0, left, low);
+      put(1, right, low);
+      put(2, right, high);
+      put(3, left, high);
     }
     pos.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
@@ -474,15 +482,19 @@ export function initRoadSurface() {
       const edge = G.roadEdgesAt(sampleS[r]);
       const gap = edge.rightInner - edge.leftInner;
       if (gap > opened) opened = gap;
-      const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
-      const rx = rightX[r], rz = rightZ[r];
+      const s = sampleS[r];
+      const y = sampleY[r];
       const idx = r * 2;
-      posL.setXYZ(idx, cx + rx * edge.leftOuter, cy, cz + rz * edge.leftOuter);
-      posL.setXYZ(idx + 1, cx + rx * edge.leftInner, cy, cz + rz * edge.leftInner);
-      posR.setXYZ(idx, cx + rx * edge.rightInner, cy, cz + rz * edge.rightInner);
-      posR.setXYZ(idx + 1, cx + rx * edge.rightOuter, cy, cz + rz * edge.rightOuter);
-      posG.setXYZ(idx, cx + rx * edge.leftInner, cy, cz + rz * edge.leftInner);
-      posG.setXYZ(idx + 1, cx + rx * edge.rightInner, cy, cz + rz * edge.rightInner);
+      const l0 = G.embedRoad(s, edge.leftOuter);
+      const l1 = G.embedRoad(s, edge.leftInner);
+      const r0 = G.embedRoad(s, edge.rightInner);
+      const r1 = G.embedRoad(s, edge.rightOuter);
+      posL.setXYZ(idx, l0.x, y, l0.z);
+      posL.setXYZ(idx + 1, l1.x, y, l1.z);
+      posR.setXYZ(idx, r0.x, y, r0.z);
+      posR.setXYZ(idx + 1, r1.x, y, r1.z);
+      posG.setXYZ(idx, l1.x, y, l1.z);
+      posG.setXYZ(idx + 1, r0.x, y, r0.z);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -496,11 +508,13 @@ export function initRoadSurface() {
     const halfW = width * 0.5;
     for (let r = 0; r < ROW; r++) {
       const lat = latAt(r);
-      const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
-      const rx = rightX[r], rz = rightZ[r];
+      const s = sampleS[r];
+      const y = sampleY[r] + yOffset;
+      const a = G.embedRoad(s, lat - halfW);
+      const b = G.embedRoad(s, lat + halfW);
       const idx = r * 2;
-      pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));
-      pos.setXYZ(idx + 1, cx + rx * (lat + halfW), cy, cz + rz * (lat + halfW));
+      pos.setXYZ(idx, a.x, y, a.z);
+      pos.setXYZ(idx + 1, b.x, y, b.z);
     }
     pos.needsUpdate = true;
   }
@@ -512,14 +526,16 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
-      const edge = edgeLat(sampleS[r], side);
+      const s = sampleS[r];
+      const edge = edgeLat(s, side);
       const halfW = width * 0.5 * cw;
-      const center = edge + outwardSign(sampleS[r], edge) * (baseWidth * cw + halfW);
-      const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
-      const rx = rightX[r], rz = rightZ[r];
+      const center = edge + outwardSign(s, edge) * (baseWidth * cw + halfW);
+      const y = sampleY[r] + yOffset;
+      const a = G.embedRoad(s, center - halfW);
+      const b = G.embedRoad(s, center + halfW);
       const idx = r * 2;
-      pos.setXYZ(idx, cx + rx * (center - halfW), cy, cz + rz * (center - halfW));
-      pos.setXYZ(idx + 1, cx + rx * (center + halfW), cy, cz + rz * (center + halfW));
+      pos.setXYZ(idx, a.x, y, a.z);
+      pos.setXYZ(idx + 1, b.x, y, b.z);
     }
     pos.needsUpdate = true;
     mesh.visible = maxWeight > 0.02;
@@ -529,21 +545,23 @@ export function initRoadSurface() {
     const posL = slopeLeftMesh.geometry.attributes.position;
     const posR = slopeRightMesh.geometry.attributes.position;
     for (let r = 0; r < ROW; r++) {
-      const cx = sampleX[r], cy = sampleY[r], cz = sampleZ[r];
-      const rx = rightX[r], rz = rightZ[r];
+      const s = sampleS[r];
+      const cy = sampleY[r];
       const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
-      const s = sampleS[r];
       const left = shoulderLats(farAsphalt(s, -1), cityOuter, sh);
       const right = shoulderLats(farAsphalt(s, 1), cityOuter, sh);
+      const at = (side, fromCenter, height) => {
+        const p = G.embedRoad(s, slopeLat(s, side, fromCenter));
+        return [p.x, cy + height, p.z];
+      };
       const idx = r * 3;
-      posL.setXYZ(idx,     cx + rx * slopeLat(s, -1, left.far), cy + sh.farY, cz + rz * slopeLat(s, -1, left.far));
-      posL.setXYZ(idx + 1, cx + rx * slopeLat(s, -1, left.berm), cy + sh.bermY, cz + rz * slopeLat(s, -1, left.berm));
-      posL.setXYZ(idx + 2, cx + rx * slopeLat(s, -1, left.lip), cy + sh.lipY, cz + rz * slopeLat(s, -1, left.lip));
-
-      posR.setXYZ(idx,     cx + rx * slopeLat(s, 1, right.lip), cy + sh.lipY, cz + rz * slopeLat(s, 1, right.lip));
-      posR.setXYZ(idx + 1, cx + rx * slopeLat(s, 1, right.berm), cy + sh.bermY, cz + rz * slopeLat(s, 1, right.berm));
-      posR.setXYZ(idx + 2, cx + rx * slopeLat(s, 1, right.far), cy + sh.farY, cz + rz * slopeLat(s, 1, right.far));
+      posL.setXYZ(idx,     ...at(-1, left.far, sh.farY));
+      posL.setXYZ(idx + 1, ...at(-1, left.berm, sh.bermY));
+      posL.setXYZ(idx + 2, ...at(-1, left.lip, sh.lipY));
+      posR.setXYZ(idx,     ...at(1, right.lip, sh.lipY));
+      posR.setXYZ(idx + 1, ...at(1, right.berm, sh.bermY));
+      posR.setXYZ(idx + 2, ...at(1, right.far, sh.farY));
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -629,15 +647,12 @@ export function initRoadSurface() {
     const pos = mesh.geometry.attributes.position;
     for (let r = 0; r < ISLAND_ROWS; r++) {
       const s = from + span * (r / (ISLAND_ROWS - 1));
-      const dx = G.roadDX(s);
-      const lh = Math.hypot(dx, 1) || 1;
-      const rx = 1 / lh;
-      const rz = dx / lh;
       const lat = innerLineLat(s, side, 0.2);
-      const cx = G.roadX(s), cy = G.roadY(s) + 0.09, cz = -s;
+      const a = G.embedRoad(s, lat - halfW);
+      const b = G.embedRoad(s, lat + halfW);
       const idx = r * 2;
-      pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));
-      pos.setXYZ(idx + 1, cx + rx * (lat + halfW), cy, cz + rz * (lat + halfW));
+      pos.setXYZ(idx, a.x, a.y + 0.09, a.z);
+      pos.setXYZ(idx + 1, b.x, b.y + 0.09, b.z);
     }
     pos.needsUpdate = true;
   }

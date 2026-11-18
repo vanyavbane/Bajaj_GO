@@ -427,7 +427,7 @@ export function initCamera() {
       const mountainIndex = G.BIOMES.findIndex((b) => b.id === 'mountain');
       const mountainWeight = mountainIndex >= 0 ? wts[mountainIndex] : 0;
       const speedFactor = clamp(G.speed / 55, 0.3, 1.25);
-      targetRoll = clamp(-G.roadDDX(G.playerS) * 5.5, -0.055, 0.055)
+      targetRoll = clamp(-(G.roadCurvature ? G.roadCurvature(G.playerS) : G.roadDDX(G.playerS)) * 5.5, -0.055, 0.055)
         * speedFactor * (1 + 0.9 * mountainWeight);
     }
     camBiomeRoll += (targetRoll - camBiomeRoll) * Math.min(1, dt * 6);
@@ -456,11 +456,6 @@ export function initCamera() {
         G.camera.updateProjectionMatrix();
       }
 
-      const rightAt = (s) => {
-        const dx = G.roadDX(s);
-        const lh = Math.hypot(dx, 1) || 1;
-        return [1 / lh, dx / lh];
-      };
       const isMenuView = !G.started && !G.ended;
       const speedPullback = clamp(G.speed / 220, 0, 1.35);
       const jumpPullback = G.jumpState.airborne ? clamp(G.jumpState.height * 0.55, 0, 2.2) : 0;
@@ -472,10 +467,10 @@ export function initCamera() {
       const camS = G.playerS - distBehind;
       const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
       const camLat = G.riderLatAt(camS, camLatLogical);
-      const [camRx, camRz] = rightAt(camS);
+      const camPose = G.embedRoad(camS, camLat);
       const minSafeY = G.roadY(camS) + 1.85;
-      const targetCamX = G.roadX(camS) + camRx * camLat;
-      const targetCamZ = -camS + camRz * camLat;
+      const targetCamX = camPose.x;
+      const targetCamZ = camPose.z;
       const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
 
       const followRate = Math.min(1, dt * 11.5);
@@ -491,9 +486,9 @@ export function initCamera() {
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
       const lookLatLogical = isMenuView ? 0.5 : (G.laneOffset * 0.55);
       const lookLat = G.riderLatAt(lookAheadS, lookLatLogical);
-      const [lookRx, lookRz] = rightAt(lookAheadS);
-      const targetLookX = G.roadX(lookAheadS) + lookRx * lookLat;
-      const targetLookZ = -lookAheadS + lookRz * lookLat;
+      const lookPose = G.embedRoad(lookAheadS, lookLat);
+      const targetLookX = lookPose.x;
+      const targetLookZ = lookPose.z;
       const targetLookY = G.roadY(lookAheadS) + 1.25 + G.jumpState.height * 0.25;
 
       G.camLookSmooth.x = lerp(G.camLookSmooth.x, targetLookX, Math.min(1, dt * 13));

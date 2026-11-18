@@ -70,11 +70,36 @@ export function initRoad() {
   function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
     const dx = roadDX(s);
     const dy = roadDY(s);
-    // Касательную берём по фактическому пути объекта, иначе на съезде
-    // байк и декорации едут боком. На прямой это та же ориентация.
+    const lat = latAt(lateralOffset, s);
     const h = 0.8;
-    roadPoint(_pA, s - h, latForTangent(lateralOffset, s - h, s), 0);
-    roadPoint(_pB, s + h, latForTangent(lateralOffset, s + h, s), 0);
+    // Две точки по той же полосе: на ветке касательная — её вектор, не сплайн.
+    if (G.embedRoad) {
+      const behind = G.embedRoad(s - h, lat);
+      const ahead = G.embedRoad(s + h, lat);
+      const here = G.embedRoad(s, lat);
+      _pA.set(behind.x, behind.y, behind.z);
+      _pB.set(ahead.x, ahead.y, ahead.z);
+      _forward.subVectors(_pB, _pA);
+      if (_forward.lengthSq() < 1e-8) _forward.set(here.fx, dy, here.fz);
+      _forward.normalize();
+      _right.set(here.rx, 0, here.rz);
+      if (_right.lengthSq() < 1e-8) _right.set(1, 0, 0);
+      else _right.normalize();
+      _up.crossVectors(_right, _forward).normalize();
+      _zAxis.copy(_forward).negate();
+      _basis.makeBasis(_right, _up, _zAxis);
+      _qRoad.setFromRotationMatrix(_basis);
+      if (extraYaw !== 0 || extraPitch !== 0 || extraRoll !== 0) {
+        _euler.set(extraPitch, extraYaw, extraRoll);
+        _qExtra.setFromEuler(_euler);
+        _qRoad.multiply(_qExtra);
+      }
+      obj.quaternion.copy(_qRoad);
+      obj.position.set(here.x, here.y + heightOffset, here.z);
+      return;
+    }
+    roadPoint(_pA, s - h, lat, 0);
+    roadPoint(_pB, s + h, lat, 0);
     _forward.subVectors(_pB, _pA);
     if (_forward.lengthSq() < 1e-8) _forward.set(dx, dy, -1);
     _forward.normalize();
@@ -91,10 +116,7 @@ export function initRoad() {
       _qRoad.multiply(_qExtra);
     }
     obj.quaternion.copy(_qRoad);
-
-    // Смещение по полосе — в горизонтали, как у ленты асфальта. Дорога без крена.
     const lh = Math.hypot(dx, 1) || 1;
-    const lat = latAt(lateralOffset, s);
     obj.position.set(
       roadX(s) + lat / lh,
       roadY(s) + heightOffset,

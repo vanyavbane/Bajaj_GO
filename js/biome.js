@@ -3,7 +3,8 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { BRANCH_YAW, frameFromSpline, stepBranch } from './engine/branch.js';
+import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -472,6 +473,130 @@ function splitCenterS(playerS) {
   const meters = Math.max(0, offset + playerS);
   const zone = Math.floor(meters / ZONE_M);
   return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
+}
+
+const BRANCH_STEP = 2;
+/** @type {Map<number, { nose: number, samples: import('./engine/branch.js').PathFrame[], frozen: { fx: number, fz: number } | null }>} */
+const branchPaths = new Map();
+
+function clearBranchPaths() {
+  branchPaths.clear();
+}
+
+function mainPath(s) {
+  return frameFromSpline(biomeRoadX(s), biomeRoadDX(s), s);
+}
+
+function noseOfZone(zone) {
+  const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
+  return (zone + 1) * ZONE_M - FORK_LEAD - offset;
+}
+
+/** Взятые съезды, чей поворот уже кончился к точке s: дальше дорога идёт их вектором. */
+function ownedNoses(s) {
+  const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
+  const meters = Math.max(0, offset + s);
+  const zone = Math.floor(meters / ZONE_M);
+  const noses = [];
+  for (let z = 0; z <= zone; z++) {
+    if (chosenExit[z] !== 1) continue;
+    const nose = noseOfZone(z);
+    if (s >= nose + EXIT_CHOICE + EXIT_END - 0.01) noses.push(nose);
+  }
+  return noses;
+}
+
+function advanceBranch(rec, baseAt) {
+  const prev = rec.samples[rec.samples.length - 1];
+  const cursor = rec.nose + (rec.samples.length - 1) * BRANCH_STEP;
+  const mid = cursor + BRANCH_STEP * 0.5;
+  const stepped = stepBranch(prev, cursor, rec.nose, BRANCH_STEP, baseAt(mid), EXIT_DIVERGE, BRANCH_YAW, rec.frozen);
+  rec.frozen = stepped.frozen;
+  rec.samples.push(stepped.frame);
+}
+
+function pathFrom(nose, s, baseAt) {
+  if (!(s > nose)) return baseAt(s);
+  let rec = branchPaths.get(nose);
+  if (!rec) {
+    rec = { nose, samples: [baseAt(nose)], frozen: null };
+    branchPaths.set(nose, rec);
+  }
+  const need = Math.ceil((s - nose) / BRANCH_STEP);
+  while (rec.samples.length - 1 < need) advanceBranch(rec, baseAt);
+  const t = (s - nose) / BRANCH_STEP;
+  const i0 = Math.max(0, Math.min(rec.samples.length - 1, Math.floor(t)));
+  const i1 = Math.min(rec.samples.length - 1, i0 + 1);
+  const u = Math.max(0, Math.min(1, t - i0));
+  const a = rec.samples[i0];
+  const b = rec.samples[i1];
+  const fx = a.fx + (b.fx - a.fx) * u;
+  const fz = a.fz + (b.fz - a.fz) * u;
+  const len = Math.hypot(fx, fz) || 1;
+  const nfx = fx / len;
+  const nfz = fz / len;
+  return {
+    x: a.x + (b.x - a.x) * u,
+    z: a.z + (b.z - a.z) * u,
+    fx: nfx,
+    fz: nfz,
+    rx: -nfz,
+    rz: nfx,
+    curvature: a.curvature + (b.curvature - a.curvature) * u,
+  };
+}
+
+/** Центр дороги с учётом уже взятых съездов. Текущий поворот сюда не входит, пока он не стал дорогой. */
+function centerline(s, skipNose) {
+  const noses = ownedNoses(s);
+  let nose = null;
+  for (let i = noses.length - 1; i >= 0; i--) {
+    if (noses[i] !== skipNose) { nose = noses[i]; break; }
+  }
+  if (nose == null) return mainPath(s);
+  return pathFrom(nose, s, (u) => centerline(u, nose));
+}
+
+/** Лента съезда этой зоны, даже если игрок ещё едет прямо. */
+function exitPath(s) {
+  const nose = splitCenterS(s);
+  if (!(s > nose)) return null;
+  return pathFrom(nose, s, (u) => centerline(u, nose));
+}
+
+function embedRoad(s, lat) {
+  const y = biomeRoadY(s);
+  const edges = roadEdgesAt(s);
+  const nose = splitCenterS(s);
+  const exit = s > nose ? exitPath(s) : null;
+  const width = edges.rightOuter - edges.rightInner;
+  const gap = edges.rightInner - edges.leftInner;
+  const ribbon = (edges.rightInner + edges.rightOuter) * 0.5;
+  const zone = Math.floor(Math.max(0, (G.biomeOffsetM || 0) + s) / ZONE_M);
+  const ownedHere = chosenExit[zone] === 1 && s >= nose + EXIT_CHOICE + EXIT_END - 0.01;
+  if (exit && !ownedHere && width > 0.8 && gap > 0.5 && lat >= edges.rightInner - 0.2) {
+    const local = lat - ribbon;
+    return {
+      x: exit.x + exit.rx * local, y, z: exit.z + exit.rz * local,
+      rx: exit.rx, rz: exit.rz, fx: exit.fx, fz: exit.fz,
+      curvature: exit.curvature, branched: true,
+    };
+  }
+  const path = centerline(s, null);
+  const branched = ownedNoses(s).length > 0;
+  const local = branched ? lat - frameAt(s).origin : lat;
+  return {
+    x: path.x + path.rx * local, y, z: path.z + path.rz * local,
+    rx: path.rx, rz: path.rz, fx: path.fx, fz: path.fz,
+    curvature: path.curvature, branched,
+  };
+}
+
+function roadCurvature(s) {
+  const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
+  const pose = embedRoad(s, lat);
+  if (pose.branched) return pose.curvature * 0.08;
+  return biomeRoadDDX(s);
 }
 
 function roadBiomeAtS(s) {
@@ -1450,6 +1575,7 @@ function resetBiomeRun() {
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
+  clearBranchPaths();
   G.laneAssistTarget = null;
   saveTimer = 0;
   hideBiomeBanner();
@@ -1521,6 +1647,8 @@ export function initBiome() {
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
+  G.embedRoad = embedRoad;
+  G.roadCurvature = roadCurvature;
   G.roadBlockAt = (s) => frameAt(s).block;
   G.builtBlocksAt = (s) => exitChain(forkChosenSideAtS(s));
   G.riderLatAt = riderLatAt;
