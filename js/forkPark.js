@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EXIT_DIVERGE, EXIT_RUN, FORK_SPREAD } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN } from './engine/fork.js';
 import { box, cylinder } from './geom.js';
 import { G } from './state.js';
 
@@ -38,17 +38,6 @@ function makeRandom(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function smooth01(v) {
-  const t = Math.max(0, Math.min(1, v));
-  return t * t * (3 - 2 * t);
-}
-
-/** Полуширина клина на раздельном участке. d считается от его середины. */
-function islandHalfWidth(d) {
-  if (Math.abs(d) >= PARK_EDGE) return 0;
-  return FORK_SPREAD * smooth01(1 - Math.abs(d) / PARK_EDGE);
 }
 
 export function initForkPark() {
@@ -129,19 +118,14 @@ export function initForkPark() {
   // Деревья не растут вплотную друг к другу: иначе кроны сливаются в кашу.
   const kept = [];
   for (const t of trees) {
-    const half = islandHalfWidth(t.d);
-    if (half < PARK_MARGIN + 1.6) continue;
-    const lat = t.u * (half - PARK_MARGIN);
-    if (Math.abs(lat) < 2.4) continue; // аллея по центру островка
-    if (kept.some((k) => Math.abs(k.d - t.d) < 4.6 && Math.abs(k.lat - lat) < 4.6)) continue;
-    kept.push({ ...t, lat });
+    if (Math.abs(t.u) < 0.22) continue;
+    if (kept.some((k) => Math.abs(k.d - t.d) < 4.6 && Math.abs(k.u - t.u) < 0.35)) continue;
+    kept.push(t);
   }
 
   const bushSpots = [];
   for (let i = 0; i < BUSH_COUNT; i++) {
     const d = rand(-PARK_EDGE, PARK_EDGE);
-    const half = islandHalfWidth(d);
-    if (half < 2.4) continue;
     bushSpots.push({
       d,
       u: rand(-1, 1),
@@ -153,8 +137,6 @@ export function initForkPark() {
   const benches = [];
   for (let i = 0; i < BENCH_COUNT; i++) {
     const d = -36 + i * 24 + rand(-3, 3);
-    const half = islandHalfWidth(d);
-    if (half < PARK_MARGIN + 1.4) continue;
     const side = i % 2 === 0 ? -1 : 1;
     benches.push({ d, u: side * 0.72, yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
   }

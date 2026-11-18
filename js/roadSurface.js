@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, exitLaneOpen, exitLaneWorld, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -247,14 +247,13 @@ export function initRoadSurface() {
   /** Сдвиг штрихов на ленту съезда. null, когда съезда нет или основные штрихи уже на нём. */
   function exitDashShift(s) {
     const edge = G.roadEdgesAt(s);
-    const width = edge.rightOuter - edge.rightInner;
-    const gap = edge.rightInner - edge.leftInner;
-    if (width < 1.2 || gap < 0.8) return null;
-    const exitCenter = exitRibbonMid(edge);
+    if (!exitLaneOpen(edge)) return null;
     const main = toWorld(s, 0);
+    const exitCenter = exitRibbonMid(edge);
     if (Math.abs(main - exitCenter) < 2.5) return null;
-    // От текущей оси полос, не от центра маршрута: на закрытии ось уже едет к съезду.
-    return exitCenter - main;
+    // Тот же сдвиг, что у машины: лента сходится, штрих не обрывается раньше неё.
+    const shift = exitLaneWorld(edge, main, main) - main;
+    return Math.abs(shift) < 0.05 ? null : shift;
   }
 
   function updateDashes(playerS, dense) {

@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { carriageLanes, laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkOffset, forkSpreadAt, landOnCarriage, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
 import { RIGHT_FORK, carriageWay, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
@@ -746,8 +746,11 @@ function roadMetersAt(s, laneOffset, riding) {
 
 /** Мир байка в текущей системе полосы: от ленты, если она захвачена, иначе от центра дороги. */
 function riderPoint(frame, span) {
-  const along = G.laneOffset * span;
-  return frame.origin + (exitHold ? heldCenter : 0) + along;
+  return frame.origin + (exitHold ? heldCenter : 0) + G.laneOffset * span;
+}
+
+function laneOf(world, axis, span) {
+  return (world - axis) / span;
 }
 
 /**
@@ -755,23 +758,24 @@ function riderPoint(frame, span) {
  * Лента ещё есть — ось на её середине. Лента стала дорогой — центр уже там,
  * второй раз его не прибавляем. Отпущенный съезд возвращает ось на прямую.
  */
-function updateExitHold(zone) {
+function updateExitHold() {
   const frame = frameAt(G.playerS);
   const span = laneSpanAt(G.playerS);
   const center = exitRibbonCenter(frame.local);
+  const world = riderPoint(frame, span);
   if (center == null) {
-    if (exitHold && frame.chosen !== 1) G.laneOffset += heldCenter / span;
+    if (exitHold && frame.chosen !== 1) {
+      G.laneOffset = landOnCarriage(frame.origin, frame.local, world, span);
+    }
     exitHold = false;
     heldCenter = 0;
     return;
   }
-  const world = riderPoint(frame, span);
   const logical = world - frame.origin;
   const onRibbon = onExitRibbon(logical, frame.local);
-  const choseExit = chosenExit[zone] === 1;
-  const hold = choseExit || onRibbon || (exitHold && !canReleaseExit(logical, frame.local));
+  const hold = onRibbon || (exitHold && !canReleaseExit(logical, frame.local));
   if (hold && !exitHold) {
-    let lane = (world - (frame.origin + center)) / span;
+    let lane = laneOf(world, frame.origin + center, span);
     if (onRibbon) {
       const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
       const limit = Math.max(0, (halfW - 0.7) / span);
@@ -784,13 +788,13 @@ function updateExitHold(zone) {
     return;
   }
   if (!hold && exitHold) {
-    G.laneOffset = (world - frame.origin) / span;
+    G.laneOffset = laneOf(world, frame.origin, span);
     exitHold = false;
     heldCenter = 0;
     return;
   }
   if (exitHold) {
-    G.laneOffset = (world - (frame.origin + center)) / span;
+    G.laneOffset = laneOf(world, frame.origin + center, span);
     heldCenter = center;
   }
 }
@@ -807,7 +811,11 @@ function riderLatAt(s, laneOffset) {
   if (!exitHold) return roadMetersAt(s, lane, false);
   const frame = frameAt(s);
   const center = exitRibbonCenter(frame.local);
-  return frame.origin + (center == null ? heldCenter : center) + lane * span;
+  if (center != null) return frame.origin + center + lane * span;
+  // Впереди лента уже стала дорогой: её центр сидит в origin. Позади — ещё нет.
+  const home = frameAt(G.playerS).origin;
+  const axis = Math.abs(frame.origin - home) < 0.5 ? heldCenter : 0;
+  return frame.origin + axis + lane * span;
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -1442,7 +1450,7 @@ function updateBiome(dt) {
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
   splitChoices[zone] = choices;
 
-  updateExitHold(zone);
+  updateExitHold();
   const chosenBefore = chosenZones.has(zone);
   const previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)

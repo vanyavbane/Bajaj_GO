@@ -1,4 +1,4 @@
-import { exitLaneWorld } from './engine/fork.js';
+import { exitLaneOpen, exitLaneWorld } from './engine/fork.js';
 import { carriageLanes, clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
@@ -157,13 +157,6 @@ export function initTraffic() {
     }
   };
 
-  function exitRibbonOpen(edges) {
-    if (!edges) return false;
-    const width = edges.rightOuter - edges.rightInner;
-    const gap = edges.rightInner - edges.leftInner;
-    return width > 1.2 && gap > 0.8;
-  }
-
   /** Встречные на одностороннем съезде уходят в попутный ряд, а не разворачиваются на месте. */
   function joinCarriage(car, road) {
     if (road.way !== 'one-way') return;
@@ -194,7 +187,7 @@ export function initTraffic() {
   /** Попутная полоса у правого края уходит на съезд, пока клин только открывается.
    *  Одна такая полоса, как в горах, тоже уходит. Дальше её не возвращает на прямую. */
   function followExit(car, edges, runLanes, lastLane) {
-    const open = exitRibbonOpen(edges);
+    const open = !!edges && exitLaneOpen(edges);
     if (!open) car.onExit = false;
     else if (!car.onExit && !car.changingLane && runLanes >= 1 && car.laneIdx === lastLane) {
       const gap = edges.rightInner - edges.leftInner;

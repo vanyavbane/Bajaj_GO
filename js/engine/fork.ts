@@ -434,23 +434,37 @@ export function exitRibbonCenter(edges: AsphaltEdges): number | null {
   return exitRibbonMid(edges);
 }
 
+const RIBBON_MARGIN = 0.7;
+
+/** Лента ещё достаточно широкая, чтобы по ней ехала машина. */
+export function exitLaneOpen(edges: AsphaltEdges): boolean {
+  return exitWidth(edges) > 0.05 && exitGap(edges) > 0.8;
+}
+
+/**
+ * Полоса в единицах руля, когда боковая лента пропала.
+ * Далеко справа сажает на край оставшейся дороги. Кто уже на ней — остаётся.
+ */
+export function landOnCarriage(origin: number, edges: AsphaltEdges, world: number, span: number): number {
+  const scale = Number.isFinite(span) && span !== 0 ? span : 1;
+  const axis = Number.isFinite(origin) ? origin : 0;
+  const edge = axis + edges.leftInner - RIBBON_MARGIN;
+  const at = Number.isFinite(world) ? world : axis;
+  return (Math.min(at, edge) - axis) / scale;
+}
+
 /**
  * Полоса на ленте съезда. laneZero — нулевая полоса прямой в тех же метрах.
- * Пока съезд приклеен, машина остаётся на прямой. Когда лента сходится,
- * машина возвращается. На полной ленте она едет по тем же полосам, что и прямая.
+ * Пока съезд приклеен, машина остаётся на прямой. Пока лента сходится,
+ * машина возвращается на свою полосу, а не прыгает в последний момент.
  */
 export function exitLaneWorld(edges: AsphaltEdges, laneWorld: number, laneZero: number): number {
-  const width = exitWidth(edges);
-  const gap = exitGap(edges);
-  if (!(width > 1.2) || !(gap > 0.8) || !Number.isFinite(laneWorld) || !Number.isFinite(laneZero)) {
+  if (!exitLaneOpen(edges) || !Number.isFinite(laneWorld) || !Number.isFinite(laneZero)) {
     return laneWorld;
   }
-  const center = exitRibbonCenter(edges);
-  if (center == null) return laneWorld;
   const mainWidth = Math.max(1, edges.leftInner - edges.leftOuter);
-  const keep = Math.max(0, Math.min(1, width / mainWidth));
-  const onRibbon = center + (laneWorld - laneZero);
-  return laneWorld + (onRibbon - laneWorld) * keep;
+  const keep = Math.max(0, Math.min(1, exitWidth(edges) / mainWidth));
+  return laneWorld + (exitRibbonMid(edges) - laneZero) * keep;
 }
 
 /**
@@ -597,7 +611,6 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
   };
 }
 
-const RIBBON_MARGIN = 0.7;
 const RIBBON_FLOOR = 2.2;
 
 /**

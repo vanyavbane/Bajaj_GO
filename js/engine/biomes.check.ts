@@ -1,7 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
 import { carriageLanes } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, landOnCarriage, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -209,6 +209,15 @@ const openRibbonLanes = branchEdges(10, FORK_SPREAD);
 assert(Math.abs(exitLaneWorld(openRibbonLanes, 4, 0) - 36) < 1e-6, 'крайняя полоса на открытом съезде едет по его ленте');
 assert(exitLaneWorld(branchEdges(10, 4), 4, 0) === 4, 'пока съезд приклеен, машина остаётся на прямой');
 assert(exitLaneWorld(branchEdges(10, 0), 4, 0) === 4, 'без съезда полоса не сдвигается');
+const closing = { leftOuter: -10, leftInner: 10, rightInner: 24, rightOuter: 32 };
+const sliding = exitLaneWorld(closing, 4, 0);
+assert(sliding > 8 && sliding < 24, 'машина сходит с ленты вместе с её шириной');
+const sliver = { leftOuter: -10, leftInner: 10, rightInner: 31.6, rightOuter: 32.2 };
+const almostHome = exitLaneWorld(sliver, 4, 0);
+assert(Math.abs(almostHome - 4) < 1.5, 'узкая лента уже почти вернула машину на полосу');
+const dead = branchEdges(10, 0);
+assert(Math.abs(landOnCarriage(0, dead, 32, 1) - 9.3) < 1e-9, 'пропавшая лента сажает байка на край прямой');
+assert(landOnCarriage(0, dead, 2, 1) === 2, 'байк, который уже на прямой, остаётся на месте');
 const oneWay = carriageLanes({ oncomingCount: 2, offsets: [-6, -2, 2, 6] }, 'one-way');
 assert(oneWay.way === 'one-way' && oneWay.oncomingCount === 0 && oneWay.biomeOncoming === 2, 'односторонняя помнит, какие полосы были встречными');
 const again = carriageLanes(oneWay, 'one-way');
