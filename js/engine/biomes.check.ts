@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitCarryOrigin, exitEdges, exitPhase, exitReserved, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, pickToSide, roadLateral, sampleRoad, splitPick } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitCarryOrigin, exitEdges, exitLaneWorld, exitPhase, exitReserved, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, pickToSide, roadLateral, sampleRoad, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -143,5 +143,9 @@ assert(!exitReserved(-5) && exitReserved(EXIT_DIVERGE) && !exitReserved(FORK_LEA
 assert(liveForkAmount(1, 'settle', 0) === 1, 'до выбора хвост ещё занимает место развилки');
 assert(liveForkAmount(1, 'settle', 1) === 0 && liveForkAmount(1, 'settle', -1) === 0, 'после выбора блок дороги уже не развилка');
 assert(liveForkAmount(1, 'end', 1) === 1 && liveForkAmount(0, 'none', 1) === 0, 'закрытие ветки ещё развилка, пустая фаза — нет');
+const openRibbonLanes = branchEdges(10, FORK_SPREAD);
+assert(Math.abs(exitLaneWorld(openRibbonLanes, 4, 0) - 36) < 1e-6, 'крайняя полоса на открытом съезде едет по его ленте');
+assert(exitLaneWorld(branchEdges(10, 4), 4, 0) === 4, 'пока съезд приклеен, машина остаётся на прямой');
+assert(exitLaneWorld(branchEdges(10, 0), 4, 0) === 4, 'без съезда полоса не сдвигается');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('biome catalog ok');

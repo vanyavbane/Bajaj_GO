@@ -104,6 +104,8 @@ export interface TrafficCar {
   s: number;
   speedKmh: number;
   changingLane: boolean;
+  /** Машина уехала на ленту съезда и остаётся на ней, пока лента есть. */
+  onExit: boolean;
   flashReactTimer: number;
   steerAngle: number;
   nearMissAwarded: boolean;

@@ -1,3 +1,4 @@
+import { exitLaneWorld } from './engine/fork.js';
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
@@ -101,6 +102,7 @@ export function initTraffic() {
       s,
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
+      onExit: false,
       flashReactTimer: 0,
       steerAngle: 0,
       nearMissAwarded: false,
@@ -152,9 +154,28 @@ export function initTraffic() {
     }
   };
 
+  function exitRibbonOpen(edges) {
+    if (!edges) return false;
+    const width = edges.rightOuter - edges.rightInner;
+    const gap = edges.rightInner - edges.leftInner;
+    return width > 1.2 && gap > 0.8;
+  }
+
+  /** Правая попутная полоса уходит на съезд, пока клин только открывается.
+   *  Дальше перестроение не сбрасывает её обратно на прямую. */
+  function followExit(car, edges, runLanes, lastLane) {
+    const open = exitRibbonOpen(edges);
+    if (!open) car.onExit = false;
+    else if (!car.onExit && !car.changingLane && runLanes >= 2 && car.laneIdx === lastLane) {
+      const gap = edges.rightInner - edges.leftInner;
+      if (gap < 6) car.onExit = true;
+    }
+    return car.onExit;
+  }
+
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
-    if (!ev || !ev.active || oncoming || car.changingLane) return;
+    if (!ev || !ev.active || oncoming || car.changingLane || car.onExit) return;
     if (!sameLaneOffset(car.lateralOffset, ev.laneOffset)) return;
     if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
     let rank = 0;
@@ -244,7 +265,12 @@ export function initTraffic() {
 
       // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
       const toWorld = G.laneWorldOffsetAtS;
-      const carWorldLat = toWorld(car.s, car.lateralOffset);
+      let carWorldLat = toWorld(car.s, car.lateralOffset);
+      const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
+      const runLanes = road.count - road.oncomingCount;
+      if (followExit(car, edges, runLanes, road.count - 1)) {
+        carWorldLat = exitLaneWorld(edges, carWorldLat, toWorld(car.s, 0));
+      }
       const playerWorldLat = G.riderLatAt(G.playerS);
 
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);

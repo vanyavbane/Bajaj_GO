@@ -347,6 +347,25 @@ export function exitRibbonCenter(edges: AsphaltEdges): number | null {
 }
 
 /**
+ * Полоса на ленте съезда. laneZero — нулевая полоса прямой в тех же метрах.
+ * Пока съезд приклеен, машина остаётся на прямой. Когда лента сходится,
+ * машина возвращается. На полной ленте она едет по тем же полосам, что и прямая.
+ */
+export function exitLaneWorld(edges: AsphaltEdges, laneWorld: number, laneZero: number): number {
+  const width = exitWidth(edges);
+  const gap = exitGap(edges);
+  if (!(width > 1.2) || !(gap > 0.8) || !Number.isFinite(laneWorld) || !Number.isFinite(laneZero)) {
+    return laneWorld;
+  }
+  const center = exitRibbonCenter(edges);
+  if (center == null) return laneWorld;
+  const mainWidth = Math.max(1, edges.leftInner - edges.leftOuter);
+  const keep = Math.max(0, Math.min(1, width / mainWidth));
+  const onRibbon = center + (laneWorld - laneZero);
+  return laneWorld + (onRibbon - laneWorld) * keep;
+}
+
+/**
  * Прямая лента ещё накрывает центр дороги, а не сжата в точку.
  * Центр — ось этой ленты. После съезда это уже не ноль маршрута.
  */

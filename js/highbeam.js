@@ -18,7 +18,7 @@ export function initHighbeam() {
       const lane = highbeamYieldLane(
         car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count, carLanes.laneWidth
       );
-      if (lane == null) continue;
+      if (lane == null || car.onExit) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;
       car.speedKmh = carLanes.speeds[lane];

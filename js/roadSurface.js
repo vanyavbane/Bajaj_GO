@@ -254,7 +254,7 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Разметка полос (инстансы) ---------------- */
-  const MAX_DASHES = 384;
+  const MAX_DASHES = 768;
   const DASH_LEN = 4.2;
   const DASH_HALF = DASH_LEN * 0.5;
   const dashGeo = new THREE.BoxGeometry(0.15, 0.035, DASH_LEN);
@@ -280,26 +280,41 @@ export function initRoadSurface() {
   const dummy = new THREE.Object3D();
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
+  /** Сдвиг штрихов на ленту съезда. null, когда съезда нет или основные штрихи уже на нём. */
+  function exitDashShift(s) {
+    const edge = G.roadEdgesAt(s);
+    const width = edge.rightOuter - edge.rightInner;
+    const gap = edge.rightInner - edge.leftInner;
+    if (width < 1.2 || gap < 0.8) return null;
+    const exitCenter = (edge.rightInner + edge.rightOuter) * 0.5;
+    const main = toWorld(s, 0);
+    if (Math.abs(main - exitCenter) < 2.5) return null;
+    return exitCenter - roadCenter(s);
+  }
+
   function updateDashes(playerS, dense) {
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
     let used = 0;
+    const paint = (s, back, ahead, w) => {
+      if (used >= MAX_DASHES) return;
+      dummy.scale.set(1, 1, w);
+      placeAlongLane(dummy, s, back, ahead, DASH_HALF, 0.03);
+      dummy.updateMatrix();
+      dashMesh.setMatrixAt(used++, dummy.matrix);
+    };
     for (let k = 0; k < 32 && dense; k++) {
       const s = startDashS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       // На стыке биомов наборы штрихов перетекают: штрих укорачивается
       // по весу и растворяется, вместо мгновенной смены числа полос.
+      // Пока съезд отдельная лента, тот же набор рисуется и на ней.
+      const shift = exitDashShift(s);
       for (const mark of G.laneMarksAtS(s)) {
-        if (used >= MAX_DASHES) break;
-        dummy.scale.set(1, 1, mark.w);
-        placeAlongLane(
-          dummy, s,
-          toWorld(s - DASH_HALF, mark.lat),
-          toWorld(s + DASH_HALF, mark.lat),
-          DASH_HALF, 0.03
-        );
-        dummy.updateMatrix();
-        dashMesh.setMatrixAt(used++, dummy.matrix);
+        const back = toWorld(s - DASH_HALF, mark.lat);
+        const ahead = toWorld(s + DASH_HALF, mark.lat);
+        paint(s, back, ahead, mark.w);
+        if (shift != null) paint(s, back + shift, ahead + shift, mark.w);
       }
     }
     for (let i = used; i < MAX_DASHES; i++) dashMesh.setMatrixAt(i, hidden);
