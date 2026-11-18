@@ -1229,6 +1229,8 @@ function commitSplit(zone, side, commitMeters) {
   lastSplitZone = zone;
   lastSplitSide = side === 1 ? 1 : 0;
   zoneBiomes[zone + 1] = chosen;
+  // Снимаем фикс профиля следующей зоны, чтобы он совпал с фактическим выбором.
+  delete roadLock[zone + 1];
   G.pendingBiome = chosen;
   G.visitCounts = G.visitCounts || ZERO_VISITS();
   G.visitCounts[chosen] = Math.min(2, (G.visitCounts[chosen] || 0) + 1);
