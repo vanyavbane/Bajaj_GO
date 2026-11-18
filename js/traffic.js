@@ -191,12 +191,12 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Правая попутная полоса уходит на съезд, пока клин только открывается.
-   *  Дальше перестроение не сбрасывает её обратно на прямую. */
+  /** Попутная полоса у правого края уходит на съезд, пока клин только открывается.
+   *  Одна такая полоса, как в горах, тоже уходит. Дальше её не возвращает на прямую. */
   function followExit(car, edges, runLanes, lastLane) {
     const open = exitRibbonOpen(edges);
     if (!open) car.onExit = false;
-    else if (!car.onExit && !car.changingLane && runLanes >= 2 && car.laneIdx === lastLane) {
+    else if (!car.onExit && !car.changingLane && runLanes >= 1 && car.laneIdx === lastLane) {
       const gap = edges.rightInner - edges.leftInner;
       if (gap < 6) car.onExit = true;
     }

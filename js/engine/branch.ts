@@ -1,7 +1,7 @@
 /**
  * Настоящее ответвление.
- * Съезд поворачивает вправо относительно касательной дороги и после поворота
- * держит этот вектор: дальше он не повторяет изгибы маршрута.
+ * Съезд поворачивает вправо относительно касательной дороги. После поворота
+ * он держит этот угол к шоссе и дальше повторяет его изгибы.
  */
 
 /** Радианы вправо. Около 24°. */
@@ -66,12 +66,20 @@ export function signedAngle(ax: number, az: number, bx: number, bz: number): num
   return Math.atan2(ax * bz - az * bx, ax * bx + az * bz);
 }
 
-export interface BranchStep {
-  frame: PathFrame;
-  frozen: { fx: number; fz: number } | null;
+/** Угол съезда к шоссе в момент, когда поворот закончился. */
+export interface FrozenYaw {
+  fx: number;
+  fz: number;
+  bx: number;
+  bz: number;
 }
 
-/** Шаг интеграции. После поворота курс берётся из frozen и больше не следует за сплайном. */
+export interface BranchStep {
+  frame: PathFrame;
+  frozen: FrozenYaw | null;
+}
+
+/** Шаг интеграции. После поворота угол к шоссе фиксирован, изгиб шоссе остаётся. */
 export function stepBranch(
   from: PathFrame,
   cursor: number,
@@ -80,7 +88,7 @@ export function stepBranch(
   base: PathFrame,
   turn: number,
   yaw: number,
-  frozen: { fx: number; fz: number } | null,
+  frozen: FrozenYaw | null,
 ): BranchStep {
   const mid = cursor + ds * 0.5;
   const distance = mid - nose;
@@ -88,13 +96,15 @@ export function stepBranch(
   let fz: number;
   let nextFrozen = frozen;
   if (frozen && distance >= turn) {
-    fx = frozen.fx;
-    fz = frozen.fz;
+    const offset = signedAngle(frozen.bx, frozen.bz, frozen.fx, frozen.fz);
+    const turned = yawRight(base, offset);
+    fx = turned.fx;
+    fz = turned.fz;
   } else {
     const turned = yawRight(base, branchYaw(distance, turn, yaw));
     fx = turned.fx;
     fz = turned.fz;
-    if (distance >= turn) nextFrozen = { fx, fz };
+    if (distance >= turn) nextFrozen = { fx, fz, bx: base.fx, bz: base.fz };
   }
   const curvature = ds > 0 ? signedAngle(from.fx, from.fz, fx, fz) / ds : 0;
   return {

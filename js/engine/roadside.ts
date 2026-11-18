@@ -98,11 +98,14 @@ function exitGore(edges: AsphaltEdges, center = 0): boolean {
 }
 
 export function medianRoom(edges: AsphaltEdges, center = 0): number {
-  if (exitGore(edges, center)) return Math.max(0, (edges.rightInner - edges.leftInner) * 0.5);
-  const left = -finite(edges.leftInner);
-  const right = finite(edges.rightInner);
-  if (left <= 0 || right <= 0) return 0;
-  return Math.min(left, right);
+  const gap = edges.rightInner - edges.leftInner;
+  if (!(gap > 0)) return 0;
+  if (exitGore(edges, center)) return gap * 0.5;
+  const axis = Number.isFinite(center) ? center : 0;
+  if (edges.leftInner < axis && edges.rightInner > axis) {
+    return Math.min(axis - edges.leftInner, edges.rightInner - axis);
+  }
+  return 0;
 }
 
 /** Помещается ли объект между лентами, не задевая асфальт. */

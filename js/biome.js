@@ -367,8 +367,9 @@ let roadCacheM = NaN;
 let roadCache = null;
 /** Стабильная сторона превью развилки: не даёт дороге/биому перескакивать
  *  от мелкого рыскания у центра, пока выбор ещё не зафиксирован. */
-/** Игрок удерживает съезд, пока лента не вернётся к дороге. */
+/** Игрок в координатах ленты съезда. Середина ленты, от которой считалась полоса. */
 let exitHold = false;
+let heldCenter = 0;
 
 function roadAtMeters(meters) {
   if (meters === roadCacheM && roadCache) return roadCache;
@@ -743,58 +744,54 @@ function roadMetersAt(s, laneOffset, riding) {
   return laneMeters(laneOffset, laneSpanAt(s), roadWidthAtS(s) * 0.5, frameAt(s), riding);
 }
 
-/** Мировые метры байка. На съезде полоса считается от центра его ленты, как на прямой. */
-function riderWorld(frame, span) {
-  const origin = frame.origin;
-  const lane = G.laneOffset * span;
-  if (!exitHold) return origin + lane;
-  const center = exitRibbonCenter(frame.local);
-  return center == null ? origin + lane : origin + center + lane;
+/** Мир байка в текущей системе полосы: от ленты, если она захвачена, иначе от центра дороги. */
+function riderPoint(frame, span) {
+  const along = G.laneOffset * span;
+  return frame.origin + (exitHold ? heldCenter : 0) + along;
 }
 
-/** Захват переносит полосу на центр съезда, не сдвигая байка в мире. */
-function grabExit(frame, span) {
-  const center = exitRibbonCenter(frame.local);
-  if (center == null) return;
-  const world = frame.origin + G.laneOffset * span;
-  const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
-  const limit = Math.max(0, (halfW - 0.7) / span);
-  let lane = (world - (frame.origin + center)) / span;
-  if (lane < -limit) lane = -limit;
-  if (lane > limit) lane = limit;
-  exitHold = true;
-  G.laneOffset = lane;
-}
-
-/** Отпуск возвращает полосу к центру прямой дороги, тоже без скачка. */
-function releaseExit(frame, span) {
-  const world = riderWorld(frame, span);
-  exitHold = false;
-  G.laneOffset = (world - frame.origin) / span;
-}
-
-/** Съезд берётся с его асфальта, пока ленты соединены. Дальше это обычная дорога той же ширины. */
-function updateExitHold(meters, zone) {
+/**
+ * Полоса следует за тем асфальтом, на котором стоит байк.
+ * Лента ещё есть — ось на её середине. Лента стала дорогой — центр уже там,
+ * второй раз его не прибавляем. Отпущенный съезд возвращает ось на прямую.
+ */
+function updateExitHold(zone) {
   const frame = frameAt(G.playerS);
   const span = laneSpanAt(G.playerS);
-  if (!exitReserved(forkOffset(meters, ZONE_M))) {
-    if (exitHold) releaseExit(frame, span);
+  const center = exitRibbonCenter(frame.local);
+  if (center == null) {
+    if (exitHold && frame.chosen !== 1) G.laneOffset += heldCenter / span;
+    exitHold = false;
+    heldCenter = 0;
     return;
   }
-  if (!chosenZones.has(zone)) {
-    const logical = G.laneOffset * span;
-    if (!exitHold && onExitRibbon(logical, frame.local)) grabExit(frame, span);
-    else if (exitHold) {
-      const center = exitRibbonCenter(frame.local);
-      const local = center == null ? logical : center + logical;
-      if (canReleaseExit(local, frame.local)) releaseExit(frame, span);
+  const world = riderPoint(frame, span);
+  const logical = world - frame.origin;
+  const onRibbon = onExitRibbon(logical, frame.local);
+  const choseExit = chosenExit[zone] === 1;
+  const hold = choseExit || onRibbon || (exitHold && !canReleaseExit(logical, frame.local));
+  if (hold && !exitHold) {
+    let lane = (world - (frame.origin + center)) / span;
+    if (onRibbon) {
+      const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
+      const limit = Math.max(0, (halfW - 0.7) / span);
+      if (lane < -limit) lane = -limit;
+      if (lane > limit) lane = limit;
     }
+    G.laneOffset = lane;
+    exitHold = true;
+    heldCenter = center;
+    return;
   }
-  const carried = chosenExit[zone] === 1 && (frame.phase.kind === 'settle' || frame.phase.kind === 'none');
-  if (exitHold && carried) {
-    const center = exitRibbonCenter(frame.local);
-    if (center != null) G.laneOffset += center / span;
+  if (!hold && exitHold) {
+    G.laneOffset = (world - frame.origin) / span;
     exitHold = false;
+    heldCenter = 0;
+    return;
+  }
+  if (exitHold) {
+    G.laneOffset = (world - (frame.origin + center)) / span;
+    heldCenter = center;
   }
 }
 
@@ -810,7 +807,7 @@ function riderLatAt(s, laneOffset) {
   if (!exitHold) return roadMetersAt(s, lane, false);
   const frame = frameAt(s);
   const center = exitRibbonCenter(frame.local);
-  return center == null ? frame.origin + lane * span : frame.origin + center + lane * span;
+  return frame.origin + (center == null ? heldCenter : center) + lane * span;
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -1445,7 +1442,7 @@ function updateBiome(dt) {
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
   splitChoices[zone] = choices;
 
-  updateExitHold(meters, zone);
+  updateExitHold(zone);
   const chosenBefore = chosenZones.has(zone);
   const previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
@@ -1573,6 +1570,7 @@ function resetBiomeRun() {
   lastSplitZone = -1;
   lastSplitSide = -1;
   exitHold = false;
+  heldCenter = 0;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();

@@ -68,6 +68,9 @@ assert(highwaySpan.left === -10 && highwaySpan.right === highway.rightOuter, 'с
 const carriedSpan = asphaltSpan(carried, 32);
 assert(carriedSpan.left === 22 && carriedSpan.right === 42 && carriedSpan.mid === 32, 'после съезда портал садится на новую дорогу');
 assert(Math.abs(medianRoom(shifted, 32) - 6) < 1e-9, 'клин после переноса центра сохраняет ширину');
+const shiftedMedian: AsphaltEdges = { leftOuter: 16, leftInner: 26, rightInner: 38, rightOuter: 48 };
+assert(Math.abs(medianRoom(shiftedMedian, 32) - 6) < 1e-9, 'островок считается от центра дороги, не от нуля маршрута');
+assert(medianRoom(shiftedMedian, 0) === 0, 'щель мимо центра дороги островком не становится');
 
 const clipped = medianPose(fork, { halfWidth: 1, gap: 3.2, lateral: 40 });
 assert(clipped.lateral != null && Math.abs(clipped.lateral) <= 25.84 - 4.2 + 1e-9, 'сдвиг по островку не заходит на асфальт');

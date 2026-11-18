@@ -8,7 +8,7 @@
 import { BRANCH_YAW, frameFromSpline, stepBranch } from './branch.ts';
 import { courseLocal, exitRibbonMid } from './fork.ts';
 import type { AsphaltEdges, ExitClock } from './fork.ts';
-import type { PathFrame, RoadEmbed } from './branch.ts';
+import type { FrozenYaw, PathFrame, RoadEmbed } from './branch.ts';
 import type { RoadWay } from './lanes.ts';
 
 export type { PathFrame, RoadEmbed };
@@ -198,7 +198,7 @@ interface PathRecord {
   nose: number;
   yaw: number;
   samples: PathFrame[];
-  frozen: { fx: number; fz: number } | null;
+  frozen: FrozenYaw | null;
 }
 
 const STEP = 2;

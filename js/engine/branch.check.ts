@@ -1,4 +1,5 @@
-import { BRANCH_YAW, branchYaw, frameFromSpline, headingRate, stepBranch } from './branch.ts';
+import { BRANCH_YAW, branchYaw, frameFromSpline, headingRate, signedAngle, stepBranch } from './branch.ts';
+import type { FrozenYaw } from './branch.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -8,7 +9,7 @@ const step = 2;
 const turn = 110;
 const nose = 0;
 let frame = frameFromSpline(0, 0, nose);
-let frozen: { fx: number; fz: number } | null = null;
+let frozen: FrozenYaw | null = null;
 let cursor = nose;
 let peak = 0;
 while (cursor < 220 - 1e-6) {
@@ -24,20 +25,35 @@ assert(frame.x > 18, 'после поворота ветка ушла вправ
 assert(Math.abs(frame.fx - Math.sin(BRANCH_YAW)) < 0.08, 'курс держит угол поворота, а не касательную прямой');
 assert(frozen != null, 'после поворота курс заморожен');
 
-const held = frame.fx;
-let later = frame;
-let laterFrozen = frozen;
+let straight = frame;
+let straightFrozen = frozen;
 let at = cursor;
 while (at < 400 - 1e-6) {
-  // Сплайн после поворота уходит влево. Ветка не должна за ним последовать.
-  const base = frameFromSpline(-40, -0.4, at + step * 0.5);
+  const base = frameFromSpline(0, 0, at + step * 0.5);
+  const next = stepBranch(straight, at, nose, step, base, turn, BRANCH_YAW, straightFrozen);
+  straight = next.frame;
+  straightFrozen = next.frozen;
+  at += step;
+}
+assert(Math.abs(straight.fx - Math.sin(BRANCH_YAW)) < 0.08, 'на прямом шоссе угол после поворота не растёт');
+assert(Math.abs(straight.curvature) < 1e-6, 'на прямом шоссе съезд больше не крутит байк');
+
+let later = frame;
+let laterFrozen = frozen;
+let bend = 0;
+at = cursor;
+while (at < 400 - 1e-6) {
+  bend -= 0.004;
+  const base = frameFromSpline(0, bend, at + step * 0.5, -0.004);
   const next = stepBranch(later, at, nose, step, base, turn, BRANCH_YAW, laterFrozen);
   later = next.frame;
   laterFrozen = next.frozen;
   at += step;
 }
-assert(Math.abs(later.fx - held) < 1e-6, 'замороженный вектор не повторяет новый изгиб маршрута');
-assert(Math.abs(later.curvature) < 1e-6, 'после поворота прямая ветка больше не крутит байк');
+const parentNow = frameFromSpline(0, bend, at);
+const rel = signedAngle(parentNow.fx, parentNow.fz, later.fx, later.fz);
+assert(Math.abs(rel - BRANCH_YAW) < 0.05, 'после поворота съезд держит угол к шоссе');
+assert(later.curvature < -0.001, 'изгиб шоссе крутит съезд вместе с собой');
 assert(branchYaw(0, turn) === 0 && Math.abs(branchYaw(turn, turn) - BRANCH_YAW) < 1e-9, 'угол растёт только на повороте');
 assert(headingRate(0, 0.01) === 0.01, 'на прямой изгиб совпадает со второй производной');
 assert(Math.abs(headingRate(1, 0.02) - 0.01) < 1e-12, 'наклон уменьшает скорость поворота относительно второй производной');
