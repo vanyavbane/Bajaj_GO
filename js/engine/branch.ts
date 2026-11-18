@@ -24,12 +24,14 @@ export interface RoadEmbed extends PathFrame {
   branched: boolean;
 }
 
-/** Кадр прямой дороги. dx — dX/ds сплайна, вперёд по −Z. */
-export function frameFromSpline(x: number, dx: number, s: number): PathFrame {
+/** Кадр прямой дороги. dx — dX/ds сплайна, вперёд по −Z.
+ *  curvature — изгиб родителя, рад/м, в тех же единицах, что вторая производная сплайна. */
+export function frameFromSpline(x: number, dx: number, s: number, curvature = 0): PathFrame {
   const lh = Math.hypot(dx, 1) || 1;
   const fx = dx / lh;
   const fz = -1 / lh;
-  return { x, z: -s, fx, fz, rx: -fz, rz: fx, curvature: 0 };
+  const bend = Number.isFinite(curvature) ? curvature : 0;
+  return { x, z: -s, fx, fz, rx: -fz, rz: fx, curvature: bend };
 }
 
 /** 0 до носа, полный угол после поворота. Отрицательный угол — влево. */

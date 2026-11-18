@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { exitRibbonMid } from './engine/fork.js';
 import { readLanes } from './engine/lanes.js';
 import { G } from './state.js';
 
@@ -62,8 +63,8 @@ export function initRoad() {
     const width = edge.rightOuter - edge.rightInner;
     if (width < 0.8 || lat < edge.rightInner - 0.4 || lat > edge.rightOuter + 0.4) return lat;
     const ahead = G.roadEdgesAt(sSample);
-    const centerRef = (edge.rightInner + edge.rightOuter) * 0.5;
-    const centerSample = (ahead.rightInner + ahead.rightOuter) * 0.5;
+    const centerRef = exitRibbonMid(edge);
+    const centerSample = exitRibbonMid(ahead);
     return lat + (centerSample - centerRef);
   }
 

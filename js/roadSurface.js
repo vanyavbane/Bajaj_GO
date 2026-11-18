@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -17,16 +17,10 @@ export function initRoadSurface() {
   const ISLAND_ROWS = 49;
 
   const sampleS = new Float32Array(ROW);
-  const sampleX = new Float32Array(ROW);
   const sampleY = new Float32Array(ROW);
-  const sampleZ = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
-  const sampleHalf = new Float32Array(ROW);
-  const rightX = new Float32Array(ROW);
-  const rightZ = new Float32Array(ROW);
 
   const toWorld = (s, lat) => G.laneWorldOffsetAtS(s, lat);
-  const widthAt = (s) => G.roadWidthAtS(s);
 
   /* Точка на дороге со сдвигом оси развилки — как placeOnRoad, но без поворота. */
   const _laneA = new THREE.Vector3();
@@ -106,18 +100,9 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const frac = r / RIBBON_SEGS;
       const s = playerS - RIBBON_BEHIND + (1 - frac) * RIBBON_LEN;
-      const dx = G.roadDX(s);
-      const lh = Math.hypot(dx, 1) || 1;
       sampleS[r] = s;
-      const rx = 1 / lh;
-      const rz = dx / lh;
-      sampleX[r] = G.roadX(s);
       sampleY[r] = G.roadY(s);
-      sampleZ[r] = -s;
       sampleCity[r] = G.cityWeightAtS(s);
-      sampleHalf[r] = widthAt(s) * 0.5;
-      rightX[r] = rx;
-      rightZ[r] = rz;
     }
   }
 
@@ -222,40 +207,32 @@ export function initRoadSurface() {
     return Math.abs(edgeLat(s, side) - roadCenter(s));
   }
 
-  function shadeSlope(geo, side) {
+  /** Нормаль откоса берётся из уже поставленных вершин, по курсу съезда, а не по сплайну. */
+  function shadeSlope(geo) {
+    const pos = geo.attributes.position.array;
     const norm = geo.attributes.normal.array;
     for (let r = 0; r < ROW; r++) {
       const ahead = r < ROW - 1;
       const r2 = ahead ? r + 1 : r - 1;
       const sign = ahead ? 1 : -1;
-      const ax = (sampleX[r2] - sampleX[r]) * sign;
-      const ay = (sampleY[r2] - sampleY[r]) * sign;
-      const az = (sampleZ[r2] - sampleZ[r]) * sign;
-      const rx = rightX[r];
-      const rz = rightZ[r];
-      const write = (slot, latA, latB, hA, hB) => {
-        const vx = rx * (latB - latA);
-        const vy = hB - hA;
-        const vz = rz * (latB - latA);
+      for (let slot = 0; slot < 3; slot++) {
+        const o = (r * 3 + slot) * 3;
+        const n = (r2 * 3 + slot) * 3;
+        const ax = (pos[n] - pos[o]) * sign;
+        const ay = (pos[n + 1] - pos[o + 1]) * sign;
+        const az = (pos[n + 2] - pos[o + 2]) * sign;
+        const across = slot < 2 ? slot + 1 : slot - 1;
+        const b = (r * 3 + across) * 3;
+        const vx = pos[b] - pos[o];
+        const vy = pos[b + 1] - pos[o + 1];
+        const vz = pos[b + 2] - pos[o + 2];
         let nx = ay * vz - az * vy;
         let ny = az * vx - ax * vz;
         let nz = ax * vy - ay * vx;
         if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
         const len = Math.hypot(nx, ny, nz) || 1;
-        const o = (r * 3 + slot) * 3;
         norm[o] = nx / len; norm[o + 1] = ny / len; norm[o + 2] = nz / len;
-      };
-      const sh = G.shoulder;
-      const s = sampleS[r];
-      const asphalt = farAsphalt(s, side);
-      const cityOuter = sh.cityEdge * sampleCity[r];
-      const lat = shoulderLats(asphalt, cityOuter, sh);
-      const far = slopeLat(s, side, lat.far);
-      const berm = slopeLat(s, side, lat.berm);
-      const lip = slopeLat(s, side, lat.lip);
-      write(0, far, berm, sh.farY, sh.bermY);
-      write(1, far, lip, sh.farY, sh.lipY);
-      write(2, berm, lip, sh.bermY, sh.lipY);
+      }
     }
     geo.attributes.normal.needsUpdate = true;
   }
@@ -293,10 +270,11 @@ export function initRoadSurface() {
     const width = edge.rightOuter - edge.rightInner;
     const gap = edge.rightInner - edge.leftInner;
     if (width < 1.2 || gap < 0.8) return null;
-    const exitCenter = (edge.rightInner + edge.rightOuter) * 0.5;
+    const exitCenter = exitRibbonMid(edge);
     const main = toWorld(s, 0);
     if (Math.abs(main - exitCenter) < 2.5) return null;
-    return exitCenter - roadCenter(s);
+    // От текущей оси полос, не от центра маршрута: на закрытии ось уже едет к съезду.
+    return exitCenter - main;
   }
 
   function updateDashes(playerS, dense) {
@@ -714,7 +692,7 @@ export function initRoadSurface() {
       const edge = G.roadEdgesAt(s);
       const width = edge.rightOuter - edge.rightInner;
       if (width < 1.2) return null;
-      return (edge.rightInner + edge.rightOuter) * 0.5;
+      return exitRibbonMid(edge);
     };
     const decided = !!(G.splitState && G.splitState.chosen);
     const tookExit = decided && G.splitState.chosenSide === 1;
@@ -793,8 +771,8 @@ export function initRoadSurface() {
     updateSlopeRibbons();
     if (Number.isNaN(lastSlopeShadeS) || Math.abs(playerS - lastSlopeShadeS) >= 4) {
       lastSlopeShadeS = playerS;
-      shadeSlope(slopeLeftMesh.geometry, -1);
-      shadeSlope(slopeRightMesh.geometry, 1);
+      shadeSlope(slopeLeftMesh.geometry);
+      shadeSlope(slopeRightMesh.geometry);
     }
 
     updateIsland(playerS);

@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { BiomeDef, BiomeId, BiomeTraffic, LaneLayout, RoadSample, TrafficModel } from './engine/biomes.js';
+import type { CarriageLayout, RoadWay } from './engine/lanes.js';
 import type { RoadEmbed } from './engine/branch.js';
 import type { AsphaltEdges, BranchPick, ChosenSide, PlacedBlock, ShoulderProfile, SplitPick } from './engine/fork.js';
 import type { BesideAsset, MedianAsset, RoadsideFrame, RoadsidePose } from './engine/roadside.js';
@@ -107,6 +108,8 @@ export interface TrafficCar {
   changingLane: boolean;
   /** Машина уехала на ленту съезда и остаётся на ней, пока лента есть. */
   onExit: boolean;
+  /** Куда смотрит кузов: 0 по ходу, π навстречу. Доворачивается, а не прыгает. */
+  heading: number;
   flashReactTimer: number;
   steerAngle: number;
   nearMissAwarded: boolean;
@@ -325,6 +328,7 @@ export interface GameState {
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   roadOuterLat: (s: number, side: number) => number;
+  asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
   roadBiomeAtS: (s: number) => number;
   splitCenterS: (playerS: number) => number;
   shoulder: ShoulderProfile;
@@ -356,16 +360,17 @@ export interface GameState {
   splitAmountAtS: (s: number) => number;
   laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
   laneDisplayScaleAtS: (s: number) => number;
-  roadWayAt: (s: number, onRamp?: boolean) => 'one-way' | 'two-way';
-  laneMarksAtS: (s: number, way?: 'one-way' | 'two-way') => { lat: number; w: number }[];
+  roadWayAt: (s: number, onRamp?: boolean) => RoadWay;
+  laneMarksAtS: (s: number, way?: RoadWay) => { lat: number; w: number }[];
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
   biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;
   getLaneConfig: (biomeId: BiomeId | number) => LaneLayout;
   getBiomeChoices: (currentBiome: number, visitCounts: number[]) => number[];
   randomRunLane: (s?: number) => number;
-  lanesAtS: (s?: number) => LaneLayout;
-  remapTrafficLanes: (cfg?: LaneLayout | null) => void;
+  /** Полосы дороги в точке: биом плюс односторонний или двусторонний проезд. */
+  lanesAtS: (s?: number) => CarriageLayout;
+  remapTrafficLanes: (cfg?: CarriageLayout | null) => void;
   currentBiome: number;
   visitCounts: number[];
   pendingBiome: number | null;

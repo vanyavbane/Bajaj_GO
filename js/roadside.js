@@ -408,10 +408,9 @@ export function initRoadside() {
           G.placeOnRoad(bb.group, boardS, boardLat, G.groundOffset(boardLat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
-          const portalCenter = G.roadOriginAt ? G.roadOriginAt(slot.s) : 0;
-          G.placeOnRoad(slot.portal.group, slot.s, portalCenter, 0);
-          const span = G.roadOuterLat(slot.s, 1) - G.roadOuterLat(slot.s, -1);
-          const wf = Math.max(1, span / G.nominalRoadWidth);
+          const cover = G.asphaltSpan(slot.s);
+          G.placeOnRoad(slot.portal.group, slot.s, cover.mid, 0);
+          const wf = Math.max(1, cover.width / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
         }
       }, Math.round((leftLamp + rightLamp) * 50) + Math.round(city * 20) * 100000);

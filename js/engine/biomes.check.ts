@@ -1,5 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitCarryOrigin, exitEdges, exitLaneWorld, exitPhase, exitReserved, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, pickToSide, roadLateral, sampleRoad, splitPick } from './fork.ts';
+import { carriageLanes } from './lanes.ts';
+import { stepTrafficCar } from './motion.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitEdges, exitLaneWorld, exitPhase, exitReserved, exitRibbonMid, exitSeam, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -51,6 +53,22 @@ const carriedFrame = sampleRoad({
   carriedOrigin: exitCarryOrigin(10, 0),
 });
 assert(carriedFrame.origin === exitCarryOrigin(10, 0), 'взятый съезд держит свой центр');
+const earlyChoice = sampleRoad({
+  forkDistance: -30,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 4,
+  carriedOrigin: exitCarryOrigin(10, 4),
+});
+assert(earlyChoice.origin === 4, 'до развилки записанный съезд не переносит центр');
+const afterFork = sampleRoad({
+  forkDistance: FORK_LEAD + 8,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 4,
+  carriedOrigin: exitCarryOrigin(10, 4),
+});
+assert(afterFork.origin === exitCarryOrigin(10, 4), 'после съезда центр остаётся на ленте');
 assert(carriedFrame.local.leftOuter === -10 && carriedFrame.local.leftInner === 10, 'локальная дорога прямая относительно этого центра');
 assert(Math.abs(carriedFrame.world.leftOuter - (carriedFrame.origin - 10)) < 1e-6, 'мировые кромки сдвинуты на центр съезда');
 assert(laneMeters(0, 1, 10, carriedFrame, false) === carriedFrame.origin, 'нулевая полоса стоит в центре увезённой дороги');
@@ -63,8 +81,9 @@ const sealStart = sampleRoad({
   carriedOrigin,
   endWeight: 0,
 });
+const clock = exitClock();
 const sealEnd = sampleRoad({
-  forkDistance: EXIT_CHOICE + 69.95,
+  forkDistance: clock.ownAfter - 0.05,
   half: 10,
   chosen: 1,
   baseOrigin: 0,
@@ -72,7 +91,7 @@ const sealEnd = sampleRoad({
   endWeight: 1,
 });
 const carryStart = sampleRoad({
-  forkDistance: EXIT_CHOICE + 70.05,
+  forkDistance: clock.ownAfter + 0.05,
   half: 10,
   chosen: 1,
   baseOrigin: 0,
@@ -85,7 +104,7 @@ assert(
   'полосы не прыгают, когда съезд становится дорогой',
 );
 const straightEnd = sampleRoad({
-  forkDistance: EXIT_CHOICE + 69,
+  forkDistance: clock.ownAfter - 1,
   half: 10,
   chosen: -1,
   baseOrigin: 0,
@@ -105,7 +124,7 @@ assert(forkSpreadAt(noseM + EXIT_CHOICE + 10, zone) === FORK_SPREAD, 'после
 assert(forkSpreadAt(noseM + FORK_LEAD - 1, zone) === FORK_SPREAD, 'до границы зоны ветка ещё считается открытой');
 assert(forkSpreadAt(noseM + FORK_LEAD, zone) === 0, 'за границей зоны съезда уже нет');
 const endedExit = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, -1);
-const endedMid = (endedExit.rightInner + endedExit.rightOuter) * 0.5;
+const endedMid = exitRibbonMid(endedExit);
 assert(Math.abs(endedExit.rightOuter - endedExit.rightInner) < 1e-6, 'отказанная ветка сходит на нет');
 assert(endedMid > 12, 'отказанная ветка заканчивается в стороне, не на прямой дороге');
 const taken = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
@@ -127,7 +146,31 @@ assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк �
 const carried = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
 const carriedRide = roadLateral(9, 10, carried, true);
 assert(carriedRide > carried.rightInner && carriedRide < carried.rightOuter, 'на взятом съезде байк остаётся на его ленте');
-assert(exitCarryOrigin(10, 0) === (carried.rightInner + carried.rightOuter) * 0.5, 'новый центр дороги — центр съезда, не ось');
+const straightZone = { tookExit: false, half: 8 };
+const exitZone = { tookExit: true, half: 10 };
+assert(originBeforeZones([straightZone]) === 0, 'прямой ход центр не двигает');
+assert(carriedOriginAt([straightZone], exitZone) === exitCarryOrigin(10, 0), 'центр зоны считает движок из выбора и ширины');
+assert(originBeforeZones([exitZone]) === exitCarryOrigin(10, 0), 'следующая зона наследует центр съезда');
+const center = exitCarryOrigin(10, 0);
+assert(storedOriginHolds(center, center) && storedOriginHolds(center + 0.04, center), 'совпавший старый центр остаётся');
+assert(!storedOriginHolds(center + 2, center) && !storedOriginHolds(center, null), 'чужой центр не подставляется, дорога считается заново');
+const seam = exitSeam(10, 0);
+assert(Math.abs(seam.ribbon - seam.origin) < 1e-6, 'на стыке центр ленты и центр дороги — одна точка');
+assert(
+  courseLocal(seam.ribbon, { kind: 'ribbon', ribbon: seam.ribbon }) === courseLocal(seam.ribbon, { kind: 'owned', center: seam.origin }),
+  'после захвата полоса и курс вычитают один центр',
+);
+const carriedCenter = exitCarryOrigin(8, 0);
+const narrow = sampleRoad({ forkDistance: exitClock().ownAfter, half: 8, chosen: 1, baseOrigin: 0, carriedOrigin: carriedCenter, endWeight: 1 });
+const wide = sampleRoad({ forkDistance: exitClock().ownAfter + 20, half: 14, chosen: 1, baseOrigin: 0, carriedOrigin: carriedCenter, endWeight: 1 });
+assert(roadCenter(narrow) === roadCenter(wide) && roadCenter(wide) === carriedCenter, 'смена ширины не двигает центр взятой дороги');
+assert(laneMeters(0, 1, 14, wide, false) === roadCenter(wide), 'нулевая полоса остаётся на центре курса');
+assert(Math.abs(wide.world.leftOuter - (roadCenter(wide) - 14)) < 1e-6 && Math.abs(wide.world.leftInner - (roadCenter(wide) + 14)) < 1e-6, 'полотно ширится вокруг того же центра');
+const seamShifted = exitSeam(10, 18);
+assert(Math.abs(seamShifted.ribbon - seamShifted.origin) < 1e-6, 'стык держится и если дорога уже уехала в сторону');
+assert(exitCarryOrigin(10, 0) === exitRibbonMid(branchEdges(10, FORK_SPREAD)), 'центр взятой дороги — середина полной ленты');
+assert(exitCarryOrigin(10, 0) === exitRibbonMid(carried), 'новый центр дороги — центр съезда, не ось');
+assert(onExitRibbon(32, openRibbon) && !onExitRibbon(0, openRibbon), 'байк на асфальте съезда узнаётся и при открытом клине');
 const handed = roadLateral(9, 10, carried, true) - exitCarryOrigin(10, 0);
 assert(Math.abs(handed) < 10, 'после переноса полоса остаётся на дороге съезда, не на оси маршрута');
 const joined = branchEdges(10, 4);
@@ -147,5 +190,21 @@ const openRibbonLanes = branchEdges(10, FORK_SPREAD);
 assert(Math.abs(exitLaneWorld(openRibbonLanes, 4, 0) - 36) < 1e-6, 'крайняя полоса на открытом съезде едет по его ленте');
 assert(exitLaneWorld(branchEdges(10, 4), 4, 0) === 4, 'пока съезд приклеен, машина остаётся на прямой');
 assert(exitLaneWorld(branchEdges(10, 0), 4, 0) === 4, 'без съезда полоса не сдвигается');
+const oneWay = carriageLanes({ oncomingCount: 2, offsets: [-6, -2, 2, 6] }, 'one-way');
+assert(oneWay.way === 'one-way' && oneWay.oncomingCount === 0 && oneWay.biomeOncoming === 2, 'односторонняя помнит, какие полосы были встречными');
+const again = carriageLanes(oneWay, 'one-way');
+assert(again.way === 'one-way' && again.oncomingCount === 0 && again.biomeOncoming === 2, 'повтор не забывает встречные полосы биома');
+const back = carriageLanes(oneWay, 'two-way');
+assert(back.way === 'two-way' && back.oncomingCount === 2, 'на двусторонней встречные биома возвращаются');
+const meet = stepTrafficCar(
+  { laneIdx: 0, targetLaneIdx: 0, lateralOffset: -6, s: 10, speedKmh: 36, changingLane: false, flashReactTimer: 0, steerAngle: 0 },
+  0.5, [-6, -2, 2, 6], 2,
+);
+assert(meet.s < 10 && meet.oncoming, 'на двусторонней встречная едет навстречу');
+const merged = stepTrafficCar(
+  { laneIdx: 0, targetLaneIdx: 2, lateralOffset: -6, s: 10, speedKmh: 36, changingLane: true, flashReactTimer: 0, steerAngle: 0 },
+  0.5, [-6, -2, 2, 6], 0, 1,
+);
+assert(merged.s > 10 && !merged.oncoming, 'на съезде бывшая встречная едет вперёд и перестраивается');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('biome catalog ok');

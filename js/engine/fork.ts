@@ -87,8 +87,6 @@ export interface RoadLimits {
 export const EXIT_DIVERGE = EXIT_PLAN.diverge;
 /** Блок, где ветки уже разделены. Здесь игрок выбирает, что строить дальше. */
 export const EXIT_RUN = EXIT_PLAN.run;
-/** Блок, в котором ненужная ветка заканчивается на месте. */
-export const EXIT_END = EXIT_PLAN.seal;
 /** Последний блок цепочки: запас до границы зоны. */
 export const EXIT_MARGIN = EXIT_PLAN.margin;
 /** Нос съезда стоит на столько метров раньше границы зоны. */
@@ -96,6 +94,59 @@ export const FORK_LEAD = EXIT_PLAN.length;
 /** Конец общего подхода: дальше строится только выбранная цепочка. */
 export const EXIT_CHOICE = EXIT_PLAN.choiceAt;
 export const FORK_SPREAD = EXIT_PLAN.spread;
+
+/** Линейка съезда для курса. Курс не складывает длины блоков сам. */
+export interface ExitClock {
+  /** Нос стоит на столько метров раньше конца зоны. */
+  lead: number;
+  /** Сколько метров курс поворачивает. Это блок отхода. */
+  turn: number;
+  /** С этой метки после носа взятый съезд уже является дорогой. Начало блока carry. */
+  ownAfter: number;
+  /** Конец общего подхода: здесь фиксируется выбор. */
+  choiceAt: number;
+  spread: number;
+}
+
+/** Единственные метры, по которым курс понимает, когда сечение уже стало его дорогой. */
+export function exitClock(): ExitClock {
+  const carry = EXIT_PLAN.exit.find((span) => span.kind === 'carry');
+  if (!carry) throw new Error('Съезд без блока carry: курс не знает, когда лента стала дорогой');
+  return {
+    lead: EXIT_PLAN.length,
+    turn: EXIT_PLAN.diverge,
+    ownAfter: carry.start,
+    choiceAt: EXIT_PLAN.choiceAt,
+    spread: EXIT_PLAN.spread,
+  };
+}
+
+/** Выбор зоны для центра дороги. Прямая не несёт центр. Съезд может оставить уже сверенный. */
+export type ZoneRoad =
+  | { tookExit: false; half: number }
+  | { tookExit: true; half: number; keptOrigin?: number };
+
+/** Центр дороги перед переданными зонами. Прямой ход его не двигает. */
+export function originBeforeZones(previous: readonly ZoneRoad[]): number {
+  let origin = 0;
+  for (const zone of previous) {
+    if (!zone.tookExit) continue;
+    if (zone.keptOrigin != null) {
+      origin = zone.keptOrigin;
+      continue;
+    }
+    origin = exitCarryOrigin(zone.half, origin);
+  }
+  return origin;
+}
+
+/** Центр зоны. null, если съезд не взят: прямая остаётся на прежнем центре. */
+export function carriedOriginAt(previous: readonly ZoneRoad[], zone: ZoneRoad): number | null {
+  if (!zone.tookExit) return null;
+  if (zone.keptOrigin != null) return zone.keptOrigin;
+  return exitCarryOrigin(zone.half, originBeforeZones(previous));
+}
+
 /** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
 export const FORK_SEAM = 0.16;
 
@@ -219,11 +270,56 @@ function pinchSpan(from: number, to: number, keep: number): [number, number] {
   return [mid + (from - mid) * keep, mid + (to - mid) * keep];
 }
 
-/** Центр дороги после взятого съезда. Это смещение больше не возвращается на ноль. */
+/** Середина правой ленты. Одна формула и для полос, и для курса. */
+export function exitRibbonMid(edges: AsphaltEdges): number {
+  return (edges.rightInner + edges.rightOuter) * 0.5;
+}
+
+/**
+ * Стык сечения и курса.
+ * В конце закрытия прямой центр ленты в мире, в начале carry — центр дороги.
+ * Это одно число: курс вычитает его и до захвата, и после.
+ */
+export interface ExitSeamPoint {
+  /** Середина ленты в конце закрытия прямой. */
+  ribbon: number;
+  /** Центр дороги в начале carry. */
+  origin: number;
+}
+
+export function exitSeam(half: number, base = 0): ExitSeamPoint {
+  const clock = exitClock();
+  const carriedOrigin = exitCarryOrigin(half, base);
+  const seal = sampleRoad({
+    forkDistance: clock.ownAfter - 0.02,
+    half,
+    chosen: 1,
+    baseOrigin: base,
+    carriedOrigin,
+    endWeight: 1,
+  });
+  const carry = sampleRoad({
+    forkDistance: clock.ownAfter,
+    half,
+    chosen: 1,
+    baseOrigin: base,
+    carriedOrigin,
+    endWeight: 1,
+  });
+  return { ribbon: exitRibbonMid(seal.world), origin: carry.origin };
+}
+
+/** Старый сохранённый центр можно оставить, только если он уже равен формуле. */
+export function storedOriginHolds(stored: number, fresh: number | null): boolean {
+  if (fresh == null || typeof stored !== 'number' || !Number.isFinite(stored)) return false;
+  return Math.abs(stored - fresh) <= 0.05;
+}
+
+/** Центр дороги после взятого съезда. Это середина полной ленты, не отдельный сдвиг. */
 export function exitCarryOrigin(roadHalf: number, base = 0): number {
   const half = Math.max(0, Number.isFinite(roadHalf) ? roadHalf : 0);
   const from = Number.isFinite(base) ? base : 0;
-  return from + half + FORK_SPREAD;
+  return from + exitRibbonMid(branchEdges(half, FORK_SPREAD));
 }
 
 /**
@@ -294,7 +390,9 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
     : phase;
   const stored = query.carriedOrigin;
   const onCarry = block != null && block.built && block.kind === 'carry';
-  const carried = chosen === 1 && stored != null && (onCarry || weighted.kind === 'none');
+  // До носа фазы тоже none: уже записанный выбор не должен переносить центр заранее.
+  const afterFork = query.forkDistance >= EXIT_PLAN.length;
+  const carried = chosen === 1 && stored != null && (onCarry || afterFork);
   const origin = carried && stored != null ? stored : query.baseOrigin;
   const local = blockEdges(query.half, block, chosen, endWeight);
   return {
@@ -307,20 +405,42 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   };
 }
 
+/** Центр курса. После захвата его вычитают и полосы, и заголовок. */
+export function roadCenter(frame: RoadFrame): number {
+  return frame.origin;
+}
+
+/** Откуда вычитать боковой метр. Середину ленты и центр дороги нельзя перепутать. */
+export type CoursePlace =
+  | { kind: 'ribbon'; ribbon: number }
+  | { kind: 'owned'; center: number }
+  | { kind: 'free' };
+
+/**
+ * Боковой метр на курсе.
+ * На открытой ленте вычитается её середина. После захвата — roadCenter.
+ * На стыке это одно число, поэтому смена ширины не разводит ряд и полотно.
+ */
+export function courseLocal(lat: number, place: CoursePlace): number {
+  if (place.kind === 'ribbon') return lat - place.ribbon;
+  if (place.kind === 'owned') return lat - place.center;
+  return lat;
+}
+
 /**
  * Центр, от которого считаются полосы машин и разметки.
- * Пока съезд закрывает прямую, полосы переезжают на его ленту.
- * К блоку carry они приходят уже в его центр, без скачка.
+ * Пока съезд закрывает прямую, полосы переезжают к roadCenter ленты.
+ * К блоку carry они приходят уже в него, без скачка.
  */
 function laneAnchor(frame: RoadFrame): number {
-  const origin = frame.origin;
+  const center = roadCenter(frame);
   if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') {
-    return origin;
+    return center;
   }
   const local = exitRibbonCenter(frame.local);
-  if (local == null) return origin;
+  if (local == null) return center;
   const t = frame.phase.kind === 'end' ? Math.max(0, Math.min(1, frame.phase.t)) : 1;
-  return origin + local * t;
+  return center + local * t;
 }
 
 /** Полоса в мировых метрах. riding оставляет байка на боковой ленте старым сдвигом. */
@@ -341,9 +461,8 @@ export function exitWidth(edges: AsphaltEdges): number {
 
 /** Центр ленты съезда в тех же метрах, что и кромки. null, если съезда нет. */
 export function exitRibbonCenter(edges: AsphaltEdges): number | null {
-  const width = exitWidth(edges);
-  if (width < 1) return null;
-  return (edges.rightInner + edges.rightOuter) * 0.5;
+  if (exitWidth(edges) < 1) return null;
+  return exitRibbonMid(edges);
 }
 
 /**
@@ -395,6 +514,15 @@ export function outwardFrom(edge: number, origin: number, gap: number): number {
   return edge + outward * clearance;
 }
 
+/** Весь асфальт в точке: прямая и съезд вместе. После сжатия чужой ленты остаётся живая. */
+export function asphaltSpan(edges: AsphaltEdges, center = 0): { left: number; right: number; mid: number; width: number } {
+  const left = worldEdge(edges, -1, center);
+  const right = worldEdge(edges, 1, center);
+  const lo = Math.min(left, right);
+  const hi = Math.max(left, right);
+  return { left: lo, right: hi, mid: (lo + hi) * 0.5, width: Math.max(0, hi - lo) };
+}
+
 /** Дальний асфальт для откоса. Узкая умирающая лента не отодвигает землю. */
 export function worldEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
   const leftGone = edges.leftInner - edges.leftOuter < 1;
@@ -413,10 +541,15 @@ const RELEASE_INSET = 2.6;
 const ATTACHED_GAP = 2.4;
 const RIDEABLE = 2.4;
 
+/** Точка уже на асфальте съезда, даже если клин между лентами уже открыт. */
+export function onExitRibbon(logical: number, edges: AsphaltEdges): boolean {
+  if (!(exitWidth(edges) > RIDEABLE) || !Number.isFinite(logical)) return false;
+  return logical >= edges.rightInner - 0.35 && logical <= edges.rightOuter + 0.35;
+}
+
 /** Съезд ещё приклеен, и байк уже стоит на его асфальте. Иначе захват перенёс бы его скачком. */
 export function canGrabExit(logical: number, edges: AsphaltEdges): boolean {
-  if (!(exitGap(edges) < ATTACHED_GAP) || !(exitWidth(edges) > RIDEABLE)) return false;
-  return logical >= edges.rightInner - 0.35 && logical <= edges.rightOuter + 0.35;
+  return exitGap(edges) < ATTACHED_GAP && onExitRibbon(logical, edges);
 }
 
 /** Пока клин не открылся, уход влево отпускает съезд. */

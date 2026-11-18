@@ -6,6 +6,8 @@
  */
 
 import { BRANCH_YAW, frameFromSpline, stepBranch } from './branch.ts';
+import { courseLocal, exitRibbonMid } from './fork.ts';
+import type { AsphaltEdges, ExitClock } from './fork.ts';
 import type { PathFrame, RoadEmbed } from './branch.ts';
 import type { RoadWay } from './lanes.ts';
 
@@ -36,8 +38,11 @@ export const RIGHT_FORK: ForkCourse = {
   vectors: [STRAIGHT, EXIT_RIGHT],
 };
 
+/** 0 — прямая. 1 — первое ответвление, 2 — следующее. Дробный номер сюда не входит. */
+export type CoursePick = 0 | 1 | 2;
+
 /** Выбор игрока. 0 и меньше — прямая, 1 — первое ответвление, 2 — следующее. */
-export function courseVector(course: ForkCourse, pick: number): CourseVector {
+export function courseVector(course: ForkCourse, pick: CoursePick): CourseVector {
   const index = Number.isFinite(pick) && pick > 0 ? Math.floor(pick) : 0;
   return course.vectors[index] ?? course.vectors[0] ?? STRAIGHT;
 }
@@ -47,14 +52,32 @@ export function branchVectors(course: ForkCourse): readonly CourseVector[] {
   return course.vectors.filter((vector) => vector.yaw !== 0);
 }
 
-/** Как зоны лежат на оси s. Биом подставляет свои длины, курс их не знает. */
+/** Как зоны лежат на оси s. Длины съезда приходят из ExitClock, биом их не складывает. */
 export interface CourseLayout {
   zoneLength: number;
   /** Нос развилки стоит на столько метров раньше конца зоны. */
   lead: number;
   /** Через столько метров после носа взятый вектор становится дорогой. */
   ownAfter: number;
+  /** Сколько метров курс поворачивает. */
+  turn: number;
+  /** Конец общего подхода: здесь фиксируется выбор. */
+  choiceAt: number;
+  spread: number;
   offset: number;
+}
+
+/** Раскладка зоны из линейки съезда. Поля линейки копируются, а не задаются заново. */
+export function courseLayoutOf(clock: ExitClock, zoneLength: number, offset: number): CourseLayout {
+  return {
+    zoneLength,
+    lead: clock.lead,
+    ownAfter: clock.ownAfter,
+    turn: clock.turn,
+    choiceAt: clock.choiceAt,
+    spread: clock.spread,
+    offset: Number.isFinite(offset) ? offset : 0,
+  };
 }
 
 export function zoneAt(s: number, layout: CourseLayout): number {
@@ -84,13 +107,13 @@ export function ownedCourse(
   course: ForkCourse,
   s: number,
   layout: CourseLayout,
-  pickAt: (zone: number) => number,
+  pickAt: (zone: number) => CoursePick,
 ): VectorSpawn[] {
   const zone = zoneAt(s, layout);
   const list: VectorSpawn[] = [];
   for (let z = 0; z <= zone; z++) {
     const spawn = vectorSpawnOf(z, courseVector(course, pickAt(z)), layout);
-    if (spawn && s >= spawn.ownsFrom - 0.01) list.push(spawn);
+    if (spawn && s >= spawn.ownsFrom) list.push(spawn);
   }
   return list;
 }
@@ -109,8 +132,8 @@ export function openCourse(course: ForkCourse, s: number, layout: CourseLayout):
 }
 
 /** Взятый ненулевой вектор этой зоны уже стал дорогой. */
-export function courseOwns(course: ForkCourse, pick: number, s: number, nose: number, ownAfter: number): boolean {
-  return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter - 0.01;
+export function courseOwns(course: ForkCourse, pick: CoursePick, s: number, nose: number, ownAfter: number): boolean {
+  return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter;
 }
 
 /**
@@ -120,7 +143,7 @@ export function courseOwns(course: ForkCourse, pick: number, s: number, nose: nu
  */
 export function carriageWay(args: {
   course: ForkCourse;
-  pick: number;
+  pick: CoursePick;
   s: number;
   nose: number;
   ownAfter: number;
@@ -148,15 +171,12 @@ export interface VectorSpawn {
 export interface SplineSample {
   x: number;
   dx: number;
+  /** Вторая производная сплайна. На ветке к ней добавляется собственный поворот. */
+  ddx?: number;
 }
 
-/** Кромки, которые нужны, чтобы понять, лежит ли точка на ленте съезда. */
-export interface RibbonEdges {
-  leftOuter: number;
-  leftInner: number;
-  rightInner: number;
-  rightOuter: number;
-}
+/** Кромки ленты. Те же поля, что у сечения дороги. */
+export type RibbonEdges = AsphaltEdges;
 
 export interface EmbedQuery {
   s: number;
@@ -197,7 +217,7 @@ function pickBranch(branches: readonly VectorSpawn[], edges: RibbonEdges, lat: n
 }
 
 function splineFrame(sample: SplineSample, s: number): PathFrame {
-  return frameFromSpline(sample.x, sample.dx, s);
+  return frameFromSpline(sample.x, sample.dx, s, sample.ddx ?? 0);
 }
 
 /** Поле путей. Каждый вектор копится отдельно и не затирает остальные. */
@@ -263,7 +283,7 @@ export function createVectorField() {
     for (let i = spawns.length - 1; i >= 0; i--) {
       const item = spawns[i];
       if (!item || !(item.nose < beforeNose)) continue;
-      if (item.nose <= s && item.ownsFrom <= s + 0.01) {
+      if (item.nose <= s && item.ownsFrom <= s) {
         spawn = item;
         break;
       }
@@ -281,18 +301,21 @@ export function createVectorField() {
       : null;
     const width = edges.rightOuter - edges.rightInner;
     const gap = edges.rightInner - edges.leftInner;
-    const ribbon = (edges.rightInner + edges.rightOuter) * 0.5;
-    if (exitFrame && exit && !ownedHere && width > 0.8 && lat >= edges.rightInner - 0.2) {
+    const ribbon = exitRibbonMid(edges);
+    const onRibbon = !ownedHere && width > 0.8 && lat >= edges.rightInner - 0.2;
+    if (exitFrame && exit && onRibbon) {
       const base = frame(owned, s, spline, turn, exit.nose);
       const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
       const peel = peelT * peelT * (3 - 2 * peelT);
       const separated = Math.max(0, Math.min(1, gap / 4));
       const outer = Math.max(0, Math.min(1, (lat - edges.rightInner) / Math.max(width, 0.5)));
       const weight = peel * Math.max(separated, outer);
-      const sx = base.x + base.rx * lat;
-      const sz = base.z + base.rz * lat;
-      const bx = exitFrame.x + exitFrame.rx * (lat - ribbon);
-      const bz = exitFrame.z + exitFrame.rz * (lat - ribbon);
+      const fromCenter = courseLocal(lat, { kind: 'owned', center: origin });
+      const sx = base.x + base.rx * fromCenter;
+      const sz = base.z + base.rz * fromCenter;
+      const along = courseLocal(lat, { kind: 'ribbon', ribbon });
+      const bx = exitFrame.x + exitFrame.rx * along;
+      const bz = exitFrame.z + exitFrame.rz * along;
       const fx = base.fx + (exitFrame.fx - base.fx) * weight;
       const fz = base.fz + (exitFrame.fz - base.fz) * weight;
       const len = Math.hypot(fx, fz) || 1;
@@ -312,7 +335,7 @@ export function createVectorField() {
     }
     const path = frame(owned, s, spline, turn);
     const branched = owned.length > 0;
-    const local = branched ? lat - origin : lat;
+    const local = courseLocal(lat, branched ? { kind: 'owned', center: origin } : { kind: 'free' });
     return {
       x: path.x + path.rx * local,
       y,

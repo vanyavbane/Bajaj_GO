@@ -272,9 +272,17 @@ export interface TrafficStep {
   oncoming: boolean;
 }
 
-/** Шаг чужой машины: ход, перестроение, затухание реакции на свет. Направление берётся до смены полосы. */
-export function stepTrafficCar(car: TrafficMotion, dt: number, laneOffsets: number[], oncomingCount: number): TrafficStep {
-  const oncoming = isOncomingLane(car.laneIdx, oncomingCount);
+/** Шаг чужой машины: ход, перестроение, затухание реакции на свет.
+ *  flow задаёт направление на односторонней: 1 вперёд, -1 навстречу.
+ *  Без него направление берётся из текущей полосы, до перестроения. */
+export function stepTrafficCar(
+  car: TrafficMotion,
+  dt: number,
+  laneOffsets: number[],
+  oncomingCount: number,
+  flow?: 1 | -1,
+): TrafficStep {
+  const oncoming = flow == null ? isOncomingLane(car.laneIdx, oncomingCount) : flow < 0;
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
   let steerAngle = car.steerAngle;

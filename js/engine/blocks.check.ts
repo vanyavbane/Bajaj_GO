@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitCarryOrigin, exitChain, exitEdges, exitPhase, sampleRoad } from './fork.ts';
+import { exitCarryOrigin, exitChain, exitClock, exitEdges, exitPhase, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -20,6 +20,10 @@ const plan = compileExit(RIGHT_EXIT);
 assert(plan.diverge === 110 && plan.run === 150 && plan.seal === 70 && plan.margin === 100, 'блоки правого съезда держат прежние длины');
 assert(plan.choiceAt === 260 && plan.length === 430, 'выбор стоит в конце общего подхода, рецепт кончается у границы зоны');
 assert(plan.straight[0]?.start === plan.exit[0]?.start && plan.straight[1]?.length === plan.exit[1]?.length, 'стык двух цепочек на одной метке');
+const clock = exitClock();
+const carry = plan.exit.find((span) => span.kind === 'carry');
+assert(clock.lead === plan.length && clock.turn === plan.diverge && clock.choiceAt === plan.choiceAt && clock.spread === plan.spread, 'курс берёт длины из рецепта');
+assert(carry != null && clock.ownAfter === carry.start, 'вектор становится дорогой ровно в начале блока carry');
 
 const nose = placedBlock(plan, 20, 0);
 assert(nose?.id === 'split' && nose.built, 'подход уже построен, выбор его не ждёт');

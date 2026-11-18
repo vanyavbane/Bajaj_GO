@@ -216,12 +216,11 @@ export function initStructures() {
     const span = G.megaStructures.length * 320;
     for (const ms of G.megaStructures) {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
-      const spanM = G.roadOuterLat(ms.userData.s, 1) - G.roadOuterLat(ms.userData.s, -1);
+      const cover = G.asphaltSpan(ms.userData.s);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
-        const center = G.roadOriginAt ? G.roadOriginAt(ms.userData.s) : 0;
-        G.placeOnRoad(ms, ms.userData.s, center, 0);
-        ms.userData.baseWidth = spanM;
-      }, Math.round(spanM * 50));
+        G.placeOnRoad(ms, ms.userData.s, cover.mid, 0);
+        ms.userData.baseWidth = cover.width;
+      }, Math.round(cover.width * 50));
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
       const cw = G.cityWeightAtS(ms.userData.s);

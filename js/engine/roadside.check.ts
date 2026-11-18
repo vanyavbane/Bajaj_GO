@@ -1,4 +1,4 @@
-import { branchEdges, carriageEdge, exitEdges, mainRoadOpen } from './fork.ts';
+import { asphaltSpan, branchEdges, carriageEdge, exitEdges, mainRoadOpen } from './fork.ts';
 import {
   besidePose,
   medianFits,
@@ -61,6 +61,12 @@ const shifted = { leftOuter: 22, leftInner: 42, rightInner: 54, rightOuter: 74 }
 assert(mainRoadOpen(shifted, 32) && !mainRoadOpen(shifted), 'прямая лента жива вокруг своего центра');
 assert(carriageEdge(shifted, 1, 32) === 42, 'кромка проезда — край прямой, съезд в неё не входит');
 assert(outerEdge(shifted, 1, 32) === 74, 'декор справа за внешним асфальтом съезда');
+const plainSpan = asphaltSpan(straight, 0);
+assert(plainSpan.left === -10 && plainSpan.right === 10 && plainSpan.mid === 0, 'прямая: портал от кромки до кромки');
+const highwaySpan = asphaltSpan(highway, 0);
+assert(highwaySpan.left === -10 && highwaySpan.right === highway.rightOuter, 'съезд: портал накрывает прямую и ленту');
+const carriedSpan = asphaltSpan(carried, 32);
+assert(carriedSpan.left === 22 && carriedSpan.right === 42 && carriedSpan.mid === 32, 'после съезда портал садится на новую дорогу');
 assert(Math.abs(medianRoom(shifted, 32) - 6) < 1e-9, 'клин после переноса центра сохраняет ширину');
 
 const clipped = medianPose(fork, { halfWidth: 1, gap: 3.2, lateral: 40 });

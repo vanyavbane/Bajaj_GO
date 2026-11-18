@@ -3,8 +3,8 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { carriageLanes, laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_END, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitChain, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
-import { RIGHT_FORK, carriageWay, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt } from './engine/vectors.js';
+import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { RIGHT_FORK, carriageWay, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -21,8 +21,6 @@ import { G } from './state.js';
 
 const ZONE_M = 1500;              // длина одной локации
 const ROAD_FADE_M = 350;         // плавный переход профиля/ширины дороги между биомами после границы зоны, метров
-const SPLIT_LEAD = FORK_LEAD;
-const SPLIT_AUTO_D = EXIT_CHOICE; // выбор в конце раздельного участка, не на носу съезда
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
 const STORAGE_KEY = 'bajajGO_biomeKm';
 const CURRENT_KEY = 'bajajGO_currentBiome';
@@ -149,10 +147,11 @@ function getBiomeChoices(currentBiome, visitCounts) {
 let zoneBiomes = Object.create(null);   // zone → biome index
 let splitChoices = Object.create(null); // zone → [left, right]
 const chosenZones = new Set();
-/** Зона → 1 если взят съезд, -1 если поехали прямо. Не выводится из индекса биома. */
+/** Зона → 1 если взят съезд, -1 если поехали прямо. Центр дороги из этого выбора считается, а не хранится. */
 const chosenExit = Object.create(null);
-/** Зона → мировой центр дороги после взятого съезда. На ось не возвращается. */
-const chosenOrigin = Object.create(null);
+/** Старые сохранения: центр зоны, если он совпал с формулой. Чужое число сюда не попадает. */
+const keptOrigins = Object.create(null);
+let storedOrigins = null;
 /** Метр, на котором выбор развилки зоны был зафиксирован. Нужен, чтобы
  *  схлопывание чужой ветки и сдвиг оси вводились плавно, а не рывком. */
 const splitCommitMeters = Object.create(null);
@@ -245,13 +244,7 @@ function readPlan() {
         if (Number.isFinite(zone) && (side === 1 || side === -1)) chosenExit[zone] = side;
       }
     }
-    if (parsed.origins && typeof parsed.origins === 'object') {
-      for (const key of Object.keys(parsed.origins)) {
-        const zone = Number(key);
-        const origin = Number(parsed.origins[key]);
-        if (Number.isFinite(zone) && Number.isFinite(origin)) chosenOrigin[zone] = origin;
-      }
-    }
+    if (parsed.origins && typeof parsed.origins === 'object') storedOrigins = parsed.origins;
   } catch {
     /* сохранение недоступно — план соберётся заново */
   }
@@ -299,13 +292,12 @@ function persistBiome() {
     else localStorage.setItem(PENDING_KEY, String(biomeIndex(G.pendingBiome)));
 
     const zone = currentZone();
-    const plan = { zones: {}, choices: {}, chosen: [], exits: {}, origins: {} };
+    const plan = { zones: {}, choices: {}, chosen: [], exits: {} };
     for (let z = Math.max(0, zone - 2); z <= zone + 4; z++) {
       if (zoneBiomes[z] != null) plan.zones[z] = biomeIndex(zoneBiomes[z]);
       if (splitChoices[z]) plan.choices[z] = splitChoices[z].slice(0, 2);
       if (chosenZones.has(z)) plan.chosen.push(z);
       if (chosenExit[z] === 1 || chosenExit[z] === -1) plan.exits[z] = chosenExit[z];
-      if (chosenOrigin[z] != null) plan.origins[z] = chosenOrigin[z];
     }
     localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
   } catch {
@@ -436,7 +428,8 @@ function biomeRoadDDY(s) {
 
 /* ---------- Ширина дороги и развилка ---------- */
 function splitAmountAtMeters(meters) {
-  return forkAmountAt(meters, ZONE_M, SPLIT_LEAD);
+  const layout = courseLayout();
+  return forkAmountAt(meters, layout.zoneLength, layout.lead);
 }
 
 function baseRoadWidthAtMeters(meters) {
@@ -447,7 +440,8 @@ function baseRoadWidthAtMeters(meters) {
 }
 
 function forkSpreadAtMeters(meters) {
-  return forkSpreadAt(meters, ZONE_M, SPLIT_LEAD, FORK_SPREAD);
+  const layout = courseLayout();
+  return forkSpreadAt(meters, layout.zoneLength, layout.lead, layout.spread);
 }
 
 function forkSpreadAtS(s) {
@@ -467,62 +461,64 @@ function splitAmountAtS(s) {
   return liveForkAmount(raw, frame.phase.kind, frame.chosen);
 }
 
-/** Центр развилки в координате s игрока. Единственная формула, её читает и полотно. */
-function splitCenterS(playerS) {
-  const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  const meters = Math.max(0, offset + playerS);
-  const zone = Math.floor(meters / ZONE_M);
-  return (zone + 1) * ZONE_M - SPLIT_LEAD - offset;
-}
-
+const EXIT_CLOCK = exitClock();
 const vectors = createVectorField();
 
 function clearBranchPaths() {
   vectors.clear();
 }
 
+/** @returns {import('./engine/vectors.js').CourseLayout} */
 function courseLayout() {
   const offset = Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0;
-  return {
-    zoneLength: ZONE_M,
-    lead: FORK_LEAD,
-    ownAfter: EXIT_CHOICE + EXIT_END,
-    offset,
-  };
+  return courseLayoutOf(EXIT_CLOCK, ZONE_M, offset);
 }
 
+/** Зона, нос развилки и выбранный вектор в точке s. */
+function layoutAt(s) {
+  const layout = courseLayout();
+  const along = Number.isFinite(s) ? s : 0;
+  const zone = zoneAt(along, layout);
+  return { layout, zone, nose: zoneNose(zone, layout), pick: coursePick(zone) };
+}
+
+/** Центр развилки в координате s игрока. Единственная формула, её читает и полотно. */
+function splitCenterS(playerS) {
+  return layoutAt(playerS).nose;
+}
+
+/** @returns {import('./engine/vectors.js').CoursePick} */
 function coursePick(zone) {
-  return chosenExit[zone] === 1 ? 1 : 0;
+  return zoneTookExit(zone) ? 1 : 0;
 }
 
 function embedRoad(s, lat) {
-  const layout = courseLayout();
-  const nose = splitCenterS(s);
+  const at = layoutAt(s);
+  const frame = frameAt(s);
   return vectors.embed({
     s,
     lat,
     y: biomeRoadY(s),
-    nose,
-    edges: roadEdgesAt(s),
-    owned: ownedCourse(RIGHT_FORK, s, layout, coursePick),
-    branches: openCourse(RIGHT_FORK, s, layout),
-    origin: frameAt(s).origin,
-    turn: EXIT_DIVERGE,
-    ownedHere: courseOwns(RIGHT_FORK, coursePick(zoneAt(s, layout)), s, nose, layout.ownAfter),
-  }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u) }));
+    nose: at.nose,
+    edges: frame.world,
+    owned: ownedCourse(RIGHT_FORK, s, at.layout, coursePick),
+    branches: openCourse(RIGHT_FORK, s, at.layout),
+    origin: roadCenter(frame),
+    turn: at.layout.turn,
+    ownedHere: courseOwns(RIGHT_FORK, at.pick, s, at.nose, at.layout.ownAfter),
+  }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u), ddx: biomeRoadDDX(u) }));
 }
 
 /** Односторонний съезд или двусторонняя дорога биома. */
 function roadWayAt(s, onRamp = false) {
-  const layout = courseLayout();
-  const nose = splitCenterS(s);
+  const at = layoutAt(s);
   return carriageWay({
     course: RIGHT_FORK,
-    pick: coursePick(zoneAt(s, layout)),
+    pick: at.pick,
     s,
-    nose,
-    ownAfter: layout.ownAfter,
-    zoneEnd: nose + layout.lead,
+    nose: at.nose,
+    ownAfter: at.layout.ownAfter,
+    zoneEnd: at.nose + at.layout.lead,
     onRamp,
   });
 }
@@ -530,7 +526,8 @@ function roadWayAt(s, onRamp = false) {
 function roadCurvature(s) {
   const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
   const pose = embedRoad(s, lat);
-  if (pose.branched) return pose.curvature * 0.08;
+  // На съезде это уже рад/м его курса, тот же масштаб, что у изгиба шоссе.
+  if (pose.branched) return pose.curvature;
   return biomeRoadDDX(s);
 }
 
@@ -618,24 +615,60 @@ function splitDecisionWeight(zone, meters) {
   return u * u * (3 - 2 * u);
 }
 
-function originBefore(zone) {
-  let origin = 0;
-  for (let z = 0; z < zone; z++) {
-    if (chosenOrigin[z] != null) origin = chosenOrigin[z];
+function zoneRoadHalf(zone) {
+  const cfg = LANE_CONFIG[zoneBiomeAt(zone)];
+  const width = cfg && Number.isFinite(cfg.width) ? cfg.width : 0;
+  return width * 0.5;
+}
+
+function zoneTookExit(zone) {
+  return forkChosenSideForZone(zone) === 1;
+}
+
+/** Биом называет выбор и ширину. Центр считает движок.
+ *  @returns {import('./engine/fork.js').ZoneRoad} */
+function zoneRoad(zone) {
+  const half = zoneRoadHalf(zone);
+  if (!zoneTookExit(zone)) return { tookExit: false, half };
+  const kept = keptOrigins[zone];
+  return kept == null ? { tookExit: true, half } : { tookExit: true, half, keptOrigin: kept };
+}
+
+function zonesBefore(zone) {
+  const previous = [];
+  for (let z = 0; z < zone; z++) previous.push(zoneRoad(z));
+  return previous;
+}
+
+/** Старый центр остаётся только при совпадении с формулой. Иначе зона едет по формуле. */
+function reconcileStoredOrigins() {
+  if (!storedOrigins) return;
+  const zones = Object.keys(storedOrigins)
+    .map(Number)
+    .filter((zone) => Number.isFinite(zone))
+    .sort((a, b) => a - b);
+  for (const zone of zones) {
+    const stored = Number(storedOrigins[zone]);
+    const fresh = carriedOriginAt(zonesBefore(zone), {
+      tookExit: zoneTookExit(zone),
+      half: zoneRoadHalf(zone),
+    });
+    if (storedOriginHolds(stored, fresh)) keptOrigins[zone] = stored;
   }
-  return origin;
+  storedOrigins = null;
 }
 
 /** Один кадр дороги в точке s. */
 function frameAt(s) {
   const route = routeAt(s);
-  const carried = chosenOrigin[route.zone];
+  const previous = zonesBefore(route.zone);
+  const carried = carriedOriginAt(previous, zoneRoad(route.zone));
   return sampleRoad({
     forkDistance: forkOffset(route.meters, ZONE_M),
     half: roadWidthAtS(s) * 0.5,
     chosen: forkChosenSideForZone(route.zone),
-    baseOrigin: originBefore(route.zone),
-    carriedOrigin: carried == null ? null : carried,
+    baseOrigin: originBeforeZones(previous),
+    carriedOrigin: carried,
     endWeight: splitDecisionWeight(route.zone, route.meters),
   });
 }
@@ -655,16 +688,13 @@ function forkCloseAtS(s) {
   return 0;
 }
 
-/** Центр дороги после взятого съезда известен сразу: лента впереди уже продолжается им. */
-function commitExitOrigin(zone, s) {
-  if (chosenExit[zone] !== 1 || chosenOrigin[zone] != null) return;
-  const phase = exitPhase(forkOffset(blendMetersAt(s), ZONE_M));
-  if (phase.kind !== 'settle' && phase.kind !== 'none') return;
-  chosenOrigin[zone] = exitCarryOrigin(roadWidthAtS(s) * 0.5, originBefore(zone));
-}
-
 /** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
  *  Когда съезд заменил прямую, кромки переходят на него. */
+function asphaltSpanAt(s) {
+  const frame = frameAt(s);
+  return asphaltSpan(frame.world, frame.origin);
+}
+
 function roadOuterLat(s, side) {
   const frame = frameAt(s);
   return carriageEdge(frame.world, side < 0 ? -1 : 1, frame.origin);
@@ -716,7 +746,6 @@ function releaseExit(frame, span) {
 
 /** Съезд берётся с его асфальта, пока ленты соединены. Дальше это обычная дорога той же ширины. */
 function updateExitHold(meters, zone) {
-  commitExitOrigin(zone, G.playerS);
   const frame = frameAt(G.playerS);
   const span = laneSpanAt(G.playerS);
   if (!exitReserved(forkOffset(meters, ZONE_M))) {
@@ -724,15 +753,20 @@ function updateExitHold(meters, zone) {
     return;
   }
   if (!chosenZones.has(zone)) {
-    if (!exitHold && canGrabExit(G.laneOffset * span, frame.local)) grabExit(frame, span);
+    const logical = G.laneOffset * span;
+    if (!exitHold && onExitRibbon(logical, frame.local)) grabExit(frame, span);
     else if (exitHold) {
       const center = exitRibbonCenter(frame.local);
-      const local = center == null ? G.laneOffset * span : center + G.laneOffset * span;
+      const local = center == null ? logical : center + logical;
       if (canReleaseExit(local, frame.local)) releaseExit(frame, span);
     }
   }
   const carried = chosenExit[zone] === 1 && (frame.phase.kind === 'settle' || frame.phase.kind === 'none');
-  if (exitHold && carried) exitHold = false;
+  if (exitHold && carried) {
+    const center = exitRibbonCenter(frame.local);
+    if (center != null) G.laneOffset += center / span;
+    exitHold = false;
+  }
 }
 
 /** Полоса машины или разметки: масштаб ширины, без съезда. */
@@ -1280,7 +1314,8 @@ function updateScenery() {
   G.updateBiomeScenery();
 }
 
-/** Полосы биома, которым нарисована дорога в точке s. Без s — под байком. */
+/** Полосы дороги в точке s: каталог биома и тип проезда. Без s — под байком.
+ *  @returns {import('./engine/lanes.js').CarriageLayout} */
 function lanesAtS(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
   return carriageLanes(LANE_CONFIG[biomeIndex(roadBiomeAtS(at))], roadWayAt(at));
@@ -1299,9 +1334,6 @@ function commitSplit(zone, side, commitMeters) {
   const chosen = choices[side === 1 ? 1 : 0];
   chosenZones.add(zone);
   chosenExit[zone] = side === 1 ? 1 : -1;
-  if (side === 1 && chosenOrigin[zone] == null) {
-    chosenOrigin[zone] = exitCarryOrigin(roadWidthAtS(G.playerS) * 0.5, originBefore(zone));
-  }
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
   lastSplitZone = zone;
   lastSplitSide = side === 1 ? 1 : 0;
@@ -1378,7 +1410,8 @@ function updateBiome(dt) {
   ensureZonePlan(zone);
   ensureZonePlan(zone + 1);
 
-  const splitM = (zone + 1) * ZONE_M - SPLIT_LEAD;
+  const layout = courseLayout();
+  const splitM = zoneNose(zone, layout) + layout.offset;
   const splitD = meters - splitM;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
   splitChoices[zone] = choices;
@@ -1391,7 +1424,7 @@ function updateBiome(dt) {
 
   // Выбор фиксируется в конце параллельного участка. До этого следующая
   // локация не переписывается: уход со съезда обратно на прямую остаётся прямым.
-  if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
+  if (G.started && !G.ended && !chosenBefore && splitD >= layout.choiceAt) {
     commitSplit(zone, previewSide, meters);
   }
   // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
@@ -1425,7 +1458,7 @@ function updateBiome(dt) {
   const chosenSide = splitPick(chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1);
   const bannerSide = branchPick(previewSide);
   G.splitState = {
-    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < SPLIT_AUTO_D + EXIT_END,
+    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < layout.ownAfter,
     zone,
     meters: splitM,
     splitMeters: splitM,
@@ -1437,7 +1470,7 @@ function updateBiome(dt) {
     chosenSide,
     choices: choices.slice(),
     chosenBiome: G.pendingBiome,
-    autoAt: SPLIT_AUTO_D
+    autoAt: layout.choiceAt
   };
 
   updateBanner(dt);
@@ -1499,7 +1532,7 @@ function resetBiomeRun() {
   G.pendingBiome = null;
   chosenZones.clear();
   for (const key of Object.keys(chosenExit)) delete chosenExit[key];
-  for (const key of Object.keys(chosenOrigin)) delete chosenOrigin[key];
+  for (const key of Object.keys(keptOrigins)) delete keptOrigins[key];
   // План следующей зоны пересобирается под свежие счётчики посещений.
   delete splitChoices[zone];
   delete splitChoices[zone + 1];
@@ -1530,8 +1563,9 @@ function biomeDisplayInfo() {
   const zone = Math.max(0, Math.floor(meters / ZONE_M));
   ensureZonePlan(zone);
   const current = zoneBiomeAt(zone);
-  const splitM = (zone + 1) * ZONE_M - SPLIT_LEAD;
-  const span = ZONE_M - SPLIT_LEAD;
+  const layout = courseLayout();
+  const splitM = zoneNose(zone, layout) + layout.offset;
+  const span = layout.zoneLength - layout.lead;
   const local = meters - zone * ZONE_M;
   const progress = Math.max(0, Math.min(1, local / span));
   const choices = splitChoices[zone] || getBiomeChoices(current, G.visitCounts || ZERO_VISITS());
@@ -1603,6 +1637,7 @@ export function initBiome() {
   G.medianRoom = medianRoom;
   G.medianFits = medianFits;
   G.medianPose = medianPose;
+  G.asphaltSpan = asphaltSpanAt;
   G.roadOuterLat = roadOuterLat;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
@@ -1651,6 +1686,7 @@ export function initBiome() {
   lastRunZone = zone;
   ensureZonePlan(zone);
   ensureZonePlan(zone + 1);
+  reconcileStoredOrigins();
   applyLaneConfig(G.currentBiome, 0);
 
   G.updateBiome = updateBiome;

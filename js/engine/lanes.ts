@@ -4,6 +4,8 @@
  * если конфига нет или он разошёлся сам с собой, игра падает сразу.
  */
 
+import type { LaneLayout } from './biomes.ts';
+
 export interface LaneSource {
   laneCount?: number;
   oncomingCount?: number;
@@ -15,10 +17,37 @@ export interface LaneSource {
 /** Односторонняя — только попутные. Двусторонняя — есть встречные. */
 export type RoadWay = 'one-way' | 'two-way';
 
+/**
+ * Полосы в конкретной точке дороги, не каталог биома.
+ * `oncomingCount` — сколько рядов сейчас встречные.
+ * `biomeOncoming` — сколько их у биома, даже когда съезд обнулил живые встречные.
+ */
+export interface CarriageLayout extends LaneLayout {
+  biomeOncoming: number;
+  way: RoadWay;
+}
+
+type CarriageInput = {
+  oncomingCount: number;
+  biomeOncoming?: number;
+  way?: RoadWay;
+};
+
 /** На односторонней встречная полоса становится попутной. Смещения полос те же. */
-export function carriageLanes<T extends { oncomingCount: number }>(lanes: T, way: RoadWay): T {
-  if (way !== 'one-way' || lanes.oncomingCount === 0) return lanes;
-  return { ...lanes, oncomingCount: 0 };
+export function carriageLanes<T extends CarriageInput>(
+  lanes: T,
+  way: RoadWay,
+): Omit<T, 'oncomingCount' | 'biomeOncoming' | 'way'> & CarriageStamp {
+  const biomeOncoming = lanes.biomeOncoming ?? lanes.oncomingCount;
+  const oncomingCount = way === 'one-way' ? 0 : biomeOncoming;
+  return { ...lanes, oncomingCount, biomeOncoming, way };
+}
+
+/** То, что carriageLanes всегда дописывает к конфигу биома. */
+export interface CarriageStamp {
+  oncomingCount: number;
+  biomeOncoming: number;
+  way: RoadWay;
 }
 
 export interface LaneConfig {

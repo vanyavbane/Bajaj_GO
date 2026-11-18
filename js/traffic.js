@@ -33,7 +33,8 @@ export function initTraffic() {
   const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
 
   function lanesAt(s) {
-    return G.getLaneConfig(G.roadBiomeAtS(s));
+    // Полосы в точке: односторонний съезд уже без встречных, не сырой конфиг биома.
+    return G.lanesAtS(s);
   }
 
   function quteLane(cfg) {
@@ -103,6 +104,7 @@ export function initTraffic() {
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
       onExit: false,
+      heading: isOncomingLane(idx, cfg.oncomingCount) ? Math.PI : 0,
       flashReactTimer: 0,
       steerAngle: 0,
       nearMissAwarded: false,
@@ -142,6 +144,7 @@ export function initTraffic() {
   G.remapTrafficLanes = () => {
     for (const car of G.trafficPool) {
       const cfg = lanesAt(car.s);
+      joinCarriage(car, cfg);
       if (car.model.type === 'qute_traffic') {
         const q = quteLane(cfg);
         car.laneIdx = q;
@@ -159,6 +162,33 @@ export function initTraffic() {
     const width = edges.rightOuter - edges.rightInner;
     const gap = edges.rightInner - edges.leftInner;
     return width > 1.2 && gap > 0.8;
+  }
+
+  /** Встречные на одностороннем съезде уходят в попутный ряд, а не разворачиваются на месте. */
+  function joinCarriage(car, road) {
+    if (road.way !== 'one-way') return;
+    const from = road.biomeOncoming | 0;
+    if (car.laneIdx >= from) return;
+    const target = Math.min(from, road.count - 1);
+    if (target < 0) return;
+    car.changingLane = true;
+    car.targetLaneIdx = target;
+  }
+
+  /** 1 — по ходу дороги, -1 — навстречу. На съезде все едут вперёд. */
+  function travelFlow(car, road) {
+    if (road.way === 'one-way') return 1;
+    if (car.changingLane && !isOncomingLane(car.targetLaneIdx, road.oncomingCount)) return 1;
+    return isOncomingLane(car.laneIdx, road.oncomingCount) ? -1 : 1;
+  }
+
+  function faceTraffic(car, flow, dt) {
+    const want = flow < 0 ? Math.PI : 0;
+    if (!Number.isFinite(car.heading)) car.heading = want;
+    let turn = want - car.heading;
+    if (turn > Math.PI) turn -= Math.PI * 2;
+    if (turn < -Math.PI) turn += Math.PI * 2;
+    car.heading += turn * Math.min(1, dt * 2.4);
   }
 
   /** Правая попутная полоса уходит на съезд, пока клин только открывается.
@@ -228,16 +258,20 @@ export function initTraffic() {
       // settle мог перенести её вперёд, поэтому конфиг читаем ещё раз.
       let road = lanesAt(car.s);
       if (car.onExit) road = carriageLanes(road, 'one-way');
+      joinCarriage(car, road);
       settleCarLane(car, road);
       road = lanesAt(car.s);
       if (car.onExit) road = carriageLanes(road, 'one-way');
+      joinCarriage(car, road);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
         : road.speeds[clampLaneIndex(car.laneIdx, road.count)];
       car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
 
       const wasFlashing = car.flashReactTimer > 0;
-      const step = stepTrafficCar(car, dt, road.offsets, road.oncomingCount);
+      const flow = travelFlow(car, road);
+      const step = stepTrafficCar(car, dt, road.offsets, road.oncomingCount, flow);
+      faceTraffic(car, flow, dt);
       car.s = step.s;
       car.lateralOffset = step.lateralOffset;
       car.steerAngle = step.steerAngle;
@@ -278,7 +312,7 @@ export function initTraffic() {
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;
 
-      const vehicleYaw = (oncoming ? Math.PI : 0) - car.steerAngle * 0.45;
+      const vehicleYaw = car.heading - car.steerAngle * 0.45;
       G.placeOnRoad(car.model.root, car.s, carWorldLat, 0, vehicleYaw);
       car.model.root.visible = true;
 
