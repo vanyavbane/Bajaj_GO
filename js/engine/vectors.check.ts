@@ -74,4 +74,30 @@ const parent = again.frame([firstExit], 510, straight, 110);
 const expected = parent.x + parent.rx * (ribbon - carried);
 assert(Math.abs(peeled.x - expected) < 8, 'второй съезд отмеряется от центра дороги, не от нуля маршрута');
 
+const goreField = createVectorField();
+const goreExit: VectorSpawn = { key: 'gore', nose: 0, yaw: EXIT_RIGHT.yaw, ownsFrom: 10000 };
+const goreEdges = branchEdges(10, 22);
+const goreAt = (lat: number, edges: typeof goreEdges = goreEdges) => goreField.embed({
+  s: 220,
+  lat,
+  y: 0,
+  nose: 0,
+  edges,
+  owned: [],
+  branches: [goreExit],
+  origin: 0,
+  turn: 110,
+  ownedHere: false,
+}, straight);
+const mainEdge = goreAt(goreEdges.leftInner);
+const exitEdge = goreAt(goreEdges.rightInner);
+const gapMid = (goreEdges.leftInner + goreEdges.rightInner) * 0.5;
+const inGore = goreAt(gapMid);
+const chord = mainEdge.x + (exitEdge.x - mainEdge.x) * 0.5;
+assert(Math.abs(inGore.x - chord) < 0.5, 'клин лежит на отрезке между прямой и съездом');
+assert(Math.abs(inGore.x - gapMid) > 2, 'клин не остаётся на прямой, когда съезд уже повернул');
+const shut = { leftOuter: -10, leftInner: 10, rightInner: 32, rightOuter: 32.2 };
+const stayed = goreAt(20, shut);
+assert(Math.abs(stayed.x - 20) < 1, 'схлопнутая лента не утаскивает клин на ветку');
+
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('vectors ok');

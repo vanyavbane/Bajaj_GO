@@ -286,6 +286,7 @@ export function createVectorField() {
     ribbon: number;
     width: number;
     rightInner: number;
+    leftInner: number;
     leftOuter: number;
     ownedHere: boolean;
     branched: boolean;
@@ -314,6 +315,7 @@ export function createVectorField() {
       ribbon: exitRibbonMid(edges),
       width,
       rightInner: edges.rightInner,
+      leftInner: edges.leftInner,
       leftOuter: edges.leftOuter,
       ownedHere,
       branched: owned.length > 0,
@@ -325,42 +327,81 @@ export function createVectorField() {
     };
   }
 
+  function onParent(head: Heading, lat: number): { x: number; z: number } {
+    const local = courseLocal(lat, head.branched ? { kind: 'owned', center: head.origin } : { kind: 'free' });
+    return {
+      x: head.parent.x + head.parent.rx * local,
+      z: head.parent.z + head.parent.rz * local,
+    };
+  }
+
+  /** Точка ленты съезда: внешний край отходит первым, потом вся лента. */
+  function ribbonPose(head: Heading, frame: PathFrame, lat: number, outer: number): RoadEmbed {
+    const weight = head.peel * (head.separated > 0.75 ? 1 : Math.max(head.separated, outer));
+    const from = onParent(head, lat);
+    const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
+    const bx = frame.x + frame.rx * along;
+    const bz = frame.z + frame.rz * along;
+    const fx = head.parent.fx + (frame.fx - head.parent.fx) * weight;
+    const fz = head.parent.fz + (frame.fz - head.parent.fz) * weight;
+    const len = Math.hypot(fx, fz) || 1;
+    const nfx = fx / len;
+    const nfz = fz / len;
+    return {
+      x: from.x + (bx - from.x) * weight,
+      y: head.y,
+      z: from.z + (bz - from.z) * weight,
+      rx: -nfz,
+      rz: nfx,
+      fx: nfx,
+      fz: nfz,
+      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * weight,
+      branched: weight > 0.04,
+    };
+  }
+
   function place(head: Heading, lat: number): RoadEmbed {
     const onRight = !head.ownedHere && head.width > 0.8 && lat >= head.rightInner - 0.2;
     const onLeft = !head.ownedHere && head.left && lat <= head.leftOuter + 0.2;
     const exitFrame = onRight ? head.right : onLeft ? head.left : null;
     if (exitFrame) {
-      const outer = Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
-      const weight = head.peel * (head.separated > 0.75 ? 1 : Math.max(head.separated, onLeft ? 0 : outer));
-      const fromCenter = courseLocal(lat, { kind: 'owned', center: head.origin });
-      const sx = head.parent.x + head.parent.rx * fromCenter;
-      const sz = head.parent.z + head.parent.rz * fromCenter;
-      const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
-      const bx = exitFrame.x + exitFrame.rx * along;
-      const bz = exitFrame.z + exitFrame.rz * along;
-      const fx = head.parent.fx + (exitFrame.fx - head.parent.fx) * weight;
-      const fz = head.parent.fz + (exitFrame.fz - head.parent.fz) * weight;
+      const outer = onLeft
+        ? 0
+        : Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
+      return ribbonPose(head, exitFrame, lat, outer);
+    }
+    const gap = head.rightInner - head.leftInner;
+    const open = Math.max(0, Math.min(1, head.width / 4));
+    if (!head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < head.rightInner - 0.2) {
+      const u = (lat - head.leftInner) / gap;
+      const main = onParent(head, head.leftInner);
+      const exitEdge = ribbonPose(head, head.right, head.rightInner, 0);
+      const stay = onParent(head, lat);
+      const chordX = main.x + (exitEdge.x - main.x) * u;
+      const chordZ = main.z + (exitEdge.z - main.z) * u;
+      const fx = head.parent.fx + (exitEdge.fx - head.parent.fx) * u * open;
+      const fz = head.parent.fz + (exitEdge.fz - head.parent.fz) * u * open;
       const len = Math.hypot(fx, fz) || 1;
       const nfx = fx / len;
       const nfz = fz / len;
       return {
-        x: sx + (bx - sx) * weight,
+        x: stay.x + (chordX - stay.x) * open,
         y: head.y,
-        z: sz + (bz - sz) * weight,
+        z: stay.z + (chordZ - stay.z) * open,
         rx: -nfz,
         rz: nfx,
         fx: nfx,
         fz: nfz,
-        curvature: head.parent.curvature + (exitFrame.curvature - head.parent.curvature) * weight,
-        branched: weight > 0.04,
+        curvature: head.parent.curvature + (exitEdge.curvature - head.parent.curvature) * u * open,
+        branched: open > 0.2 && u > 0.04 && exitEdge.branched,
       };
     }
-    const local = courseLocal(lat, head.branched ? { kind: 'owned', center: head.origin } : { kind: 'free' });
+    const stay = onParent(head, lat);
     const path = head.parent;
     return {
-      x: path.x + path.rx * local,
+      x: stay.x,
       y: head.y,
-      z: path.z + path.rz * local,
+      z: stay.z,
       rx: path.rx,
       rz: path.rz,
       fx: path.fx,
