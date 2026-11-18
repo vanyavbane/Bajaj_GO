@@ -74,10 +74,14 @@ export function branchEdges(half, spread, seam = FORK_SEAM) {
   };
 }
 
-/** Те же кромки после схлопывания невыбранной ленты. close 0 — обе на месте, 1 — чужая исчезла. */
+/** Те же кромки после схлопывания невыбранной ленты. close 0 — обе на месте, 1 — чужая исчезла.
+ *  Когда ветки сливаются (spread → 0), схлопывание теряет смысл — дорога становится
+ *  единой, поэтому эффект гасим вместе с разъездом, иначе после развязки кромка
+ *  «раскрывается» сотни метров и декорации оказываются на полотне. */
 export function collapsedEdges(half, spread, chosenSide, close, seam = FORK_SEAM) {
   const edge = branchEdges(half, spread, seam);
-  const shut = Math.max(0, Math.min(1, Number.isFinite(close) ? close : 0));
+  const sep = Math.max(0, Math.min(1, (Number.isFinite(spread) ? spread : 0) / 1.0));
+  const shut = Math.max(0, Math.min(1, Number.isFinite(close) ? close : 0)) * sep;
   if ((chosenSide === -1 || chosenSide === 1) && shut > 0) {
     const keep = 1 - shut;
     if (chosenSide > 0) edge.leftOuter = edge.leftInner - (edge.leftInner - edge.leftOuter) * keep;

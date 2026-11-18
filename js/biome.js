@@ -604,13 +604,20 @@ function routeAt(s) {
   return { meters, zone, local: meters - zone * ZONE_M };
 }
 
-/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за FADE_M. */
+/** Сторона и остаток закрытия прошлой зоны. В новой зоне они сходят за ROAD_FADE_M. */
 function previousChoice(route) {
   if (route.zone <= 0) return { side: 0, close: 0 };
   const side = forkChosenSideForZone(route.zone - 1);
+  if (side === 0) return { side: 0, close: 0 };
+  // Вес решения фиксируем на границе зоны: собственный вклад зоны Z-1 домножен
+  // на splitDecisionWeight (плавный ввод выбора). Без этого на границе зон был
+  // скачок (own*weight -> prev*1), из-за чего дорога перестраивалась и декорации
+  // оказывались на полотне.
+  const boundaryM = route.zone * ZONE_M;
+  const w = splitDecisionWeight(route.zone - 1, boundaryM);
   // Несём смещение выбранной ветки через весь морфинг профиля дороги (ROAD_FADE_M),
   // иначе ветка «съезжает» к оси за 150 м, пока дорога ещё перестраивается.
-  const close = side === 0 ? 0 : 1 - forkHandoff(route.local, ROAD_FADE_M);
+  const close = w * (1 - forkHandoff(route.local, ROAD_FADE_M));
   return { side, close };
 }
 
@@ -648,7 +655,8 @@ function forkCloseAtS(s) {
   const ownClose = own === 0 ? 0
     : forkClose(route.meters, ZONE_M, SPLIT_LEAD)
       * splitDecisionWeight(route.zone, route.meters);
-  return Math.max(ownClose, previousChoice(route).close);
+  const prev = previousChoice(route);
+  return Math.max(ownClose, prev.close);
 }
 
 /** Кромки асфальта в точке s, уже со схлопыванием чужой ленты. Без сдвига оси. */
