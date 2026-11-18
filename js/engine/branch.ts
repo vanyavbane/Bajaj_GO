@@ -24,14 +24,22 @@ export interface RoadEmbed extends PathFrame {
   branched: boolean;
 }
 
-/** Кадр прямой дороги. dx — dX/ds сплайна, вперёд по −Z.
- *  curvature — изгиб родителя, рад/м, в тех же единицах, что вторая производная сплайна. */
-export function frameFromSpline(x: number, dx: number, s: number, curvature = 0): PathFrame {
-  const lh = Math.hypot(dx, 1) || 1;
-  const fx = dx / lh;
+/**
+ * Скорость поворота касательной, рад на метр параметра s.
+ * Угол от −Z равен atan(dx), поэтому dθ/ds = ddx / (1 + dx²), а не сама вторая производная.
+ */
+export function headingRate(dx: number, ddx: number): number {
+  if (!Number.isFinite(dx) || !Number.isFinite(ddx)) return 0;
+  return ddx / (1 + dx * dx);
+}
+
+/** Кадр прямой дороги. dx — dX/ds сплайна, ddx — d²X/ds². curvature уже в рад/м. */
+export function frameFromSpline(x: number, dx: number, s: number, ddx = 0): PathFrame {
+  const slope = Number.isFinite(dx) ? dx : 0;
+  const lh = Math.hypot(slope, 1) || 1;
+  const fx = slope / lh;
   const fz = -1 / lh;
-  const bend = Number.isFinite(curvature) ? curvature : 0;
-  return { x, z: -s, fx, fz, rx: -fz, rz: fx, curvature: bend };
+  return { x, z: -s, fx, fz, rx: -fz, rz: fx, curvature: headingRate(slope, ddx) };
 }
 
 /** 0 до носа, полный угол после поворота. Отрицательный угол — влево. */

@@ -538,10 +538,7 @@ function roadWayAt(s, onRamp = false) {
 
 function roadCurvature(s) {
   const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
-  const pose = embedRoad(s, lat);
-  // На съезде это уже рад/м его курса, тот же масштаб, что у изгиба шоссе.
-  if (pose.branched) return pose.curvature;
-  return biomeRoadDDX(s);
+  return embedRoad(s, lat).curvature;
 }
 
 function roadBiomeAtS(s) {

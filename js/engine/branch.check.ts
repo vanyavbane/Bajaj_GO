@@ -1,4 +1,4 @@
-import { BRANCH_YAW, branchYaw, frameFromSpline, stepBranch } from './branch.ts';
+import { BRANCH_YAW, branchYaw, frameFromSpline, headingRate, stepBranch } from './branch.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -39,5 +39,9 @@ while (at < 400 - 1e-6) {
 assert(Math.abs(later.fx - held) < 1e-6, 'замороженный вектор не повторяет новый изгиб маршрута');
 assert(Math.abs(later.curvature) < 1e-6, 'после поворота прямая ветка больше не крутит байк');
 assert(branchYaw(0, turn) === 0 && Math.abs(branchYaw(turn, turn) - BRANCH_YAW) < 1e-9, 'угол растёт только на повороте');
+assert(headingRate(0, 0.01) === 0.01, 'на прямой изгиб совпадает со второй производной');
+assert(Math.abs(headingRate(1, 0.02) - 0.01) < 1e-12, 'наклон уменьшает скорость поворота относительно второй производной');
+const bent = frameFromSpline(4, 1, 10, 0.02);
+assert(Math.abs(bent.curvature - 0.01) < 1e-12, 'кадр сплайна хранит рад/м, не сырую вторую производную');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('branch ok');
