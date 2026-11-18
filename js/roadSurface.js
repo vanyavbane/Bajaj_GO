@@ -614,7 +614,25 @@ export function initRoadSurface() {
 
   function innerLineLat(s, side, inset) {
     const edge = G.roadEdgesAt(s);
-    return side < 0 ? edge.leftInner - inset : edge.rightInner + inset;
+    const room = side < 0
+      ? Math.max(0, edge.leftInner - edge.leftOuter)
+      : Math.max(0, edge.rightOuter - edge.rightInner);
+    const pad = Math.min(inset, room * 0.5);
+    return side < 0 ? edge.leftInner - pad : edge.rightInner + pad;
+  }
+
+  /** Линия развилки. На широких лентах — у кромки клина, по мере схода — у центра живой дороги. */
+  function forkMarkLat(s, side, inset) {
+    const edge = G.roadEdgesAt(s);
+    const sign = side < 0 ? -1 : 1;
+    const leftW = Math.max(0, edge.leftInner - edge.leftOuter);
+    const rightW = Math.max(0, edge.rightOuter - edge.rightInner);
+    const open = exitLaneOpen(edge);
+    const surviving = rightW >= leftW ? exitRibbonMid(edge) : roadCenter(s);
+    const home = (open ? surviving : roadCenter(s)) + sign * 0.22;
+    if (!open) return { lat: home, open: false };
+    const keep = Math.max(0, Math.min(1, Math.min(leftW, rightW) / Math.max(leftW, rightW, 1)));
+    return { lat: home + (innerLineLat(s, side, inset) - home) * keep, open: true };
   }
 
   /** Цветная линия вдоль внутренней кромки ветки. inset 0.38 на прямой даёт ±0.22. */
@@ -626,9 +644,11 @@ export function initRoadSurface() {
     const pos = mesh.geometry.attributes.position;
     for (let r = 0; r < ISLAND_ROWS; r++) {
       const s = from + span * (r / (ISLAND_ROWS - 1));
-      const lat = innerLineLat(s, side, 0.2);
-      const a = G.embedRoad(s, lat - halfW);
-      const b = G.embedRoad(s, lat + halfW);
+      const mark = forkMarkLat(s, side, 0.2);
+      const lat = mark.lat;
+      const half = mark.open ? halfW : 0;
+      const a = G.embedRoad(s, lat - half);
+      const b = G.embedRoad(s, lat + half);
       const idx = r * 2;
       pos.setXYZ(idx, a.x, a.y + 0.09, a.z);
       pos.setXYZ(idx + 1, b.x, b.y + 0.09, b.z);
@@ -663,8 +683,7 @@ export function initRoadSurface() {
     // Прямые — по центру дороги, съезд — по центру его ленты.
     const exitCenterAt = (s) => {
       const edge = G.roadEdgesAt(s);
-      const width = edge.rightOuter - edge.rightInner;
-      if (width < 1.2) return null;
+      if (!exitLaneOpen(edge)) return null;
       return exitRibbonMid(edge);
     };
     const decided = !!(G.splitState && G.splitState.chosen);
@@ -717,13 +736,9 @@ export function initRoadSurface() {
     // Жёлтая ось есть только у двусторонней дороги. На одностороннем съезде
     // её нет: все полосы попутные. Пока ленты разделены, линия стоит на клине.
     const yellowAt = (s, side) => {
-      const edge = G.roadEdgesAt(s);
-      const gap = edge.rightInner - edge.leftInner;
-      const exitW = edge.rightOuter - edge.rightInner;
-      const split = exitW > 1.2 && gap > 0.8;
-      if (!split && G.roadWayAt && G.roadWayAt(s) === 'one-way') return null;
-      if (split) return innerLineLat(s, side, 0.38);
-      return roadCenter(s) + (side < 0 ? -0.22 : 0.22);
+      const mark = forkMarkLat(s, side, 0.38);
+      if (!mark.open && G.roadWayAt && G.roadWayAt(s) === 'one-way') return null;
+      return mark.lat;
     };
     updateLateralStrip(centerDoubleLine1, (r) => yellowAt(sampleS[r], -1), 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, (r) => yellowAt(sampleS[r], 1), 0.13, 0.08);
