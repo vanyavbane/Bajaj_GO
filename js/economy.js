@@ -1179,7 +1179,7 @@ function exitLane(s, side) {
         pendingAccidentCar.lateralOffset = lanes.offsets[idx];
         pendingAccidentCar.changingLane = false;
       }
-      const playerLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
+      const playerLat = G.riderLatAt(G.playerS);
       for (const c of G.trafficPool) {
         const carLat = G.laneWorldOffsetAtS(c.s, c.lateralOffset);
         if (Math.abs(c.s - G.playerS) < 32 && Math.abs(carLat - playerLat) < 6) {

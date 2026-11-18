@@ -299,6 +299,22 @@ function riderOnExit(logical: number, roadHalf: number, edges: AsphaltEdges): nu
 }
 
 /**
+ * Метры от оси для полосы `logical`.
+ * Без съезда это сама полоса. На съезде — точка на его ленте.
+ * Другого бокового сдвига в игре нет.
+ */
+export function roadLateral(
+  logical: number,
+  roadHalf: number,
+  edges: AsphaltEdges,
+  riding: boolean,
+): number {
+  if (!Number.isFinite(logical)) return 0;
+  if (!riding) return logical;
+  return logical + exitRiderShift(logical, roadHalf, edges);
+}
+
+/**
  * Сдвиг на ленту съезда. Байк остаётся на ветке всё время, пока она сбоку:
  * его не тянет обратно к полосе прямой дороги.
  */

@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, exitRiderShift, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, logicalRoadLimits, roadLateral, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -573,10 +573,6 @@ function roadOuterLat(s, side) {
   return carriageEdge(roadEdgesAt(s), side < 0 ? -1 : 1);
 }
 
-function splitLateralShiftAtS(_s, _lateralOffset) {
-  return 0;
-}
-
 function laneSpanAt(s) {
   const scale = laneDisplayScaleAtS(s);
   return Number.isFinite(scale) && scale !== 0 ? scale : 1;
@@ -586,11 +582,9 @@ function exitReservedAt(s) {
   return exitReserved(forkOffset(Math.max(0, blendMetersAt(s)), ZONE_M));
 }
 
-/** Сдвиг конкретной полосы на съезд в точке s. Камера передаёт свою, не полосу байка. */
-function exitShiftAt(s, laneOffset) {
-  if (!exitHold) return 0;
-  const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
-  return exitRiderShift(lane * laneSpanAt(s), roadWidthAtS(s) * 0.5, roadEdgesAt(s));
+/** Единственный перевод полосы в метры от оси. riding — байк уже на съезде. */
+function roadMetersAt(s, laneOffset, riding) {
+  return roadLateral(laneOffset * laneSpanAt(s), roadWidthAtS(s) * 0.5, roadEdgesAt(s), riding);
 }
 
 /** Съезд берётся только с правой кромки, пока ленты ещё соединены.
@@ -627,9 +621,15 @@ function updateExitHold(meters, zone) {
   }
 }
 
-/** Логическое смещение полосы → позиция на дороге с учётом ширины и развилки. */
+/** Полоса машины или разметки: масштаб ширины, без съезда. */
 function laneWorldOffsetAtS(s, lateralOffset) {
-  return lateralOffset * laneDisplayScaleAtS(s) + splitLateralShiftAtS(s, lateralOffset);
+  return roadMetersAt(s, lateralOffset, false);
+}
+
+/** Полоса байка или камеры. На съезде это та же функция, с флагом ветки. */
+function riderLatAt(s, laneOffset) {
+  const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
+  return roadMetersAt(s, lane, exitHold);
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -1458,7 +1458,7 @@ export function initBiome() {
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.forkCenterShiftAtS = forkCenterShiftAtS;
-  G.exitShiftAt = exitShiftAt;
+  G.riderLatAt = riderLatAt;
   G.exitReservedAt = exitReservedAt;
   G.forkChosenSideAtS = forkChosenSideAtS;
   G.forkCloseAtS = forkCloseAtS;
@@ -1477,7 +1477,7 @@ export function initBiome() {
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
-  G.splitLateralShiftAtS = splitLateralShiftAtS;
+  G.splitLateralShiftAtS = () => 0;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
   G.laneMarksAtS = laneMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;

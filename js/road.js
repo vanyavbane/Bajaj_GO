@@ -42,21 +42,18 @@ export function initRoad() {
     return typeof lat === 'function' ? lat(s) : lat;
   }
 
-  /** Мировая точка дороги со сдвигом оси развилки — та же формула, что и у позиции. */
+  /** Мировая точка. lat уже в метрах от оси. */
   function roadPoint(out, s, lat, heightOffset) {
     const dx = roadDX(s);
     const lh = Math.hypot(dx, 1) || 1;
-    const total = lat + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
+    const total = lat;
     out.set(roadX(s) + total / lh, roadY(s) + heightOffset, -s + total * dx / lh);
     return out;
   }
 
   /**
-   * Мировое смещение для касательной. Числовой world-offset callers обычно
-   * считают в точке s и он уже включает разъезд ветки (splitLateralShiftAtS).
-   * Чтобы касательная шла вдоль ветки, а не вдоль оси, переносим вклад
-   * разъезда на sSample: lat + forkSide(lat)*(spread(sSample) - spread(s)).
-   * Сдвиг оси (centerShift) добавляется отдельно в roadPoint.
+   * Касательная вдоль ленты. lat уже в метрах от оси (`roadLateral`).
+   * Если точка лежит на съезде, соседний сэмпл едет за центром той же ленты.
    */
   function latForTangent(lat, sSample, sRef) {
     if (typeof lat === 'function') return lat(sSample);
@@ -73,10 +70,8 @@ export function initRoad() {
   function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
     const dx = roadDX(s);
     const dy = roadDY(s);
-    const shift = G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0;
-    // Касательную берём по фактическому пути объекта (с учётом сдвига/разъезда),
-    // иначе на развязке и при сходе сдвига после неё байк, трафик и декорации
-    // едут боком. На обычной дороге это даёт ту же ориентацию.
+    // Касательную берём по фактическому пути объекта, иначе на съезде
+    // байк и декорации едут боком. На прямой это та же ориентация.
     const h = 0.8;
     roadPoint(_pA, s - h, latForTangent(lateralOffset, s - h, s), 0);
     roadPoint(_pB, s + h, latForTangent(lateralOffset, s + h, s), 0);
@@ -99,7 +94,7 @@ export function initRoad() {
 
     // Смещение по полосе — в горизонтали, как у ленты асфальта. Дорога без крена.
     const lh = Math.hypot(dx, 1) || 1;
-    const lat = latAt(lateralOffset, s) + shift;
+    const lat = latAt(lateralOffset, s);
     obj.position.set(
       roadX(s) + lat / lh,
       roadY(s) + heightOffset,

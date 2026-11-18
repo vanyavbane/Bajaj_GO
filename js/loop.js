@@ -104,7 +104,7 @@ export function initLoop() {
     }
 
     const toWorld = G.laneWorldOffsetAtS;
-    const bikeLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
+    const bikeLat = G.riderLatAt(G.playerS);
     let deckHeight = 0;
     for (const ramp of G.rampsPool) {
       // Флаг мог остаться с прошлого заезда: пока трамплин впереди, сбрасываем.
@@ -213,7 +213,7 @@ export function initLoop() {
     const toWorld = G.laneWorldOffsetAtS;
     let surfaceRampHeight = 0;
     for (const ramp of G.rampsPool) {
-      const bikeLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
+      const bikeLat = G.riderLatAt(G.playerS);
       const rampLat = toWorld(ramp.s, ramp.lateralOffset);
       const contact = !G.jumpState.airborne && rampUnderBike(G.playerS, prevS, bikeLat, {
         s: ramp.s,
@@ -294,7 +294,7 @@ export function initLoop() {
     let reach = 0;
     for (let i = 0; i <= 4; i++) {
       const s = prevS + (G.playerS - prevS) * (i / 4);
-      const hit = G.medianBlocksBike(s, toWorld(s, G.laneOffset) + G.exitShiftAt(s), halfPlayer);
+      const hit = G.medianBlocksBike(s, G.riderLatAt(s), halfPlayer);
       if (hit) {
         reach = hit;
         break;
@@ -311,7 +311,7 @@ export function initLoop() {
   function placePlayer(isQute) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
-    const worldLat = G.laneWorldOffsetAtS(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
+    const worldLat = G.riderLatAt(G.playerS);
     G.placeOnRoad(
       G.bikeRoot,
       G.playerS,

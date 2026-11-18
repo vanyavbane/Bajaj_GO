@@ -41,7 +41,7 @@ export function initRoadSurface() {
   function roadPointAt(out, s, lat, yOffset) {
     const dx = G.roadDX(s);
     const lh = Math.hypot(dx, 1) || 1;
-    const total = lat + (G.forkCenterShiftAtS ? G.forkCenterShiftAtS(s) : 0);
+    const total = lat;
     out.set(G.roadX(s) + total / lh, G.roadY(s) + yOffset, -s + total * dx / lh);
     return out;
   }
@@ -80,10 +80,9 @@ export function initRoadSurface() {
       sampleS[r] = s;
       const rx = 1 / lh;
       const rz = dx / lh;
-      const shift = G.forkCenterShiftAtS(s);
-      sampleX[r] = G.roadX(s) + rx * shift;
+      sampleX[r] = G.roadX(s);
       sampleY[r] = G.roadY(s);
-      sampleZ[r] = -s + rz * shift;
+      sampleZ[r] = -s;
       sampleCity[r] = G.cityWeightAtS(s);
       sampleHalf[r] = widthAt(s) * 0.5;
       rightX[r] = rx;
@@ -586,7 +585,7 @@ export function initRoadSurface() {
       const lh = Math.hypot(dx, 1) || 1;
       const rx = 1 / lh;
       const rz = dx / lh;
-      const lat = innerLineLat(s, side, 0.2) + G.forkCenterShiftAtS(s);
+      const lat = innerLineLat(s, side, 0.2);
       const cx = G.roadX(s), cy = G.roadY(s) + 0.09, cz = -s;
       const idx = r * 2;
       pos.setXYZ(idx, cx + rx * (lat - halfW), cy, cz + rz * (lat - halfW));

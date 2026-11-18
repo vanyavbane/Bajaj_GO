@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, exitRiderShift, forkCenterShift, forkSpreadAt, logicalRoadLimits, pickToSide, splitPick } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, chosenSideOf, exitEdges, exitPhase, exitRebaseLane, exitReserved, exitRiderShift, forkCenterShift, forkSpreadAt, logicalRoadLimits, pickToSide, roadLateral, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -69,7 +69,8 @@ assert(Math.abs(settled.rightInner - plain.leftOuter) < 1e-6 && Math.abs(settled
 const declinedSettle = exitEdges(10, { kind: 'settle', t: 0.4, spread: FORK_SPREAD }, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.rightOuter === declinedSettle.rightInner, 'после отказа к границе остаётся только прямая');
 const openRibbon = branchEdges(10, FORK_SPREAD);
-const ride = 9 + exitRiderShift(9, 10, openRibbon);
+assert(roadLateral(9, 10, openRibbon, false) === 9, 'вне съезда полоса и есть метры от оси');
+const ride = roadLateral(9, 10, openRibbon, true);
 assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк на ленте съезда, не в клине');
 const mid = exitEdges(10, { kind: 'settle', t: 0.5, spread: FORK_SPREAD }, 1);
 const midRide = 9 + exitRiderShift(9, 10, mid);

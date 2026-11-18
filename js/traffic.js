@@ -245,7 +245,7 @@ export function initTraffic() {
       // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
       const toWorld = G.laneWorldOffsetAtS;
       const carWorldLat = toWorld(car.s, car.lateralOffset);
-      const playerWorldLat = toWorld(G.playerS, G.laneOffset) + G.exitShiftAt(G.playerS);
+      const playerWorldLat = G.riderLatAt(G.playerS);
 
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
       if (nudge != null) car.s = nudge;

@@ -461,8 +461,6 @@ export function initCamera() {
         const lh = Math.hypot(dx, 1) || 1;
         return [1 / lh, dx / lh];
       };
-      const toWorld = G.laneWorldOffsetAtS;
-
       const isMenuView = !G.started && !G.ended;
       const speedPullback = clamp(G.speed / 220, 0, 1.35);
       const jumpPullback = G.jumpState.airborne ? clamp(G.jumpState.height * 0.55, 0, 2.2) : 0;
@@ -473,7 +471,7 @@ export function initCamera() {
 
       const camS = G.playerS - distBehind;
       const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
-      const camLat = toWorld(camS, camLatLogical) + G.exitShiftAt(camS, camLatLogical);
+      const camLat = G.riderLatAt(camS, camLatLogical);
       const [camRx, camRz] = rightAt(camS);
       const minSafeY = G.roadY(camS) + 1.85;
       const targetCamX = G.roadX(camS) + camRx * camLat;
@@ -492,7 +490,7 @@ export function initCamera() {
 
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
       const lookLatLogical = isMenuView ? 0.5 : (G.laneOffset * 0.55);
-      const lookLat = toWorld(lookAheadS, lookLatLogical) + G.exitShiftAt(lookAheadS, lookLatLogical);
+      const lookLat = G.riderLatAt(lookAheadS, lookLatLogical);
       const [lookRx, lookRz] = rightAt(lookAheadS);
       const targetLookX = G.roadX(lookAheadS) + lookRx * lookLat;
       const targetLookZ = -lookAheadS + lookRz * lookLat;
