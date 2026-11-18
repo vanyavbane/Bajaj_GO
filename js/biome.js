@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
 import { laneDashOffsets } from './engine/lanes.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitEdges, exitPhase, exitReserved, forkAmountAt, forkOffset, forkSpreadAt, holdLaneMin, laneMeters, logicalRoadLimits, roadLateral, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
+import { EXIT_CHOICE, FORK_LEAD, FORK_SPREAD, branchPick, canGrabExit, canReleaseExit, carriageEdge, chosenSideOf, exitCarryOrigin, exitPhase, exitReserved, exitRibbonCenter, forkAmountAt, forkOffset, forkSpreadAt, laneMeters, logicalRoadLimits, outwardFrom, sampleRoad, shoulderHeight, shoulderLats, splitPick, worldEdge } from './engine/fork.js';
 import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
@@ -588,23 +588,12 @@ function forkCloseAtS(s) {
   return 0;
 }
 
-/** В кадре, когда прямая закончилась, центр дороги становится центром съезда. */
+/** Центр дороги после взятого съезда известен сразу: лента впереди уже продолжается им. */
 function commitExitOrigin(zone, s) {
   if (chosenExit[zone] !== 1 || chosenOrigin[zone] != null) return;
   const phase = exitPhase(forkOffset(blendMetersAt(s), ZONE_M));
-  if (phase.kind !== 'settle') return;
-  const half = roadWidthAtS(s) * 0.5;
-  const span = laneSpanAt(s);
-  const prev = originBefore(zone);
-  const ribbon = exitEdges(half, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
-  const world = prev + roadLateral(G.laneOffset * span, half, ribbon, exitHold);
-  const origin = exitCarryOrigin(half, prev);
-  chosenOrigin[zone] = origin;
-  if (exitHold) {
-    G.laneOffset = (world - origin) / span;
-    G.lateralVelocity = 0;
-    exitHold = false;
-  }
+  if (phase.kind !== 'settle' && phase.kind !== 'none') return;
+  chosenOrigin[zone] = exitCarryOrigin(roadWidthAtS(s) * 0.5, originBefore(zone));
 }
 
 /** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
@@ -627,30 +616,55 @@ function roadMetersAt(s, laneOffset, riding) {
   return laneMeters(laneOffset, laneSpanAt(s), roadWidthAtS(s) * 0.5, frameAt(s), riding);
 }
 
-/** Съезд берётся только с правой кромки, пока ленты ещё соединены.
- *  После клина вернуться на прямую уже нельзя, и руль не уводит байка в траву. */
+/** Мировые метры байка. На съезде полоса считается от центра его ленты, как на прямой. */
+function riderWorld(frame, span) {
+  const origin = frame.origin;
+  const lane = G.laneOffset * span;
+  if (!exitHold) return origin + lane;
+  const center = exitRibbonCenter(frame.local);
+  return center == null ? origin + lane : origin + center + lane;
+}
+
+/** Захват переносит полосу на центр съезда, не сдвигая байка в мире. */
+function grabExit(frame, span) {
+  const center = exitRibbonCenter(frame.local);
+  if (center == null) return;
+  const world = frame.origin + G.laneOffset * span;
+  const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
+  const limit = Math.max(0, (halfW - 0.7) / span);
+  let lane = (world - (frame.origin + center)) / span;
+  if (lane < -limit) lane = -limit;
+  if (lane > limit) lane = limit;
+  exitHold = true;
+  G.laneOffset = lane;
+}
+
+/** Отпуск возвращает полосу к центру прямой дороги, тоже без скачка. */
+function releaseExit(frame, span) {
+  const world = riderWorld(frame, span);
+  exitHold = false;
+  G.laneOffset = (world - frame.origin) / span;
+}
+
+/** Съезд берётся с его асфальта, пока ленты соединены. Дальше это обычная дорога той же ширины. */
 function updateExitHold(meters, zone) {
   commitExitOrigin(zone, G.playerS);
-  const edge = localEdgesAt(G.playerS);
-  const half = roadWidthAtS(G.playerS) * 0.5;
+  const frame = frameAt(G.playerS);
   const span = laneSpanAt(G.playerS);
-  const lat = G.laneOffset * span;
   if (!exitReserved(forkOffset(meters, ZONE_M))) {
-    exitHold = false;
+    if (exitHold) releaseExit(frame, span);
     return;
   }
   if (!chosenZones.has(zone)) {
-    if (canGrabExit(lat, edge)) exitHold = true;
-    if (canReleaseExit(lat, edge)) exitHold = false;
-  }
-  const minWorld = holdLaneMin(edge, half);
-  if (exitHold && minWorld != null) {
-    const minLogical = minWorld / span;
-    if (G.laneOffset < minLogical) {
-      G.laneOffset = minLogical;
-      if (G.lateralVelocity < 0) G.lateralVelocity = 0;
+    if (!exitHold && canGrabExit(G.laneOffset * span, frame.local)) grabExit(frame, span);
+    else if (exitHold) {
+      const center = exitRibbonCenter(frame.local);
+      const local = center == null ? G.laneOffset * span : center + G.laneOffset * span;
+      if (canReleaseExit(local, frame.local)) releaseExit(frame, span);
     }
   }
+  const carried = chosenExit[zone] === 1 && (frame.phase.kind === 'settle' || frame.phase.kind === 'none');
+  if (exitHold && carried) exitHold = false;
 }
 
 /** Полоса машины или разметки: масштаб ширины, без съезда. */
@@ -658,10 +672,14 @@ function laneWorldOffsetAtS(s, lateralOffset) {
   return roadMetersAt(s, lateralOffset, false);
 }
 
-/** Полоса байка или камеры. На съезде это та же функция, с флагом ветки. */
+/** Полоса байка или камеры. На съезде — от центра его ленты, иначе от центра дороги. */
 function riderLatAt(s, laneOffset) {
   const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
-  return roadMetersAt(s, lane, exitHold);
+  const span = laneSpanAt(s);
+  if (!exitHold) return roadMetersAt(s, lane, false);
+  const frame = frameAt(s);
+  const center = exitRibbonCenter(frame.local);
+  return center == null ? frame.origin + lane * span : frame.origin + center + lane * span;
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -1011,9 +1029,11 @@ const SHOULDER = {
   cityEdge: 3.55
 };
 
-/** Высота земли на удалении lat от оси. Линейка та же, что у ленты откоса в этой точке. */
+/** Высота земли в мировой точке lat. Сторона считается от центра дороги. */
 function groundOffset(lat, s) {
-  const asphalt = Math.abs(roadOuterLat(s, lat < 0 ? -1 : 1));
+  const frame = frameAt(s);
+  const side = lat < frame.origin ? -1 : 1;
+  const asphalt = Math.abs(worldEdge(frame.world, side));
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
   const lats = shoulderLats(asphalt, cityOuter, SHOULDER);
   return shoulderHeight(lat, lats, SHOULDER);
@@ -1200,6 +1220,9 @@ function commitSplit(zone, side, commitMeters) {
   const chosen = choices[side === 1 ? 1 : 0];
   chosenZones.add(zone);
   chosenExit[zone] = side === 1 ? 1 : -1;
+  if (side === 1 && chosenOrigin[zone] == null) {
+    chosenOrigin[zone] = exitCarryOrigin(roadWidthAtS(G.playerS) * 0.5, originBefore(zone));
+  }
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
   lastSplitZone = zone;
   lastSplitSide = side === 1 ? 1 : 0;
@@ -1492,6 +1515,7 @@ export function initBiome() {
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
+  G.roadBlockAt = (s) => frameAt(s).block;
   G.riderLatAt = riderLatAt;
   G.exitReservedAt = exitReservedAt;
   G.forkChosenSideAtS = forkChosenSideAtS;
@@ -1630,9 +1654,10 @@ export function initBiomeWorld() {
           if (!visible) continue;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
-          const edge = roadEdgesAt(s);
-          const outside = Math.abs(worldEdge(edge, side < 0 ? -1 : 1));
-          const lat = Math.max(entry.lat, outside + 8);
+          const frame = frameAt(s);
+          const edge = worldEdge(frame.world, side < 0 ? -1 : 1);
+          const gap = Math.max(8, entry.lat - Math.abs(edge));
+          const lat = outwardFrom(edge, frame.origin, gap);
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.engine.json --noEmit",
     "check:roadside": "node --experimental-strip-types js/engine/roadside.check.ts",
     "check:biomes": "node --experimental-strip-types js/engine/biomes.check.ts",
+    "check:blocks": "node --experimental-strip-types js/engine/blocks.check.ts",
     "scene": "node scripts/scene.mjs"
   },
   "workspaces": [

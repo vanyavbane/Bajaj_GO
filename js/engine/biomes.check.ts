@@ -73,6 +73,8 @@ const taken = exitEdges(10, { kind: 'end', t: 1, spread: FORK_SPREAD }, 1);
 assert(Math.abs(taken.leftOuter - taken.leftInner) < 1e-6, 'взятый съезд заканчивает прямую ветку');
 assert(taken.rightOuter - taken.rightInner > 10, 'взятый съезд остаётся дорогой');
 
+const stillOpen = exitEdges(10, { kind: 'settle', t: 1, spread: FORK_SPREAD }, 0);
+assert(stillOpen.rightOuter - stillOpen.rightInner > 10, 'до выбора съезд впереди не обрывается');
 const settled = exitEdges(10, { kind: 'settle', t: 1, spread: FORK_SPREAD }, 1);
 const plain = exitEdges(10, exitPhase(-1), 0);
 assert(settled.leftOuter === plain.leftOuter && settled.leftInner === plain.leftInner, 'после съезда локальная дорога снова прямая');
@@ -95,8 +97,9 @@ assert(joinedLimits.max > joined.leftInner, 'пока съезд приклее�
 const splitRoad = branchEdges(10, FORK_SPREAD);
 const blocked = logicalRoadLimits(splitRoad, 1, false);
 const riding = logicalRoadLimits(splitRoad, 1, true);
+const plainLimits = logicalRoadLimits(branchEdges(10, 0), 1, false);
 assert(blocked.max < splitRoad.leftInner, 'после клина с прямой на съезд уже не перестроиться');
-assert(riding.max > blocked.max, 'тот, кто уже на съезде, не бьётся о кромку прямой');
+assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');
 assert(!exitReserved(-5) && exitReserved(EXIT_DIVERGE) && !exitReserved(FORK_LEAD + 1), 'коридор съезда не залезает за границу зоны');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('biome catalog ok');

@@ -230,6 +230,7 @@ export function initDebug() {
           cam: [round(cam.x, 3), round(cam.y, 3), round(cam.z, 3)],
           bike: [round(bike.x, 3), round(bike.y, 3), round(bike.z, 3)],
           camRot: [round(G.camera.rotation.x, 4), round(G.camera.rotation.y, 4), round(G.camera.rotation.z, 4)],
+          block: G.roadBlockAt ? (G.roadBlockAt(G.playerS)?.id ?? null) : null,
           spread: round(G.forkSpreadAtS ? G.forkSpreadAtS(G.playerS) : 0, 2),
           shift: round(G.roadOriginAt ? G.roadOriginAt(G.playerS) : 0, 2),
           close: round(G.forkCloseAtS ? G.forkCloseAtS(G.playerS) : 0, 3),

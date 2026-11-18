@@ -38,6 +38,21 @@ export function initRoadSurface() {
   const _laneBasis = new THREE.Matrix4();
   const _laneQuat = new THREE.Quaternion();
 
+  function roadCenter(s) {
+    return G.roadOriginAt ? G.roadOriginAt(s) : 0;
+  }
+
+  function edgeLat(s, side) {
+    return worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1);
+  }
+
+  /** Белая линия чуть внутрь кромки, даже если вся дорога уже справа от оси. */
+  function insetEdge(s, side, inset) {
+    const edge = edgeLat(s, side);
+    const outward = edge < 0 ? -1 : 1;
+    return edge - outward * inset;
+  }
+
   function roadPointAt(out, s, lat, yOffset) {
     const dx = G.roadDX(s);
     const lh = Math.hypot(dx, 1) || 1;
@@ -287,7 +302,7 @@ export function initRoadSurface() {
     const split = G.splitAmountAtS(s);
     if (weight < 0.55 || split > 0.05 || barrierGapAt(s)) return 0;
     const reach = BARRIER_HALF_W + halfPlayer;
-    return Math.abs(worldLat) < reach ? reach : 0;
+    return Math.abs(worldLat - roadCenter(s)) < reach ? reach : 0;
   };
 
   function updateBarrier(playerS, dense) {
@@ -303,7 +318,7 @@ export function initRoadSurface() {
       const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) ? weight : 0;
       if (vis <= 0.02) continue;
       dummy.scale.set(1, vis, 1);
-      G.placeOnRoad(dummy, s, 0, 0.46 * vis);
+      G.placeOnRoad(dummy, s, roadCenter(s), 0.46 * vis);
       dummy.updateMatrix();
       blockMesh.setMatrixAt(used++, dummy.matrix);
     }
@@ -359,7 +374,9 @@ export function initRoadSurface() {
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight > maxWeight) maxWeight = weight;
       const vis = weight > 0.02 ? weight : 0;
-      const lat = G.roadOuterLat(s, side) + side * GUARD_OFFSET;
+      const edge = edgeLat(s, side);
+      const outward = edge < 0 ? -1 : 1;
+      const lat = edge + outward * GUARD_OFFSET;
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
       const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
@@ -401,7 +418,9 @@ export function initRoadSurface() {
       if (weight <= 0.02) continue;
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
-        const lat = G.roadOuterLat(s, side) + side * GUARD_OFFSET;
+        const edge = edgeLat(s, side);
+        const outward = edge < 0 ? -1 : 1;
+        const lat = edge + outward * GUARD_OFFSET;
         dummy.scale.set(weight, weight, weight);
         G.placeOnRoad(dummy, s, lat, 0.31 * weight);
         dummy.updateMatrix();
@@ -464,10 +483,11 @@ export function initRoadSurface() {
     for (let r = 0; r < ROW; r++) {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
-      const asphalt = Math.abs(G.roadOuterLat(sampleS[r], side));
-      const inner = asphalt + baseWidth * cw;
+      const edge = edgeLat(sampleS[r], side);
+      const outward = edge < 0 ? -1 : 1;
+      const inner = Math.abs(edge) + baseWidth * cw;
       const halfW = width * 0.5 * cw;
-      const center = side * (inner + halfW);
+      const center = edge + outward * (baseWidth * cw + halfW);
       const cx = sampleX[r], cy = sampleY[r] + yOffset, cz = sampleZ[r];
       const rx = rightX[r], rz = rightZ[r];
       const idx = r * 2;
@@ -671,12 +691,19 @@ export function initRoadSurface() {
     updateCityStrip(sidewalkLeftMesh, -1, 0.35, 3.2, 0.11);
     updateCityStrip(sidewalkRightMesh, 1, 0.35, 3.2, 0.11);
 
-    // Осевая на прямой — пара жёлтых у оси. На развилке каждая уходит
-    // на внутренний край своей ветки и остаётся на асфальте, не в траве.
-    updateLateralStrip(centerDoubleLine1, (r) => innerLineLat(sampleS[r], -1, 0.38), 0.13, 0.08);
-    updateLateralStrip(centerDoubleLine2, (r) => innerLineLat(sampleS[r], 1, 0.38), 0.13, 0.08);
-    updateLateralStrip(edgeLineLeft, (r) => G.roadOuterLat(sampleS[r], -1) + 0.32, 0.16, 0.025);
-    updateLateralStrip(edgeLineRight, (r) => G.roadOuterLat(sampleS[r], 1) - 0.32, 0.16, 0.025);
+    // Осевая на одной дороге — пара жёлтых вокруг её центра, в том числе
+    // после съезда. Пока ленты разделены, каждая линия на внутреннем крае.
+    const yellowAt = (s, side) => {
+      const edge = G.roadEdgesAt(s);
+      const gap = edge.rightInner - edge.leftInner;
+      const exitW = edge.rightOuter - edge.rightInner;
+      if (exitW > 1.2 && gap > 0.8) return innerLineLat(s, side, 0.38);
+      return roadCenter(s) + (side < 0 ? -0.22 : 0.22);
+    };
+    updateLateralStrip(centerDoubleLine1, (r) => yellowAt(sampleS[r], -1), 0.13, 0.08);
+    updateLateralStrip(centerDoubleLine2, (r) => yellowAt(sampleS[r], 1), 0.13, 0.08);
+    updateLateralStrip(edgeLineLeft, (r) => insetEdge(sampleS[r], -1, 0.32), 0.16, 0.025);
+    updateLateralStrip(edgeLineRight, (r) => insetEdge(sampleS[r], 1, 0.32), 0.16, 0.025);
 
     shareRoadNormals();
     updateSlopeRibbons();

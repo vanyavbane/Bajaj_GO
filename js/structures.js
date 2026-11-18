@@ -218,7 +218,8 @@ export function initStructures() {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
       const spanM = G.roadOuterLat(ms.userData.s, 1) - G.roadOuterLat(ms.userData.s, -1);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
-        G.placeOnRoad(ms, ms.userData.s, 0, 0);
+        const center = G.roadOriginAt ? G.roadOriginAt(ms.userData.s) : 0;
+        G.placeOnRoad(ms, ms.userData.s, center, 0);
         ms.userData.baseWidth = spanM;
       }, Math.round(spanM * 50));
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и

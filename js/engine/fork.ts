@@ -1,11 +1,19 @@
 /**
  * Дорога и съезд вправо.
+ * Форма съезда — рецепт блоков в blocks.ts. Здесь только кромки одного блока.
  * Кромки считаются относительно центра дороги. Взятый съезд переносит этот
  * центр на свою линию и больше не возвращает его на ось маршрута.
  * Прямой ход центр не двигает: съезд заканчивается сбоку.
  *
  * ChosenSide: -1 съезд закрыт, +1 съезд стал дорогой, 0 выбор ещё открыт.
  */
+
+import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
+import type { PlacedBlock } from './blocks.ts';
+
+export type { PlacedBlock };
+
+const EXIT_PLAN = compileExit(RIGHT_EXIT);
 
 /** -1 съезд не взят, +1 взят, 0 пока развилка открыта. */
 export type ChosenSide = -1 | 0 | 1;
@@ -75,19 +83,19 @@ export interface RoadLimits {
   max: number;
 }
 
-/** Метры, за которые съезд отходит от прямой дороги и открывает клин. */
-export const EXIT_DIVERGE = 110;
-/** Участок, где ветки уже разделены. Здесь выбирают прямую или съезд. */
-export const EXIT_RUN = 150;
-/** Ненужная ветка заканчивается на месте и не вливается в оставшуюся. */
-export const EXIT_END = 70;
-/** Запас до границы зоны: за ней уже другой биом, дома и деревья. */
-export const EXIT_MARGIN = 100;
+/** Метры блока, за которые съезд отходит от прямой дороги и открывает клин. */
+export const EXIT_DIVERGE = EXIT_PLAN.diverge;
+/** Блок, где ветки уже разделены. Здесь игрок выбирает, что строить дальше. */
+export const EXIT_RUN = EXIT_PLAN.run;
+/** Блок, в котором ненужная ветка заканчивается на месте. */
+export const EXIT_END = EXIT_PLAN.seal;
+/** Последний блок цепочки: запас до границы зоны. */
+export const EXIT_MARGIN = EXIT_PLAN.margin;
 /** Нос съезда стоит на столько метров раньше границы зоны. */
-export const FORK_LEAD = EXIT_DIVERGE + EXIT_RUN + EXIT_END + EXIT_MARGIN;
-/** Расстояние от носа до точки, где выбор уже должен быть сделан. */
-export const EXIT_CHOICE = EXIT_DIVERGE + EXIT_RUN;
-export const FORK_SPREAD = 22;
+export const FORK_LEAD = EXIT_PLAN.length;
+/** Конец общего подхода: дальше строится только выбранная цепочка. */
+export const EXIT_CHOICE = EXIT_PLAN.choiceAt;
+export const FORK_SPREAD = EXIT_PLAN.spread;
 /** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
 export const FORK_SEAM = 0.16;
 
@@ -147,19 +155,21 @@ export interface ExitPhase {
   spread: number;
 }
 
-/** Фаза по метрам от носа. До носа и после границы зоны съезда нет. */
+/** Фаза по блоку под этой меткой. До носа и после последнего блока съезда нет. */
 export function exitPhase(d: number): ExitPhase {
-  if (!(d > 0) || d >= FORK_LEAD) return { kind: 'none', t: 0, spread: 0 };
-  if (d < EXIT_DIVERGE) {
-    const t = d / EXIT_DIVERGE;
-    return { kind: 'diverge', t, spread: FORK_SPREAD * smooth01(t) };
+  const span = spanAt(EXIT_PLAN, d);
+  if (!span) return { kind: 'none', t: 0, spread: 0 };
+  if (span.kind === 'split') {
+    return { kind: 'diverge', t: span.u, spread: FORK_SPREAD * smooth01(span.u) };
   }
-  if (d < EXIT_CHOICE) return { kind: 'run', t: 1, spread: FORK_SPREAD };
-  if (d < EXIT_CHOICE + EXIT_END) {
-    return { kind: 'end', t: smooth01((d - EXIT_CHOICE) / EXIT_END), spread: FORK_SPREAD };
-  }
-  const tail = Math.max(1, FORK_LEAD - (EXIT_CHOICE + EXIT_END));
-  return { kind: 'settle', t: smooth01((d - EXIT_CHOICE - EXIT_END) / tail), spread: FORK_SPREAD };
+  if (span.kind === 'fork') return { kind: 'run', t: 1, spread: FORK_SPREAD };
+  if (span.kind === 'seal') return { kind: 'end', t: smooth01(span.u), spread: FORK_SPREAD };
+  return { kind: 'settle', t: smooth01(span.u), spread: FORK_SPREAD };
+}
+
+/** Какой блок стоит в этой метке и выбран ли уже его хвост. */
+export function exitBlockAt(d: number, chosen: ChosenSide): PlacedBlock | null {
+  return placedBlock(EXIT_PLAN, d, chosen);
 }
 
 /** Земля справа занята съездом: дома и деревья туда не ставятся. */
@@ -187,7 +197,13 @@ export function exitCarryOrigin(roadHalf: number, base = 0): number {
  */
 export function exitEdges(half: number, phase: ExitPhase, chosen: ChosenSide): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
-  if (phase.kind === 'none' || phase.kind === 'settle') return branchEdges(road, 0);
+  if (phase.kind === 'none') return branchEdges(road, 0);
+  // До выбора съезд впереди остаётся лентой. Иначе полотно обрывается
+  // за 350 м до байка, хотя решение ещё не принято.
+  if (phase.kind === 'settle') {
+    if (chosen === 0) return branchEdges(road, phase.spread);
+    return branchEdges(road, 0);
+  }
   if (phase.kind === 'diverge' || phase.kind === 'run') return branchEdges(road, phase.spread);
   const edge = branchEdges(road, phase.spread);
   if (chosen === 0) return edge;
@@ -207,6 +223,8 @@ export interface RoadFrame {
   world: AsphaltEdges;
   phase: ExitPhase;
   chosen: ChosenSide;
+  /** Блок рецепта в этой точке. null — съезда здесь нет. */
+  block: PlacedBlock | null;
 }
 
 export interface RoadQuery {
@@ -241,7 +259,14 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
     && (weighted.kind === 'settle' || weighted.kind === 'none');
   const origin = carried && stored != null ? stored : query.baseOrigin;
   const local = exitEdges(query.half, weighted, chosen);
-  return { origin, local, world: translateEdges(local, origin), phase: weighted, chosen };
+  return {
+    origin,
+    local,
+    world: translateEdges(local, origin),
+    phase: weighted,
+    chosen,
+    block: exitBlockAt(query.forkDistance, chosen),
+  };
 }
 
 /** Полоса в мировых метрах. На боковой ленте riding true, иначе полоса относительно центра дороги. */
@@ -259,6 +284,13 @@ export function exitWidth(edges: AsphaltEdges): number {
   return Math.max(0, edges.rightOuter - edges.rightInner);
 }
 
+/** Центр ленты съезда в тех же метрах, что и кромки. null, если съезда нет. */
+export function exitRibbonCenter(edges: AsphaltEdges): number | null {
+  const width = exitWidth(edges);
+  if (width < 1) return null;
+  return (edges.rightInner + edges.rightOuter) * 0.5;
+}
+
 /** Прямая лента ещё накрывает ось, а не сжата в точку. */
 export function mainRoadOpen(edges: AsphaltEdges): boolean {
   return edges.leftOuter < -0.5 && edges.leftInner > 0.5 && edges.leftInner - edges.leftOuter > 1;
@@ -272,6 +304,15 @@ export function carriageEdge(edges: AsphaltEdges, side: -1 | 1): number {
     return side < 0 ? edges.rightInner : edges.rightOuter;
   }
   return side < 0 ? edges.leftOuter : edges.rightOuter;
+}
+
+/** Точка снаружи кромки. Сторона берётся от центра дороги, не от нуля маршрута. */
+export function outwardFrom(edge: number, origin: number, gap: number): number {
+  if (!Number.isFinite(edge)) return Number.isFinite(origin) ? origin : 0;
+  const center = Number.isFinite(origin) ? origin : 0;
+  const outward = edge < center ? -1 : 1;
+  const clearance = Number.isFinite(gap) ? Math.max(0, gap) : 0;
+  return edge + outward * clearance;
 }
 
 /** Дальний асфальт для откоса. Узкая умирающая лента не отодвигает землю. */
@@ -300,16 +341,6 @@ export function canGrabExit(logical: number, edges: AsphaltEdges): boolean {
 /** Пока клин не открылся, уход влево отпускает съезд. */
 export function canReleaseExit(logical: number, edges: AsphaltEdges): boolean {
   return exitGap(edges) < ATTACHED_GAP && logical < edges.rightInner - RELEASE_INSET;
-}
-
-/**
- * Пока прямая дорога ещё широкая, левее этой точки байка возвращает к правой кромке.
- * null — ограничение не нужно: клин ещё закрыт или прямая ветка уже закончилась.
- */
-export function holdLaneMin(edges: AsphaltEdges, roadHalf: number): number | null {
-  if (exitGap(edges) < ATTACHED_GAP) return null;
-  if (edges.leftInner - edges.leftOuter < Math.max(roadHalf, 1)) return null;
-  return edges.leftInner - 1.5;
 }
 
 function riderOnExit(logical: number, _roadHalf: number, edges: AsphaltEdges): number | null {
@@ -387,32 +418,32 @@ const RIBBON_MARGIN = 0.7;
 const RIBBON_FLOOR = 2.2;
 
 /**
- * Пределы руля в координатах полосы, не в метрах дальнего края съезда.
- * Пока ленты соединены, можно чуть заехать на нос рампы. После клина
- * полоса остаётся у правого края прямой, а на ленту её переносит roadLateral.
+ * Пределы руля в координатах полосы вокруг центра той дороги, по которой едут.
+ * На съезде это его полуширина с тем же запасом, что у прямой дороги.
+ * Пока ленты соединены и байк ещё на прямой, можно заехать на нос рампы.
  */
 export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = false): RoadLimits {
   const span = Math.max(scale, 0.05);
-  const onExit = !mainRoadOpen(edge) && exitWidth(edge) > 1;
+  const exitHalf = exitWidth(edge) * 0.5;
+  const onExit = riding && exitHalf > 0.5;
   let minEdge: number;
   let maxEdge: number;
   if (onExit) {
-    const halfW = exitWidth(edge) * 0.5;
-    minEdge = -halfW / span;
-    maxEdge = halfW / span;
+    const joined = exitGap(edge) < ATTACHED_GAP;
+    const center = exitRibbonCenter(edge) ?? 0;
+    // Пока асфальт один, можно вернуться на прямую. После клина дорога — сам съезд.
+    if (joined) {
+      minEdge = (edge.leftOuter + RIBBON_MARGIN - center) / span;
+      maxEdge = (edge.rightOuter - RIBBON_MARGIN - center) / span;
+    } else {
+      minEdge = (-exitHalf + RIBBON_MARGIN) / span;
+      maxEdge = (exitHalf - RIBBON_MARGIN) / span;
+    }
   } else {
     minEdge = (edge.leftOuter + RIBBON_MARGIN) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN) / span;
     const joined = exitGap(edge) < ATTACHED_GAP && exitWidth(edge) > RIDEABLE;
-    if (riding && exitWidth(edge) > 1 && exitGap(edge) >= ATTACHED_GAP) {
-      // Полоса остаётся у правого края прямой. На ленту переносит roadLateral,
-      // поэтому предел не прыгает к дальнему краю съезда, когда открывается клин.
-      const anchor = edge.leftInner;
-      minEdge = Math.max(minEdge, (anchor - 1.5) / span);
-      maxEdge = Math.max(maxEdge, (anchor + 0.8) / span);
-    } else if (joined) {
-      maxEdge = Math.max(maxEdge, (edge.rightInner + 0.45) / span);
-    }
+    if (joined) maxEdge = Math.max(maxEdge, (edge.rightInner + 0.45) / span);
   }
   if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };
   if (minEdge > -RIBBON_FLOOR) minEdge = -RIBBON_FLOOR;

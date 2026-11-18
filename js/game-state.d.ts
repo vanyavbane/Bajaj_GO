@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { BiomeDef, BiomeId, BiomeTraffic, LaneLayout, RoadSample, TrafficModel } from './engine/biomes.js';
-import type { AsphaltEdges, BranchPick, ChosenSide, ShoulderProfile, SplitPick } from './engine/fork.js';
+import type { AsphaltEdges, BranchPick, ChosenSide, PlacedBlock, ShoulderProfile, SplitPick } from './engine/fork.js';
 import type { BesideAsset, MedianAsset, RoadsideFrame, RoadsidePose } from './engine/roadside.js';
 
 export interface ColorSwatch {
@@ -307,6 +307,8 @@ export interface GameState {
   forkSpreadAtS: (s: number) => number;
   /** Мировой центр дороги. После взятого съезда это его линия, не ось маршрута. */
   roadOriginAt: (s: number) => number;
+  /** Блок рецепта съезда в точке s. null — здесь обычная дорога без съезда. */
+  roadBlockAt: (s: number) => PlacedBlock | null;
   /** Полоса байка или камеры в метрах от оси, уже со съездом. */
   riderLatAt: (s: number, laneOffset?: number) => number;
   /** Справа на этом метре стоит съезд: дома и деревья туда не ставятся. */

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { outwardFrom, worldEdge } from './engine/fork.js';
 import { nearestLaneIndex } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
@@ -645,11 +646,14 @@ function exitLane(s, side) {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      const edge = Math.abs(G.roadOuterLat(e.s, e.side));
+      const edges = G.roadEdgesAt(e.s);
+      const origin = G.roadOriginAt ? G.roadOriginAt(e.s) : 0;
+      const edge = worldEdge(edges, e.side < 0 ? -1 : 1);
+      const poiLat = outwardFrom(edge, origin, 3.1);
       const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.laneWorldOffsetAtS(zoneS, markerLogical);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
-        G.placeOnRoad(e.group, e.s, e.side * (edge + 3.1), 0);
+        G.placeOnRoad(e.group, e.s, poiLat, 0);
         G.placeOnRoad(e.marker, zoneS, markerLat, 0.07);
       }, Math.round(edge * 50) * 10000 + Math.round(markerLat * 50));
 

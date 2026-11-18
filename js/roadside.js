@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { worldEdge } from './engine/fork.js';
+import { outwardFrom, worldEdge } from './engine/fork.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -385,30 +385,36 @@ export function initRoadside() {
 
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
-      const edgeAt = (at, side) => {
+      const signedEdge = (at, side) => {
         const edge = G.roadEdgesAt ? G.roadEdgesAt(at) : null;
-        return edge ? Math.abs(worldEdge(edge, side)) : Math.abs(G.roadOuterLat(at, side));
+        return edge ? worldEdge(edge, side) : G.roadOuterLat(at, side);
       };
-      const leftEdge = edgeAt(slot.s, -1);
-      const rightEdge = edgeAt(slot.s, 1);
+      const originAt = (at) => (G.roadOriginAt ? G.roadOriginAt(at) : 0);
+      const leftEdge = signedEdge(slot.s, -1);
+      const rightEdge = signedEdge(slot.s, 1);
+      const origin = originAt(slot.s);
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
       slot.lastDom = dom;
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        G.placeOnRoad(slot.leftLamp, slot.s, G.roadOuterLat(slot.s, -1) - 0.8, 0);
-        G.placeOnRoad(slot.rightLamp, slot.s, rightEdge + 0.8, 0);
-        const leftProp = Math.abs(G.roadOuterLat(slot.s, -1)) + 12;
-        const rightProp = rightEdge + 12;
-        G.placeOnRoad(slot.leftProp, slot.s, -leftProp, G.groundOffset(leftProp, slot.s));
+        const leftLamp = outwardFrom(leftEdge, origin, 0.8);
+        const rightLamp = outwardFrom(rightEdge, origin, 0.8);
+        const leftProp = outwardFrom(leftEdge, origin, 12);
+        const rightProp = outwardFrom(rightEdge, origin, 12);
+        G.placeOnRoad(slot.leftLamp, slot.s, leftLamp, 0);
+        G.placeOnRoad(slot.rightLamp, slot.s, rightLamp, 0);
+        G.placeOnRoad(slot.leftProp, slot.s, leftProp, G.groundOffset(leftProp, slot.s));
         G.placeOnRoad(slot.rightProp, slot.s, rightProp, G.groundOffset(rightProp, slot.s));
         if (slot.billboard) {
           const bb = slot.billboard;
           const boardS = slot.s + 6;
-          const boardLat = edgeAt(boardS, bb.side < 0 ? -1 : 1) + 4.8;
-          G.placeOnRoad(bb.group, boardS, bb.side * boardLat, G.groundOffset(boardLat, boardS), bb.side * -0.18);
+          const boardEdge = signedEdge(boardS, bb.side < 0 ? -1 : 1);
+          const boardLat = outwardFrom(boardEdge, originAt(boardS), 4.8);
+          G.placeOnRoad(bb.group, boardS, boardLat, G.groundOffset(boardLat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
-          G.placeOnRoad(slot.portal.group, slot.s, 0, 0);
+          const portalCenter = G.roadOriginAt ? G.roadOriginAt(slot.s) : 0;
+          G.placeOnRoad(slot.portal.group, slot.s, portalCenter, 0);
           const span = G.roadOuterLat(slot.s, 1) - G.roadOuterLat(slot.s, -1);
           const wf = Math.max(1, span / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
