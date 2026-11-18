@@ -1314,25 +1314,21 @@ function updateBiome(dt) {
   let previewSide = previewStableSide;
   if (G.laneOffset < -1.2) previewSide = 0;
   else if (G.laneOffset > 1.2) previewSide = 1;
-  const chosenBefore = chosenZones.has(zone);
-  const previewActive = !chosenBefore && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD;
 
-  // Авто-выбор, если игрок не ушёл на ветку до sSplit + 30.
-  if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
-    commitSplit(zone, previewSide, meters);
-  }
-  // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
-  // увидеть решение сразу, а не следующим кадром.
-  const chosen = chosenZones.has(zone);
-  // Пока следующая зона ещё не попала в кадр, её профиль едет за той стороной,
-  // где байк. Закрепляем выбор превью: повторно меняем биом следующей зоны
-  // только при уверенном уходе на другую сторону, иначе дорога/объекты впереди
-  // резко перестраиваются на глазах у игрока.
-  if (!chosen && roadLock[zone + 1] == null && splitD > -SPLIT_BANNER_AHEAD) {
+  const chosenBefore = chosenZones.has(zone);
+  // Биом следующей зоны закрепляем заранее (пока её морфинг ещё вне видимости),
+  // чтобы впереди не было резкой перестройки дороги/объектов. Переключить можно
+  // только один раз и только при уверенном выборе другой стороны — иначе оставляем
+  // как есть до фактического коммита развилки.
+  const PREVIEW_LOCK_AHEAD = 420;
+  if (!chosenBefore && roadLock[zone + 1] == null && splitD > -PREVIEW_LOCK_AHEAD) {
     const desired = choices[previewSide];
     if (zoneBiomes[zone + 1] !== desired) {
-      const strongOther = previewSide !== previewStableSide && Math.abs(G.laneOffset) > 3.0;
-      if (!previewActive || previewSide === previewStableSide || strongOther || splitD < -SPLIT_BANNER_AHEAD + 20) {
+      // В самом начале окна позволяем выбрать сторону один раз; дальше — только
+      // при явном уходе на другую сторону, и не прямо перед развилкой.
+      const early = splitD < -PREVIEW_LOCK_AHEAD + 40;
+      const strongSwitch = previewSide !== previewStableSide && Math.abs(G.laneOffset) > 3.2 && splitD < -SPLIT_BANNER_AHEAD - 20;
+      if (early || strongSwitch) {
         zoneBiomes[zone + 1] = desired;
         previewStableSide = previewSide;
         dropRoadCache();
@@ -1342,8 +1338,17 @@ function updateBiome(dt) {
     } else {
       previewStableSide = previewSide;
     }
-  } else if (chosen) {
-    previewStableSide = chosenZones.has(zone) ? (G.pendingBiome === choices[1] ? 1 : 0) : previewSide;
+  }
+
+  // Авто-выбор, если игрок не ушёл на ветку до sSplit + 30.
+  if (G.started && !G.ended && !chosenBefore && splitD >= SPLIT_AUTO_D) {
+    commitSplit(zone, previewSide, meters);
+  }
+  // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
+  // увидеть решение сразу, а не следующим кадром.
+  const chosen = chosenZones.has(zone);
+  if (chosen) {
+    previewStableSide = G.pendingBiome === choices[1] ? 1 : 0;
   }
   const forkAhead = splitM - meters;
   G.forkView = forkAhead < 340 && forkAhead > -90 ? 1 : 0;
