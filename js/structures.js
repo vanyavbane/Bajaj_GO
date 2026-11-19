@@ -220,7 +220,7 @@ export function initStructures() {
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, cover.mid, 0);
         ms.userData.baseWidth = cover.width;
-      }, Math.round(cover.width * 50));
+      }, Math.round(cover.mid * 20) * 1000 + Math.round(cover.width * 50));
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
       const cw = G.cityWeightAtS(ms.userData.s);

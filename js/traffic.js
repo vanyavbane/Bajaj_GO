@@ -188,10 +188,11 @@ export function initTraffic() {
    *  Одна такая полоса, как в горах, тоже уходит. Дальше её не возвращает на прямую. */
   function followExit(car, edges, runLanes, lastLane) {
     const open = !!edges && exitLaneOpen(edges);
-    if (!open) car.onExit = false;
-    else if (!car.onExit && !car.changingLane && runLanes >= 1 && car.laneIdx === lastLane) {
+    if (!open) {
+      car.onExit = false;
+    } else if (!car.onExit && !car.changingLane && runLanes >= 1 && car.laneIdx === lastLane) {
       const gap = edges.rightInner - edges.leftInner;
-      if (gap < 6) car.onExit = true;
+      if (gap < 8) car.onExit = true;
     }
     return car.onExit;
   }

@@ -454,7 +454,14 @@ function forkSpreadAtS(s) {
 
 /** Ширина одной ветки. Зазор между ветками сюда не входит: его рисует полотно отдельно. */
 function roadWidthAtS(s) {
-  return baseRoadWidthAtMeters(blendMetersAt(s));
+  const base = baseRoadWidthAtMeters(blendMetersAt(s));
+  const ci = carryInAt(s);
+  if (ci >= 0 && ci < 1) {
+    const exitW = 4.75 * 2;
+    const t = ci * ci * (3 - 2 * ci);
+    return exitW + (base - exitW) * t;
+  }
+  return base;
 }
 
 function splitAmountAtS(s) {
@@ -559,6 +566,22 @@ function maxLaneOffset(cfg) {
  *  Оба биома перехода смешиваются по тому же весу, что и ширина полотна:
  *  иначе на стыке масштаб скачет и вся разметка с машинами дёргается вбок. */
 function laneDisplayScaleAtS(s) {
+  if (onExitPath(s)) {
+    const lw = 4.75;
+    const maxAbsExit = lw * 0.5;
+    const halfExit = lw - 0.9;
+    const exitScale = (maxAbsExit <= 0.001 || halfExit <= 0.5) ? 1 : Math.min(1, halfExit / (maxAbsExit + 1.15));
+    const ci = carryInAt(s);
+    if (ci >= 0) {
+      const r = roadAtMeters(blendMetersAt(s));
+      const maxAbsN = mixValue(maxLaneOffset(LANE_CONFIG[r.a]), maxLaneOffset(LANE_CONFIG[r.b]), r.t);
+      const halfN = mixValue(LANE_CONFIG[r.a].width, LANE_CONFIG[r.b].width, r.t) * 0.5 - 0.9;
+      const normalScale = (maxAbsN <= 0.001 || halfN <= 0.5) ? 1 : Math.min(1, halfN / (maxAbsN + 1.15));
+      const t = ci * ci * (3 - 2 * ci);
+      return exitScale + (normalScale - exitScale) * t;
+    }
+    return exitScale;
+  }
   const r = roadAtMeters(blendMetersAt(s));
   const maxAbs = mixValue(maxLaneOffset(LANE_CONFIG[r.a]), maxLaneOffset(LANE_CONFIG[r.b]), r.t);
   const half = mixValue(LANE_CONFIG[r.a].width, LANE_CONFIG[r.b].width, r.t) * 0.5 - 0.9;
@@ -570,6 +593,10 @@ function laneDisplayScaleAtS(s) {
  *  одновременно и плавно перетекают: вес 1 — полный штрих, 0 — растворяется.
  *  Совпавшие штрихи сливаются, чтобы общая линия не укорачивалась. */
 function laneMarksAtS(s, way) {
+  if (onExitPath(s) && way !== 'two-way') {
+    // 2-полосный съезд: одна разделительная линия по центру.
+    return [{ lat: 0, w: 1 }];
+  }
   const r = roadAtMeters(blendMetersAt(s));
   const ca = LANE_CONFIG[r.a];
   const cb = LANE_CONFIG[r.b];
@@ -691,6 +718,9 @@ function frameAt(s) {
   if (s === frameKey && frameHit) return frameHit;
   const route = routeAt(s);
   const pack = originsAt(route.zone);
+  let carryIn = 1;
+  const ci = carryInAt(s);
+  if (ci >= 0) carryIn = ci;
   frameKey = s;
   frameHit = sampleRoad({
     forkDistance: forkOffset(route.meters, ZONE_M, EXIT_CLOCK.lead),
@@ -699,6 +729,7 @@ function frameAt(s) {
     baseOrigin: pack.base,
     carriedOrigin: pack.carried,
     endWeight: splitDecisionWeight(route.zone, route.meters),
+    carryIn,
   });
   return frameHit;
 }
@@ -764,10 +795,19 @@ function updateExitHold() {
   const center = exitRibbonCenter(frame.local);
   const world = riderPoint(frame, span);
   if (center == null) {
-    if (exitHold && frame.chosen !== 1) {
-      G.laneOffset = landOnCarriage(frame.origin, frame.local, world, span);
+    // Лента съезда исчезла: если съезд стал дорогой, остаёмся на ней по миру.
+    if (exitHold) {
+      exitHold = false;
+      heldCenter = 0;
+      const nextSpan = laneSpanAt(G.playerS);
+      const ci = carryInAt(G.playerS);
+      if (frame.chosen === 1 || ci >= 0) {
+        G.laneOffset = laneOf(world, frame.origin, nextSpan);
+      } else {
+        G.laneOffset = landOnCarriage(frame.origin, frame.local, world, nextSpan);
+      }
+      return;
     }
-    exitHold = false;
     heldCenter = 0;
     return;
   }
@@ -775,26 +815,31 @@ function updateExitHold() {
   const onRibbon = onExitRibbon(logical, frame.local);
   const hold = onRibbon || (exitHold && !canReleaseExit(logical, frame.local));
   if (hold && !exitHold) {
-    let lane = laneOf(world, frame.origin + center, span);
+    // Захват съезда: переходим в его систему координат без прыжка по миру.
+    exitHold = true;
+    heldCenter = center;
+    const nextSpan = laneSpanAt(G.playerS);
+    let lane = laneOf(world, frame.origin + center, nextSpan);
     if (onRibbon) {
       const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
-      const limit = Math.max(0, (halfW - 0.7) / span);
+      const limit = Math.max(0, (halfW - 0.7) / Math.max(nextSpan, 0.05));
       if (lane < -limit) lane = -limit;
       if (lane > limit) lane = limit;
     }
     G.laneOffset = lane;
-    exitHold = true;
-    heldCenter = center;
     return;
   }
   if (!hold && exitHold) {
-    G.laneOffset = laneOf(world, frame.origin, span);
+    // Возврат на прямую, пока съезд ещё рядом: сохраняем мировую позицию.
     exitHold = false;
     heldCenter = 0;
+    const nextSpan = laneSpanAt(G.playerS);
+    G.laneOffset = laneOf(world, frame.origin, nextSpan);
     return;
   }
   if (exitHold) {
-    G.laneOffset = laneOf(world, frame.origin + center, span);
+    const nextSpan = laneSpanAt(G.playerS);
+    G.laneOffset = laneOf(world, frame.origin + center, nextSpan);
     heldCenter = center;
   }
 }
@@ -824,10 +869,14 @@ function dominantBiomeAtS(s) {
   return live.t >= 1 ? live.b : live.a;
 }
 
-/** Ближайшая попутная полоса текущего биома к логическому смещению. */
+/** Ближайшая попутная полоса к логическому смещению. */
 function nearestRunLane(lateralOffset, cfg = null) {
-  const config = cfg || LANE_CONFIG[biomeIndex(G.biomeDominant != null ? G.biomeDominant : G.currentBiome)];
-  let best = config.offsets[config.oncomingCount];
+  let config = cfg;
+  if (!config) {
+    const dom = biomeIndex(G.biomeDominant != null ? G.biomeDominant : G.currentBiome);
+    config = onExitPath(G.playerS) ? exitLaneLayout(dom) : LANE_CONFIG[dom];
+  }
+  let best = config.offsets[config.oncomingCount] ?? config.offsets[0] ?? 0;
   let bestDist = Infinity;
   for (let i = config.oncomingCount; i < config.count; i++) {
     const off = config.offsets[i];
@@ -1315,28 +1364,123 @@ function updateTerrainTint(weights) {
 }
 
 let lastLaneBiome = -1;
+let lastExitLaneMode = false;
 let lastSplitZone = -1;
 let lastSplitSide = -1;
 
+/** @returns {import('./engine/lanes.js').CarriageLayout} */
+function exitLaneLayout(dominant) {
+  const base = LANE_CONFIG[dominant] || LANE_CONFIG[0];
+  const lw = 4.75;
+  const offsets = [-lw * 0.5, lw * 0.5];
+  return {
+    id: base.id,
+    count: 2,
+    oncomingCount: 0,
+    biomeOncoming: 0,
+    way: /** @type {import('./engine/lanes.js').RoadWay} */ ('one-way'),
+    laneWidth: lw,
+    width: lw * 2,
+    offsets,
+    speeds: [60, 70],
+    startLane: 0,
+  };
+}
+
+function onExitPath(s) {
+  if (exitHold) return true;
+  const ci = carryInAt(s);
+  if (ci >= 0 && ci < 0.85) return true;
+  const at = layoutAt(s);
+  if (coursePick(at.zone) !== 1) return false;
+  const meters = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0) + s;
+  const d = meters - (at.nose + at.layout.offset);
+  if (d < at.layout.choiceAt - 8) return false;
+  // На всём carry съезд — 2-полосная дорога со своим конфигом.
+  const frame = frameAt(s);
+  if (frame.block && frame.block.kind === 'carry' && frame.block.built) {
+    return true;
+  }
+  return true;
+}
+
+const CARRY_IN_M = 100;
+
+/** 0..1 в начале зоны после взятого съезда предыдущей зоны, иначе -1. */
+function carryInAt(s) {
+  const at = layoutAt(s);
+  if (at.zone <= 0) return -1;
+  const meters = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0) + s;
+  const local = meters - at.zone * ZONE_M;
+  if (!(local >= 0 && local < CARRY_IN_M)) return -1;
+  if (!zoneTookExit(at.zone - 1)) return -1;
+  // Если эта зона сама едет по своему съезду — это уже её дорога, не carry-in.
+  if (coursePick(at.zone) === 1) {
+    const d = meters - (at.nose + at.layout.offset);
+    if (d >= at.layout.choiceAt - 8) return -1;
+  }
+  return local / CARRY_IN_M;
+}
+
+function riderAxisAt(s) {
+  const frame = frameAt(s);
+  if (exitHold) {
+    const center = exitRibbonCenter(frame.local);
+    if (center != null) return frame.origin + center;
+    const home = frameAt(G.playerS).origin;
+    return frame.origin + (Math.abs(frame.origin - home) < 0.5 ? heldCenter : 0);
+  }
+  // laneAnchor используется в roadMetersAt(..., riding=false)
+  const chosen = frame.chosen;
+  if (chosen === 1 && frame.block && frame.block.built && frame.block.kind === 'seal') {
+    const local = exitRibbonCenter(frame.local);
+    if (local != null) {
+      const t = frame.phase.kind === 'end' ? Math.max(0, Math.min(1, frame.phase.t)) : 1;
+      return roadCenter(frame) + local * t;
+    }
+  }
+  return roadCenter(frame);
+}
+
 function applyLaneConfig(dominant, playerS) {
   const base = LANE_CONFIG[dominant];
-  const cfg = carriageLanes(base, roadWayAt(playerS, exitHold));
+  const isExit = onExitPath(playerS);
+  const cfg = isExit ? exitLaneLayout(dominant) : carriageLanes(base, roadWayAt(playerS, exitHold));
+  const worldBefore = riderLatAt(playerS, G.laneOffset);
+  const modeChanged = isExit !== lastExitLaneMode;
+  const biomeChanged = dominant !== lastLaneBiome;
+
   G.laneCount = cfg.count;
   G.oncomingCount = cfg.oncomingCount;
   G.LANE_OFFSETS = cfg.offsets.slice();
   G.LANE_SPEEDS = cfg.speeds.slice();
-  G.ROAD_WIDTH = base.width;
+  const ciApply = carryInAt(playerS);
+  if (isExit && ciApply >= 0) {
+    G.ROAD_WIDTH = roadWidthAtS(playerS);
+  } else {
+    G.ROAD_WIDTH = isExit ? cfg.width : base.width;
+  }
   G.START_LANE = cfg.startLane;
-  if (dominant !== lastLaneBiome) {
+
+  if (biomeChanged || modeChanged) {
+    // Сохраняем мировую позицию байка при смене конфига/режима полос.
+    const newSpan = laneSpanAt(playerS);
+    const axis = riderAxisAt(playerS);
+    if (Number.isFinite(worldBefore) && newSpan > 0.001) {
+      G.laneOffset = (worldBefore - axis) / newSpan;
+    }
     lastLaneBiome = dominant;
-    // Полос стало меньше (4 → 2) или смещения другого масштаба (МКАД):
-    // плавно уводим байк на валидную полосу нового биома.
-    const outer = cfg.offsets[cfg.count - 1];
-    if (Number.isFinite(G.laneOffset) && Math.abs(G.laneOffset) > outer + 1.2) {
-      G.laneAssistTarget = nearestRunLane(G.laneOffset, cfg);
+    lastExitLaneMode = isExit;
+    const target = nearestRunLane(G.laneOffset, cfg);
+    if (Math.abs(G.laneOffset - target) > 0.35) {
+      G.laneAssistTarget = target;
     }
     if (G.remapTrafficLanes) G.remapTrafficLanes(cfg);
+  } else {
+    lastLaneBiome = dominant;
+    lastExitLaneMode = isExit;
   }
+
   const limits = logicalRoadLimits(localEdgesAt(playerS), laneDisplayScaleAtS(playerS), exitHold);
   G.roadEdgeMin = limits.min;
   G.roadEdgeMax = limits.max;
@@ -1352,7 +1496,9 @@ function updateScenery() {
  *  @returns {import('./engine/lanes.js').CarriageLayout} */
 function lanesAtS(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
-  return carriageLanes(LANE_CONFIG[biomeIndex(roadBiomeAtS(at))], roadWayAt(at));
+  const dom = biomeIndex(roadBiomeAtS(at));
+  if (onExitPath(at)) return exitLaneLayout(dom);
+  return carriageLanes(LANE_CONFIG[dom], roadWayAt(at));
 }
 
 /** Случайная попутная полоса биома в точке s. */
@@ -1452,9 +1598,18 @@ function updateBiome(dt) {
 
   updateExitHold();
   const chosenBefore = chosenZones.has(zone);
-  const previewSide = chosenBefore
+  let previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
     : (exitHold ? 1 : 0);
+  // На момент выбора считаем съезд взятым, если байк реально стоит на его ленте.
+  // Это страхует от потери захвата в кадр фиксации.
+  if (!chosenBefore && !previewSide) {
+    const frame = frameAt(G.playerS);
+    const span = laneSpanAt(G.playerS);
+    const world = riderPoint(frame, span);
+    const logical = world - frame.origin;
+    if (onExitRibbon(logical, frame.local)) previewSide = 1;
+  }
 
   // Выбор фиксируется в конце параллельного участка. До этого следующая
   // локация не переписывается: уход со съезда обратно на прямую остаётся прямым.
@@ -1575,6 +1730,7 @@ function resetBiomeRun() {
   ensureZonePlan(zone + 1);
   lastRunZone = zone;
   lastLaneBiome = -1;
+  lastExitLaneMode = false;
   lastSplitZone = -1;
   lastSplitSide = -1;
   exitHold = false;

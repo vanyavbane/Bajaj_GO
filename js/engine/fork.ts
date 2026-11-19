@@ -237,14 +237,35 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'seal') {
     const edge = branchEdges(road, FORK_SPREAD);
-    const pinch = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
-    const keep = 1 - pinch;
+    const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
+    // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
+    const away = t * FORK_SPREAD * 1.5;
     if (chosen === -1) {
-      [edge.rightInner, edge.rightOuter] = pinchSpan(edge.rightInner, edge.rightOuter, keep);
+      const w = exitWidth(edge) * (1 - t);
+      const mid = exitRibbonMid(edge) + away;
+      edge.rightInner = mid - w * 0.5;
+      edge.rightOuter = mid + w * 0.5;
     } else if (chosen === 1) {
-      [edge.leftOuter, edge.leftInner] = pinchSpan(edge.leftOuter, edge.leftInner, keep);
+      const w = Math.max(0, edge.leftInner - edge.leftOuter) * (1 - t);
+      const mid = (edge.leftOuter + edge.leftInner) * 0.5 - away;
+      edge.leftOuter = mid - w * 0.5;
+      edge.leftInner = mid + w * 0.5;
     }
     return edge;
+  }
+  if (block.kind === 'carry') {
+    // Съезд стал дорогой: 2-полосная лента той же ширины до конца зоны.
+    const eh = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
+    return {
+      leftOuter: -eh,
+      leftInner: eh,
+      rightInner: eh,
+      rightOuter: eh,
+    };
+  }
+  if (block.kind === 'road') {
+    // Прямая продолжается обычной дорогой.
+    return branchEdges(road, 0);
   }
   return branchEdges(road, 0);
 }
@@ -329,6 +350,8 @@ export interface RoadQuery {
   baseOrigin: number;
   carriedOrigin: number | null;
   endWeight?: number;
+  /** 0..1: переход от 2-полосной унаследованной дороги к полной. */
+  carryIn?: number;
 }
 
 function finiteOrigin(value: number): number {
@@ -363,7 +386,22 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   const afterFork = query.forkDistance >= EXIT_PLAN.length;
   const carried = chosen === 1 && stored != null && Number.isFinite(stored) && (onCarry || afterFork);
   const origin = finiteOrigin(carried && stored != null ? stored : query.baseOrigin);
-  const local = blockEdges(query.half, block, chosen, endWeight);
+  let local = blockEdges(query.half, block, chosen, endWeight);
+  // Продолжение съезда из предыдущей зоны: дорога плавно расширяется до полной.
+  if (!block && !carried) {
+    const ci = typeof query.carryIn === 'number' ? Math.max(0, Math.min(1, query.carryIn)) : 1;
+    if (ci < 1) {
+      const road = Math.max(0, Number.isFinite(query.half) ? query.half : 0);
+      const eh = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
+      const t = smooth01(ci);
+      local = {
+        leftOuter: -eh + (-road + eh) * t,
+        leftInner: eh + (road - eh) * t,
+        rightInner: eh + (road - eh) * t,
+        rightOuter: eh + (road - eh) * t,
+      };
+    }
+  }
   return {
     origin,
     local,
@@ -530,9 +568,9 @@ export function onExitRibbon(logical: number, edges: AsphaltEdges): boolean {
   return logical >= edges.rightInner - 0.35 && logical <= edges.rightOuter + 0.35;
 }
 
-/** Съезд ещё приклеен, и байк уже стоит на его асфальте. Иначе захват перенёс бы его скачком. */
+/** Байк стоит на асфальте съезда — захватываем его. */
 export function canGrabExit(logical: number, edges: AsphaltEdges): boolean {
-  return exitGap(edges) < ATTACHED_GAP && onExitRibbon(logical, edges);
+  return onExitRibbon(logical, edges);
 }
 
 /** Пока клин не открылся, уход влево отпускает съезд. */
@@ -583,6 +621,7 @@ export function exitRiderShift(logical: number, roadHalf: number, edges: Asphalt
  * Пока разъезд меньше ширины полотна, съезд ещё приклеен к правой кромке:
  * на него можно перестроиться. Дальше между ними открывается клин.
  * При нулевом разъезде правая лента имеет нулевую ширину.
+ * Съезд — отдельная лента шириной в 2 полосы.
  */
 export function branchEdges(half: number, spread: number, seam = FORK_SEAM): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
@@ -595,8 +634,9 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
       rightOuter: road,
     };
   }
-  const grow = Math.min(1, open / Math.max(road, 0.001));
-  const exitHalf = road * grow;
+  const targetHalf = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
+  const grow = Math.min(1, open / Math.max(targetHalf, 0.001));
+  const exitHalf = targetHalf * grow;
   const exitCenter = road + open;
   let rightInner = exitCenter - exitHalf;
   let rightOuter = exitCenter + exitHalf;
@@ -627,9 +667,9 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   if (onExit) {
     const joined = exitGap(edge) < ATTACHED_GAP;
     const center = exitRibbonCenter(edge) ?? 0;
-    // Пока асфальт один, можно вернуться на прямую. После клина дорога — сам съезд.
+    // Пока асфальт один, съезд — правая лента: держим байк на ней.
     if (joined) {
-      minEdge = (edge.leftOuter + RIBBON_MARGIN - center) / span;
+      minEdge = (edge.rightInner + RIBBON_MARGIN - center) / span;
       maxEdge = (edge.rightOuter - RIBBON_MARGIN - center) / span;
     } else {
       minEdge = (-exitHalf + RIBBON_MARGIN) / span;
@@ -638,18 +678,21 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   } else {
     minEdge = (edge.leftOuter + RIBBON_MARGIN) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN) / span;
-    const joined = exitGap(edge) < ATTACHED_GAP && exitWidth(edge) > RIDEABLE;
-    if (joined) maxEdge = Math.max(maxEdge, (edge.rightInner + 0.45) / span);
+    // Пока ленты действительно слиты, можно заехать на съезд.
+    if (exitWidth(edge) > RIDEABLE && exitGap(edge) <= 0.01) {
+      maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN) / span);
+    }
   }
   if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };
-  if (minEdge > -RIBBON_FLOOR) minEdge = -RIBBON_FLOOR;
-  if (maxEdge < RIBBON_FLOOR) maxEdge = RIBBON_FLOOR;
   if (maxEdge < minEdge) {
     const mid = (minEdge + maxEdge) * 0.5;
     return { min: mid, max: mid };
   }
   return { min: minEdge, max: maxEdge };
 }
+
+/** Ширина съезда: две полосы в одну сторону. */
+export const EXIT_LANE_HALF = 4.75;
 
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs: number, cityOuter: number, shoulder: ShoulderProfile): ShoulderLats {
