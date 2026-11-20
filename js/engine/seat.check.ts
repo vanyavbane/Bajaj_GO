@@ -4,7 +4,7 @@
  */
 import { exitCarryOrigin, exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
 import { exitCarriage } from './lanes.ts';
-import { mergeExitIntoRoad, seatWorld, stepSeat, type RiderSeat } from './seat.ts';
+import { mergeExitIntoRoad, rescaleSeat, seatWorld, stepSeat, type RiderSeat } from './seat.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -68,6 +68,11 @@ const stranded: RiderSeat = { kind: 'exit', lane: 6 };
 const landed = stepSeat(declined, stranded, span, false);
 assert(landed.kind === 'road', 'пропавшая лента возвращает байка на дорогу');
 assert(landed.lane < stranded.lane, 'байк садится на край прямой, а не остаётся в стороне');
+
+const widened = rescaleSeat({ kind: 'exit', lane: 1.2 }, 0.5, 0.8, 12);
+assert(widened.kind === 'exit', 'смена масштаба не снимает байка со съезда');
+assert(Math.abs(12 + 1.2 * 0.5 - (12 + widened.lane * 0.8)) < 1e-9, 'пока лента растёт, мир байка не ползёт');
+assert(rescaleSeat({ kind: 'road', lane: 3 }, NaN, 1, 0).lane === 3, 'первый кадр не пересчитывает полосу');
 
 const exitLanes = exitCarriage('city');
 assert(exitLanes.count === 2 && exitLanes.oncomingCount === 0 && exitLanes.way === 'one-way', 'съезд — две попутные полосы');

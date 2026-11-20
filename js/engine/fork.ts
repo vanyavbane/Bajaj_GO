@@ -556,11 +556,27 @@ export function worldEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number
 const RELEASE_INSET = 2.6;
 const ATTACHED_GAP = 2.4;
 const RIDEABLE = 2.4;
+/** Насколько раньше внутренней кромки точка уже считается лентой. Одна цифра и для сиденья, и для курса. */
+const RIBBON_ENTER = 0.35;
+
+/** Где начинается курс съезда: чуть раньше внутренней кромки. */
+export function exitCourseStart(edges: AsphaltEdges): number {
+  return edges.rightInner - RIBBON_ENTER;
+}
+
+/**
+ * Курс съезда. Лента должна быть достаточно широкой, чтобы по ней ехали.
+ * Справа от асфальта курс тот же: обочина едет вместе с лентой.
+ */
+export function followsExit(lateral: number, edges: AsphaltEdges): boolean {
+  if (!(exitWidth(edges) > RIDEABLE) || !Number.isFinite(lateral)) return false;
+  return lateral >= exitCourseStart(edges);
+}
 
 /** Точка уже на асфальте съезда, даже если клин между лентами уже открыт. */
 export function onExitRibbon(logical: number, edges: AsphaltEdges): boolean {
-  if (!(exitWidth(edges) > RIDEABLE) || !Number.isFinite(logical)) return false;
-  return logical >= edges.rightInner - 0.35 && logical <= edges.rightOuter + 0.35;
+  if (!followsExit(logical, edges)) return false;
+  return logical <= edges.rightOuter + RIBBON_ENTER;
 }
 
 /** Байк стоит на асфальте съезда — захватываем его. */

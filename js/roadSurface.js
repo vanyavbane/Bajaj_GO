@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, exitLaneOpen, exitLaneWorld, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, exitLaneOpen, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -244,18 +244,6 @@ export function initRoadSurface() {
   const dummy = new THREE.Object3D();
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
-  /** Сдвиг штрихов на ленту съезда. null, когда съезда нет или основные штрихи уже на нём. */
-  function exitDashShift(s) {
-    const edge = G.roadEdgesAt(s);
-    if (!exitLaneOpen(edge)) return null;
-    const main = toWorld(s, 0);
-    const exitCenter = exitRibbonMid(edge);
-    if (Math.abs(main - exitCenter) < 2.5) return null;
-    // Тот же сдвиг, что у машины: лента сходится, штрих не обрывается раньше неё.
-    const shift = exitLaneWorld(edge, main, main) - main;
-    return Math.abs(shift) < 0.05 ? null : shift;
-  }
-
   function updateDashes(playerS, dense) {
     const spacing = 11;
     const startDashS = Math.floor((playerS - 20) / spacing) * spacing;
@@ -270,21 +258,9 @@ export function initRoadSurface() {
     for (let k = 0; k < 32 && dense; k++) {
       const s = startDashS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
-      // На стыке биомов наборы штрихов перетекают: штрих укорачивается
-      // по весу и растворяется, вместо мгновенной смены числа полос.
-      // Пока съезд отдельная лента, тот же набор рисуется и на ней.
-      const shift = exitDashShift(s);
-      for (const mark of G.laneMarksAtS(s)) {
-        const lat = toWorld(s, mark.lat);
-        paint(s, lat, lat, mark.w);
-      }
-      // Лента съезда односторонняя: штрих есть и там, где на шоссе жёлтая ось.
-      if (shift != null) {
-        for (const mark of G.laneMarksAtS(s, 'one-way')) {
-          const lat = toWorld(s, mark.lat) + shift;
-          paint(s, lat, lat, mark.w);
-        }
-      }
+      // Штрих стоит на оси той проезжей части, чьи полосы его породили.
+      for (const mark of G.laneMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
+      for (const mark of G.ribbonMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
     }
     for (let i = used; i < MAX_DASHES; i++) dashMesh.setMatrixAt(i, hidden);
     dashMesh.count = used;

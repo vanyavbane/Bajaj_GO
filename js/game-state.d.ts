@@ -360,8 +360,9 @@ export interface GameState {
   splitAmountAtS: (s: number) => number;
   laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
   laneDisplayScaleAtS: (s: number) => number;
-  roadWayAt: (s: number, onRamp?: boolean) => RoadWay;
-  laneMarksAtS: (s: number, way?: RoadWay) => { lat: number; w: number }[];
+  roadWayAt: (s: number) => RoadWay;
+  laneMarksAtS: (s: number) => { lat: number; w: number }[];
+  ribbonMarksAtS: (s: number) => { lat: number; w: number }[];
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
   biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;

@@ -1,5 +1,5 @@
 import { BRANCH_YAW } from './branch.ts';
-import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid } from './fork.ts';
+import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
 import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, carriageWay, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
 import type { CoursePick, ForkCourse, VectorSpawn } from './vectors.ts';
 
@@ -96,6 +96,13 @@ const inGore = goreAt(gapMid);
 const chord = mainEdge.x + (exitEdge.x - mainEdge.x) * 0.5;
 assert(Math.abs(inGore.x - chord) < 0.5, 'клин лежит на отрезке между прямой и съездом');
 assert(Math.abs(inGore.x - gapMid) > 2, 'клин не остаётся на прямой, когда съезд уже повернул');
+const lip = goreAt(goreEdges.rightInner);
+const justOn = goreAt(goreEdges.rightInner - 0.3);
+const justOff = goreAt(goreEdges.rightInner - 0.5);
+assert(onExitRibbon(goreEdges.rightInner - 0.3, goreEdges) && followsExit(goreEdges.rightInner - 0.3, goreEdges), 'у кромки сиденье и курс оба на ленте');
+assert(!onExitRibbon(goreEdges.rightInner - 0.5, goreEdges) && !followsExit(goreEdges.rightInner - 0.5, goreEdges), 'в клине ни сиденье, ни курс ещё не на ленте');
+assert(followsExit(goreEdges.rightOuter + 2, goreEdges) && !onExitRibbon(goreEdges.rightOuter + 2, goreEdges), 'обочина едет курсом ленты, сиденье на ней не сидит');
+assert(Math.abs(justOn.x - lip.x) < Math.abs(justOff.x - lip.x), 'на асфальте ленты курс ленты, в клине ещё клин');
 const shut = { leftOuter: -10, leftInner: 10, rightInner: 32, rightOuter: 32.2 };
 const stayed = goreAt(20, shut);
 assert(Math.abs(stayed.x - 20) < 1, 'схлопнутая лента не утаскивает клин на ветку');

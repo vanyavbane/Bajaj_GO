@@ -115,7 +115,7 @@ export function readLanes(state: LaneSource | null | undefined): LaneConfig {
  * Штрихи между соседними полосами. Граница встречных и попутных сюда не входит:
  * её рисует жёлтая осевая. Смещения берутся из конфига, а не из «номер × ширина».
  */
-export function laneDashOffsets(offsets: number[] | null | undefined, oncomingCount: number): number[] {
+export function laneDashOffsets(offsets: readonly number[] | null | undefined, oncomingCount: number): number[] {
   const marks: number[] = [];
   if (!offsets || offsets.length < 2) return marks;
   const split = oncomingCount | 0;

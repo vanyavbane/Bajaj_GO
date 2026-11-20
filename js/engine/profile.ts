@@ -35,14 +35,14 @@ function evalWave(wave: Wave, s: number, deriv: number): number {
   return -wave.amp * w * w * cs;
 }
 
-function evalSum(waves: Wave[], s: number, deriv: number): number {
+function evalSum(waves: readonly Wave[], s: number, deriv: number): number {
   let value = 0;
   for (const wave of waves) value += evalWave(wave, s, deriv);
   return value;
 }
 
 /** Профиль с полями x/dx/ddx и y/dy/ddy, как ждут биом и камера. */
-export function makeProfile(xWaves: Wave[], yWaves: Wave[]): RoadProfile {
+export function makeProfile(xWaves: readonly Wave[], yWaves: readonly Wave[]): RoadProfile {
   return {
     x: (s) => evalSum(xWaves, s, 0),
     dx: (s) => evalSum(xWaves, s, 1),

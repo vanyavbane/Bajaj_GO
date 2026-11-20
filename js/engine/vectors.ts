@@ -6,7 +6,7 @@
  */
 
 import { BRANCH_YAW, frameFromSpline, stepBranch } from './branch.ts';
-import { courseLocal, exitRibbonMid } from './fork.ts';
+import { courseLocal, exitCourseStart, exitRibbonMid, followsExit } from './fork.ts';
 import type { AsphaltEdges, ExitClock } from './fork.ts';
 import type { FrozenYaw, PathFrame, RoadEmbed } from './branch.ts';
 import type { RoadWay } from './lanes.ts';
@@ -137,9 +137,9 @@ export function courseOwns(course: ForkCourse, pick: CoursePick, s: number, nose
 }
 
 /**
- * Какая проезжая часть в точке.
- * Лента съезда односторонняя. После того как она стала дорогой, она остаётся
- * односторонней до конца зоны и там вливается в двустороннюю дорогу биома.
+ * Какая проезжая часть у самого вектора курса.
+ * Живые полосы считает carriageAt по кадру. Этот интервал остаётся свойством вектора:
+ * лента односторонняя, после захвата она односторонняя до конца зоны.
  */
 export function carriageWay(args: {
   course: ForkCourse;
@@ -192,6 +192,19 @@ export interface EmbedQuery {
   turn: number;
   /** Этот съезд уже стал дорогой. */
   ownedHere: boolean;
+  /**
+   * Полосы ещё едут к ленте. `t` — тот же 0…1, что сдвигает laneAnchor.
+   * Точка у оси едет этим t, а не перескакивает на курс съезда у кромки.
+   * Нет поля — курс по-прежнему смотрит только на кромки.
+   */
+  hold?: LaneHold | null;
+}
+
+/** Ось полос на закрытии прямой. Курс везёт её тем же t. */
+export interface LaneHold {
+  t: number;
+  axis: number;
+  half: number;
 }
 
 interface PathRecord {
@@ -295,10 +308,12 @@ export function createVectorField() {
     parent: PathFrame;
     right: PathFrame | null;
     left: PathFrame | null;
+    hold: LaneHold | null;
   }
 
   function heading(query: Omit<EmbedQuery, 'lat'>, spline: (s: number) => SplineSample): Heading {
     const { s, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
+    const givenHold = query.hold;
     const width = edges.rightOuter - edges.rightInner;
     const gap = edges.rightInner - edges.leftInner;
     const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
@@ -324,6 +339,32 @@ export function createVectorField() {
       parent,
       right: branchAt(branches.find((item) => item.yaw > 0) ?? null),
       left: branchAt(branches.find((item) => item.yaw < 0) ?? null),
+      hold: givenHold && Number.isFinite(givenHold.t) ? givenHold : null,
+    };
+  }
+
+  /** От курса прямой к курсу ленты. Вес 0 — прямая, 1 — лента. */
+  function blendRibbon(head: Heading, frame: PathFrame, lat: number, weight: number): RoadEmbed {
+    const w = Math.max(0, Math.min(1, weight));
+    const from = onParent(head, lat);
+    const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
+    const bx = frame.x + frame.rx * along;
+    const bz = frame.z + frame.rz * along;
+    const fx = head.parent.fx + (frame.fx - head.parent.fx) * w;
+    const fz = head.parent.fz + (frame.fz - head.parent.fz) * w;
+    const len = Math.hypot(fx, fz) || 1;
+    const nfx = fx / len;
+    const nfz = fz / len;
+    return {
+      x: from.x + (bx - from.x) * w,
+      y: head.y,
+      z: from.z + (bz - from.z) * w,
+      rx: -nfz,
+      rz: nfx,
+      fx: nfx,
+      fz: nfz,
+      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * w,
+      branched: w > 0.04,
     };
   }
 
@@ -336,32 +377,28 @@ export function createVectorField() {
   }
 
   /** Точка ленты съезда: внешний край отходит первым, потом вся лента. */
-  function ribbonPose(head: Heading, frame: PathFrame, lat: number, outer: number): RoadEmbed {
+  function ribbonPose(head: Heading, path: PathFrame, lat: number, outer: number): RoadEmbed {
     const weight = head.peel * (head.separated > 0.75 ? 1 : Math.max(head.separated, outer));
-    const from = onParent(head, lat);
-    const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
-    const bx = frame.x + frame.rx * along;
-    const bz = frame.z + frame.rz * along;
-    const fx = head.parent.fx + (frame.fx - head.parent.fx) * weight;
-    const fz = head.parent.fz + (frame.fz - head.parent.fz) * weight;
-    const len = Math.hypot(fx, fz) || 1;
-    const nfx = fx / len;
-    const nfz = fz / len;
-    return {
-      x: from.x + (bx - from.x) * weight,
-      y: head.y,
-      z: from.z + (bz - from.z) * weight,
-      rx: -nfz,
-      rz: nfx,
-      fx: nfx,
-      fz: nfz,
-      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * weight,
-      branched: weight > 0.04,
-    };
+    return blendRibbon(head, path, lat, weight);
   }
 
   function place(head: Heading, lat: number): RoadEmbed {
-    const onRight = !head.ownedHere && head.width > 0.8 && lat >= head.rightInner - 0.2;
+    const hold = head.hold;
+    const branch = head.right;
+    if (hold && branch && head.width > 0.8) {
+      const distAxis = Math.abs(lat - hold.axis);
+      const distRibbon = Math.abs(lat - head.ribbon);
+      if (distAxis <= hold.half && distAxis < distRibbon) {
+        return blendRibbon(head, branch, lat, hold.t);
+      }
+    }
+    const ribbonEdge = {
+      leftOuter: head.leftOuter,
+      leftInner: head.leftInner,
+      rightInner: head.rightInner,
+      rightOuter: head.rightInner + head.width,
+    };
+    const onRight = !head.ownedHere && head.right != null && followsExit(lat, ribbonEdge);
     const onLeft = !head.ownedHere && head.left && lat <= head.leftOuter + 0.2;
     const exitFrame = onRight ? head.right : onLeft ? head.left : null;
     if (exitFrame) {
@@ -372,7 +409,7 @@ export function createVectorField() {
     }
     const gap = head.rightInner - head.leftInner;
     const open = Math.max(0, Math.min(1, head.width / 4));
-    if (!head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < head.rightInner - 0.2) {
+    if (!head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < exitCourseStart(ribbonEdge)) {
       const u = (lat - head.leftInner) / gap;
       const main = onParent(head, head.leftInner);
       const exitEdge = ribbonPose(head, head.right, head.rightInner, 0);

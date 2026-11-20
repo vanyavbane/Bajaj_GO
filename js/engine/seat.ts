@@ -47,6 +47,21 @@ export function seatWorld(frame: RoadFrame, seat: RiderSeat, span: number): numb
 }
 
 /**
+ * Та же мировая точка при новом масштабе полосы.
+ * Пока лента растёт, масштаб меняется каждый кадр. Полоса пересчитывается,
+ * мир байка остаётся.
+ * `from` не число и не ноль — масштаб ещё не запомнен, полоса не трогается.
+ */
+export function rescaleSeat(seat: RiderSeat, from: number, to: number, axis: number): RiderSeat {
+  const toScale = spanOf(to);
+  const fromScale = Number.isFinite(from) && from !== 0 ? from : toScale;
+  if (fromScale === toScale) return seat;
+  const origin = Number.isFinite(axis) ? axis : 0;
+  const lane = Number.isFinite(seat.lane) ? seat.lane : 0;
+  return { kind: seat.kind, lane: (origin + lane * fromScale - origin) / toScale };
+}
+
+/**
  * Чужой кадр не тащит ось съезда, если ленты там нет и центр уже другой.
  * Пока центр тот же, сиденье остаётся съездом: вливание делает stepSeat.
  */

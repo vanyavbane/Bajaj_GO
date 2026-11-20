@@ -43,6 +43,19 @@ const DISCOVERY_WARNING = 'AdManager: не удалось обнаружить �
   + 'Создайте AdManager/manifest.json со списком файлов (см. AdManager/README.txt). '
   + 'Игра продолжит работу с процедурной рекламой.';
 
+const FILE_ORIGIN_WARNING = 'AdManager: страница открыта через file://. '
+  + 'Браузер не читает AdManager/manifest.json и папки. '
+  + 'Запустите игру через HTTP (npm run dev или python -m http.server в dist/). '
+  + 'Пока остаётся процедурная реклама.';
+
+function openedAsFile() {
+  try {
+    return location.protocol === 'file:';
+  } catch {
+    return false;
+  }
+}
+
 /** @typedef {import('./game-state.d.ts').ExternalAdProvider} ExternalAdProvider */
 /** @typedef {import('./game-state.d.ts').ExternalAdBanner} ExternalAdBanner */
 /** @typedef {import('./game-state.d.ts').AdManagerSlot} AdManagerSlot */
@@ -372,6 +385,11 @@ async function discoverFromListing() {
 
 /** @returns {Promise<DiscoveryResult>} */
 async function discover() {
+  // fetch к file:// браузер режет CORS и пишет ошибку в консоль ещё до catch.
+  if (openedAsFile()) {
+    return { source: 'fallback', billboards: [], overheads: [] };
+  }
+
   const cached = readDiscoveryCache();
   if (cached) return cached;
 
@@ -396,7 +414,7 @@ async function discover() {
 function warnDiscoveryOnce() {
   if (state.warnedDiscovery) return;
   state.warnedDiscovery = true;
-  console.warn(DISCOVERY_WARNING);
+  console.warn(openedAsFile() ? FILE_ORIGIN_WARNING : DISCOVERY_WARNING);
 }
 
 function readStorage(key) {

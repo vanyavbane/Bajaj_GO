@@ -71,7 +71,7 @@ export function initForest() {
   }, 1, 2);
 
   const mats = {
-    birchTrunk: new THREE.MeshLambertMaterial({ map: birchTex, roughness: 0.9, metalness: 0.02 }),
+    birchTrunk: new THREE.MeshLambertMaterial({ map: birchTex }),
     birchCrown: new THREE.MeshLambertMaterial({ color: 0x6fae4e, flatShading: true }),
     spruceTrunk: new THREE.MeshLambertMaterial({ color: 0x4b382a, flatShading: true }),
     spruceCone: new THREE.MeshLambertMaterial({ color: 0x28593a, flatShading: true }),

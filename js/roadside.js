@@ -319,8 +319,11 @@ export function initRoadside() {
       pR.position.set(10.3, 3.8, 0);
       const beam = new THREE.Mesh(new THREE.BoxGeometry(21.2, 0.35, 0.35), G.M.chrome);
       beam.position.set(0, 7.4, 0);
+      // Первый кадр — указатель города. updateRoadside сразу подставит
+      // табличку текущего биома из biomeSignTextures.
+      const citySigns = biomeSignTextures[0];
       const boardMat = new THREE.MeshStandardMaterial({
-        map: overheadSignTextures[Math.floor(i / 6) % overheadSignTextures.length],
+        map: citySigns[Math.floor(i / 6) % citySigns.length],
         roughness: 0.45
       });
       const board = new THREE.Mesh(new THREE.BoxGeometry(9.6, 2.4, 0.22), boardMat);
