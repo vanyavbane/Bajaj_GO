@@ -19,7 +19,7 @@ export const TRAFFIC_MODELS = [
 
 export type TrafficModel = (typeof TRAFFIC_MODELS)[number];
 
-export type BiomeId = 'city' | 'field' | 'forest' | 'mountain' | 'mkad';
+export type BiomeId = 'city' | 'field' | 'forest' | 'mountain' | 'mkad' | 'embankment';
 
 export interface BiomeTraffic {
   count: number;
@@ -64,7 +64,7 @@ export interface RoadSample {
   ddy: number;
 }
 
-const BIOME_IDS = ['city', 'field', 'forest', 'mountain', 'mkad'] as const satisfies readonly BiomeId[];
+const BIOME_IDS = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment'] as const satisfies readonly BiomeId[];
 
 function defineBiome<const Speeds extends readonly number[]>(def: {
   id: BiomeId;
@@ -184,15 +184,33 @@ export const BIOMES: readonly BiomeDef[] = [
       pref: ['sedan', 'crossover', 'suv', 'taxi', 'hatchback', 'bus', 'gazelle_van', 'kamaz', 'truck', 'gazelle_flatbed', 'qute_traffic'],
     },
   }),
+  defineBiome({
+    id: 'embankment',
+    name: 'НАБЕРЕЖНАЯ',
+    icon: '🌉',
+    sub: 'НЕВА · КЛАССИЦИЗМ · ПАРАПЕТ И ФОНАРИ',
+    short: 'Набережная',
+    accent: 0x7fb3d5,
+    lanes: 4,
+    oncoming: 2,
+    laneWidth: 4.75,
+    speeds: [40, 60, 70, 55],
+    sceneryScale: 1,
+    traffic: {
+      count: 18,
+      pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck'],
+    },
+  }),
 ];
 
 /** Куда ведёт развилка: левый слот и правый. Свой биом в паре не стоит. */
 export const BIOME_NEXT: Record<BiomeId, readonly [BiomeId, BiomeId]> = {
-  city: ['mountain', 'mkad'],
+  city: ['embankment', 'mkad'],
   field: ['city', 'forest'],
   forest: ['field', 'mountain'],
   mountain: ['city', 'forest'],
   mkad: ['city', 'field'],
+  embankment: ['city', 'field'],
 };
 
 function assertCatalog(): void {

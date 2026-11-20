@@ -530,6 +530,15 @@ export function initRoadSurface() {
       const sh = G.shoulder;
       const left = shoulderLats(farAsphalt(s, -1), cityOuter, sh);
       const right = shoulderLats(farAsphalt(s, 1), cityOuter, sh);
+      // Набережная: справа плоская пешеходная зона и спуск к воде.
+      const embW = Math.max(0, Math.min(1, G.embankmentWeightAtS ? G.embankmentWeightAtS(s) : 0));
+      const eL = (a, b) => a + (b - a) * embW;
+      const rLip = eL(right.lip, farAsphalt(s, 1));
+      const rBerm = eL(right.berm, 17);
+      const rFar = eL(right.far, 30);
+      const rLipY = eL(sh.lipY, 0.08);
+      const rBermY = eL(sh.bermY, 0.08);
+      const rFarY = eL(sh.farY, -6);
       const at = (side, fromCenter, height) => {
         const p = G.embedRoad(s, slopeLat(s, side, fromCenter));
         return [p.x, cy + height, p.z];
@@ -538,9 +547,9 @@ export function initRoadSurface() {
       posL.setXYZ(idx,     ...at(-1, left.far, sh.farY));
       posL.setXYZ(idx + 1, ...at(-1, left.berm, sh.bermY));
       posL.setXYZ(idx + 2, ...at(-1, left.lip, sh.lipY));
-      posR.setXYZ(idx,     ...at(1, right.lip, sh.lipY));
-      posR.setXYZ(idx + 1, ...at(1, right.berm, sh.bermY));
-      posR.setXYZ(idx + 2, ...at(1, right.far, sh.farY));
+      posR.setXYZ(idx,     ...at(1, rLip, rLipY));
+      posR.setXYZ(idx + 1, ...at(1, rBerm, rBermY));
+      posR.setXYZ(idx + 2, ...at(1, rFar, rFarY));
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;

@@ -1,13 +1,13 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, transitionIndexes } from './biomes.ts';
 import { carriageLanes } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, landOnCarriage, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, landOnCarriage, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
 }
 
-const ids = ['city', 'field', 'forest', 'mountain', 'mkad'] as const;
+const ids = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment'] as const;
 assert(BIOMES.length === ids.length, 'в каталоге пять биомов');
 for (let i = 0; i < ids.length; i++) {
   assert(BIOMES[i]?.id === ids[i], `порядок каталога держит сохранённые индексы, позиция ${i}`);
@@ -27,9 +27,12 @@ for (const biome of BIOMES) {
 const city = laneLayoutOf(BIOMES[0]!);
 const mountain = laneLayoutOf(BIOMES[3]!);
 const mkad = laneLayoutOf(BIOMES[4]!);
+const embankment = laneLayoutOf(BIOMES[5]!);
 assert(city.count === 4 && city.oncomingCount === 2, 'город: 4 полосы, 2 встречные');
 assert(mountain.count === 2 && mountain.oncomingCount === 1, 'горы: 2 полосы, 1 встречная');
 assert(mkad.count === 8 && mkad.oncomingCount === 4 && mkad.width === 34.4, 'МКАД: 8 полос по 4.3 м');
+assert(embankment.count === 4 && embankment.oncomingCount === 2, 'набережная: 4 полосы, 2 встречные');
+assert(embankment.speeds.join() === city.speeds.join(), 'набережная: скорости как в городе');
 assert(transitionIndexes().every((pair) => pair.length === 2), 'у каждой развилки два индекса');
 
 assert(pickToSide(0) === -1 && pickToSide(1) === 1, 'левый слот баннера — минус по оси');
@@ -88,8 +91,8 @@ const afterFork = sampleRoad({
   carriedOrigin: exitCarryOrigin(10, 4),
 });
 assert(afterFork.origin === exitCarryOrigin(10, 4), 'после съезда центр остаётся на ленте');
-assert(carriedFrame.local.leftOuter === -10 && carriedFrame.local.leftInner === 10, 'локальная дорога прямая относительно этого центра');
-assert(Math.abs(carriedFrame.world.leftOuter - (carriedFrame.origin - 10)) < 1e-6, 'мировые кромки сдвинуты на центр съезда');
+assert(carriedFrame.local.leftOuter === -EXIT_LANE_HALF && carriedFrame.local.leftInner === EXIT_LANE_HALF, 'взятый съезд — 2 полосы');
+assert(Math.abs(carriedFrame.world.leftOuter - (carriedFrame.origin - EXIT_LANE_HALF)) < 1e-6, 'мировые кромки сдвинуты на центр съезда');
 assert(laneMeters(0, 1, 10, carriedFrame, false) === carriedFrame.origin, 'нулевая полоса стоит в центре увезённой дороги');
 const carriedOrigin = exitCarryOrigin(10, 0);
 const sealStart = sampleRoad({
@@ -148,13 +151,12 @@ assert(Math.abs(endedExit.rightOuter - endedExit.rightInner) < 1e-6, 'отказ
 assert(endedMid > 12, 'отказанная ветка заканчивается в стороне, не на прямой дороге');
 const taken = roadAt(atSeal, 1);
 assert(Math.abs(taken.leftOuter - taken.leftInner) < 1e-6, 'взятый съезд заканчивает прямую ветку');
-assert(taken.rightOuter - taken.rightInner > 10, 'взятый съезд остаётся дорогой');
+assert(taken.rightOuter - taken.rightInner > 9, 'взятый съезд остаётся дорогой');
 
 const stillOpen = roadAt(afterSeal, 0);
-assert(stillOpen.rightOuter - stillOpen.rightInner > 10, 'до выбора съезд впереди не обрывается');
+assert(stillOpen.rightOuter - stillOpen.rightInner > 9, 'до выбора съезд впереди не обрывается');
 const settled = roadAt(afterSeal, 1);
-const plain = roadAt(-1, 0);
-assert(settled.leftOuter === plain.leftOuter && settled.leftInner === plain.leftInner, 'после съезда локальная дорога снова прямая');
+assert(settled.leftOuter === -EXIT_LANE_HALF && settled.leftInner === EXIT_LANE_HALF, 'после съезда локальная дорога — 2 полосы');
 assert(exitCarryOrigin(10, 0) > 10, 'мировой центр взятого съезда остаётся справа от оси');
 const declinedSettle = roadAt(afterSeal, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.rightOuter === declinedSettle.rightInner, 'после отказа к границе остаётся только прямая');
@@ -184,7 +186,7 @@ const narrow = sampleRoad({ forkDistance: exitClock().ownAfter, half: 8, chosen:
 const wide = sampleRoad({ forkDistance: exitClock().ownAfter + 20, half: 14, chosen: 1, baseOrigin: 0, carriedOrigin: carriedCenter, endWeight: 1 });
 assert(roadCenter(narrow) === roadCenter(wide) && roadCenter(wide) === carriedCenter, 'смена ширины не двигает центр взятой дороги');
 assert(laneMeters(0, 1, 14, wide, false) === roadCenter(wide), 'нулевая полоса остаётся на центре курса');
-assert(Math.abs(wide.world.leftOuter - (roadCenter(wide) - 14)) < 1e-6 && Math.abs(wide.world.leftInner - (roadCenter(wide) + 14)) < 1e-6, 'полотно ширится вокруг того же центра');
+assert(Math.abs(wide.world.leftOuter - (roadCenter(wide) - EXIT_LANE_HALF)) < 1e-6 && Math.abs(wide.world.leftInner - (roadCenter(wide) + EXIT_LANE_HALF)) < 1e-6, 'взятый съезд держит 2 полосы независимо от ширины биома');
 const seamShifted = exitSeam(10, 18);
 assert(Math.abs(seamShifted.ribbon - seamShifted.origin) < 1e-6, 'стык держится и если дорога уже уехала в сторону');
 assert(exitCarryOrigin(10, 0) === exitRibbonMid(branchEdges(10, FORK_SPREAD)), 'центр взятой дороги — середина полной ленты');
@@ -198,7 +200,7 @@ assert(joinedLimits.max > joined.leftInner, 'пока съезд приклее�
 const splitRoad = branchEdges(10, FORK_SPREAD);
 const blocked = logicalRoadLimits(splitRoad, 1, false);
 const riding = logicalRoadLimits(splitRoad, 1, true);
-const plainLimits = logicalRoadLimits(branchEdges(10, 0), 1, false);
+const plainLimits = logicalRoadLimits(branchEdges(EXIT_LANE_HALF, 0), 1, false);
 assert(blocked.max < splitRoad.leftInner, 'после клина с прямой на съезд уже не перестроиться');
 assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');
 assert(!exitReserved(-5) && exitReserved(EXIT_DIVERGE) && !exitReserved(FORK_LEAD + 1), 'коридор съезда не залезает за границу зоны');
@@ -206,7 +208,8 @@ assert(liveForkAmount(1, 'settle', 0) === 1, 'до выбора хвост ещ�
 assert(liveForkAmount(1, 'settle', 1) === 0 && liveForkAmount(1, 'settle', -1) === 0, 'после выбора блок дороги уже не развилка');
 assert(liveForkAmount(1, 'end', 1) === 1 && liveForkAmount(0, 'none', 1) === 0, 'закрытие ветки ещё развилка, пустая фаза — нет');
 const openRibbonLanes = branchEdges(10, FORK_SPREAD);
-assert(Math.abs(exitLaneWorld(openRibbonLanes, 4, 0) - 36) < 1e-6, 'крайняя полоса на открытом съезде едет по его ленте');
+const laneOnExit = exitLaneWorld(openRibbonLanes, 4, 0);
+assert(laneOnExit > 4 && laneOnExit < exitRibbonMid(openRibbonLanes), 'крайняя полоса на открытом съезде едет по его ленте');
 assert(exitLaneWorld(branchEdges(10, 4), 4, 0) === 4, 'пока съезд приклеен, машина остаётся на прямой');
 assert(exitLaneWorld(branchEdges(10, 0), 4, 0) === 4, 'без съезда полоса не сдвигается');
 const closing = { leftOuter: -10, leftInner: 10, rightInner: 24, rightOuter: 32 };

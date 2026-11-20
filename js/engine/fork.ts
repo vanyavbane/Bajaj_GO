@@ -275,11 +275,6 @@ export function exitReserved(d: number): boolean {
   return d > 0.4 && d < FORK_LEAD - 0.4;
 }
 
-function pinchSpan(from: number, to: number, keep: number): [number, number] {
-  const mid = (from + to) * 0.5;
-  return [mid + (from - mid) * keep, mid + (to - mid) * keep];
-}
-
 /** Середина правой ленты. Одна формула и для полос, и для курса. */
 export function exitRibbonMid(edges: AsphaltEdges): number {
   return (edges.rightInner + edges.rightOuter) * 0.5;
@@ -650,8 +645,6 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
     rightOuter,
   };
 }
-
-const RIBBON_FLOOR = 2.2;
 
 /**
  * Пределы руля в координатах полосы вокруг центра той дороги, по которой едут.

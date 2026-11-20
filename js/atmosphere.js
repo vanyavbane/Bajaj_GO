@@ -104,6 +104,13 @@ export function initAtmosphere() {
       bot: new THREE.Color(0xf6ece2), fog: new THREE.Color(0xe4ded6),
       cloud: new THREE.Color(0xf1eae1),
       fogMul: 1.06, cloudY: -2, cloudScale: 1.08
+    },
+    {
+      // Набережная: ясный летний день, светлый простор над рекой.
+      top: new THREE.Color(0xd8ecff), mid: new THREE.Color(0xeaf6ff),
+      bot: new THREE.Color(0xf4fbff), fog: new THREE.Color(0xdceef8),
+      cloud: new THREE.Color(0xffffff),
+      fogMul: 0.72, cloudY: 8, cloudScale: 1.04
     }
   ];
 

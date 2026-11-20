@@ -33,6 +33,7 @@ const SCENERY_SPAN = SCENERY_SLOTS * SCENERY_STEP;
 
 const CITY = biomeIndexOf('city');
 const MKAD = biomeIndexOf('mkad');
+const EMBANKMENT = biomeIndexOf('embankment');
 const TRANSITIONS = transitionIndexes();
 
 /* -------------------------------------------------------------------------
@@ -51,13 +52,20 @@ const PROFILES = [
     [sin(18, 0.006), cos(10, 0.0027), sin(6, 0.0011)],
     [sin(1.2, 0.008), cos(0.7, 0.0042)]
   ),
+  // Горы: узкий серпантин. Частые сильные изгибы в плане и заметный
+  // перепад высот — дорога идёт террасами по склону, а не прямо вверх.
   makeProfile(
-    [sin(30, 0.019), sin(16, 0.0081), cos(7, 0.0023)],
-    [sin(7.4, 0.0078), cos(4.6, 0.0039), sin(2.0, 0.0021)]
+    [sin(46, 0.028), sin(22, 0.013), cos(9, 0.0045)],
+    [sin(30, 0.006), cos(14, 0.010), sin(6, 0.019)]
   ),
   makeProfile(
     [sin(70, 0.0045), sin(30, 0.0018), cos(12, 0.0009)],
     [sin(1.15, 0.0022), cos(0.75, 0.0011)]
+  ),
+  // Набережная: почти прямая панорамная дорога вдоль реки.
+  makeProfile(
+    [sin(18, 0.0032), cos(9, 0.0013)],
+    [sin(0.5, 0.006), cos(0.3, 0.003)]
   )
 ];
 
@@ -66,7 +74,8 @@ const TERRAIN_COLORS = [
   new THREE.Color(0x6f6a36), // field
   new THREE.Color(0x1e3d29), // forest
   new THREE.Color(0x5a6066), // mountain
-  new THREE.Color(0x3a4048)  // mkad
+  new THREE.Color(0x3a4048), // mkad
+  new THREE.Color(0x5a6670)  // embankment
 ];
 if (PROFILES.length !== BIOMES.length || TERRAIN_COLORS.length !== BIOMES.length) {
   throw new Error('Профиль и цвет земли должны идти в том же порядке и количестве, что каталог биомов');
@@ -1193,12 +1202,41 @@ function buildMkadVariant(variant) {
   return { group: g, lat, spin: null };
 }
 
+function buildEmbankmentVariant(variant) {
+  // Набережная строится в js/embankment.js. Здесь — только немного зелени
+  // и камней между домами, чтобы слот не оставался пустым.
+  const g = new THREE.Group();
+  let lat = 30;
+  if (variant === 0) {
+    lat = 34;
+    addBox(g, MAT.bush, 2.4, 1.6, 2.0, 0, 0.8, 0);
+    addBox(g, MAT.bushDark, 1.8, 1.2, 1.6, 2.0, 0.6, 1.2);
+  } else if (variant === 1) {
+    lat = 38;
+    addBox(g, MAT.rock, 3.0, 1.8, 2.6, 0, 0.9, 0).rotation.y = 0.4;
+    addBox(g, MAT.bush, 1.6, 1.0, 1.4, 2.4, 0.5, 1.0);
+  } else if (variant === 2) {
+    lat = 32;
+    addPine(g, 0, 0, 8.0, [MAT.pineDark, MAT.pineMid]);
+    addPine(g, 3.0, 1.4, 6.2, [MAT.pineMid, MAT.pineDark]);
+  } else if (variant === 3) {
+    lat = 36;
+    addBox(g, MAT.moss, 5.0, 0.3, 4.0, 0, 0.15, 0);
+    addBox(g, MAT.bush, 1.8, 1.2, 1.6, 2.2, 0.6, 1.0);
+  } else {
+    lat = 30;
+    addBox(g, MAT.bushDark, 2.0, 1.4, 1.8, 0, 0.7, 0);
+  }
+  return { group: g, lat, spin: null };
+}
+
 function buildVariant(biome, variant) {
   const id = BIOMES[biome] && BIOMES[biome].id;
   if (id === 'field') return buildFieldVariant(variant);
   if (id === 'forest') return buildForestVariant(variant);
   if (id === 'mountain') return buildMountainVariant(variant);
   if (id === 'mkad') return buildMkadVariant(variant);
+  if (id === 'embankment') return buildEmbankmentVariant(variant);
   throw new Error(`Для биома «${id || biome}» нет пула декораций: город собирается в roadside.js`);
 }
 
@@ -1215,6 +1253,11 @@ const SHOULDER = {
 };
 
 /** Высота земли в мировой точке lat. Профиль тот же, что у откоса этой кромки. */
+function smooth01(v) {
+  const t = Math.max(0, Math.min(1, v));
+  return t * t * (3 - 2 * t);
+}
+
 function groundOffset(lat, s) {
   const frame = frameAt(s);
   const side = lat < frame.origin ? -1 : 1;
@@ -1222,7 +1265,23 @@ function groundOffset(lat, s) {
   const fromCenter = Math.abs(edge - frame.origin);
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
   const lats = shoulderLats(fromCenter, cityOuter, SHOULDER);
-  return shoulderHeight(Math.abs(lat - frame.origin), lats, SHOULDER);
+  const dist = Math.abs(lat - frame.origin);
+  // Набережная: справа пологая пешеходная зона и спуск к воде вместо откоса.
+  let embW = 0;
+  if (side > 0 && EMBANKMENT >= 0) {
+    embW = smooth01(((biomeWeightsAtS(s)[EMBANKMENT] || 0) - 0.02) / 0.4);
+  }
+  if (embW > 0.01) {
+    const mix = (a, b) => G.lerp(a, b, embW);
+    const eLats = { lip: mix(lats.lip, fromCenter), berm: mix(lats.berm, 17), far: mix(lats.far, 30) };
+    const eShoulder = Object.assign({}, SHOULDER, {
+      lipY: mix(SHOULDER.lipY, 0.08),
+      bermY: mix(SHOULDER.bermY, 0.08),
+      farY: mix(SHOULDER.farY, -6)
+    });
+    return shoulderHeight(dist, eLats, eShoulder);
+  }
+  return shoulderHeight(dist, lats, SHOULDER);
 }
 
 /* ---------- Состояние, баннеры и HUD ---------- */
@@ -1708,6 +1767,9 @@ function updateBiome(dt) {
   }
 
   updateScenery();
+  if (G.updateForest) G.updateForest();
+  if (G.updateMountain) G.updateMountain();
+  if (G.updateEmbankment) G.updateEmbankment(dt);
 }
 
 /** Сброс мира на старте заезда: биом продолжается с сохранённого места. */
@@ -1745,6 +1807,9 @@ function resetBiomeRun() {
   hideSplitBanner();
   G.splitState = null;
   if (G.resetBiomeScenery) G.resetBiomeScenery();
+  if (G.resetForest) G.resetForest();
+  if (G.resetMountain) G.resetMountain();
+  if (G.resetEmbankment) G.resetEmbankment();
   applyLaneConfig(zoneBiomeAt(zone), G.playerS);
 }
 
@@ -1806,6 +1871,7 @@ export function initBiome() {
   G.biomeRoadDDY = biomeRoadDDY;
   G.cityWeightAtS = cityWeightAtS;
   G.mkadWeightAtS = mkadWeightAtS;
+  G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
