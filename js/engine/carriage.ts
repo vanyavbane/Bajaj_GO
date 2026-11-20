@@ -8,6 +8,7 @@
  */
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
+import type { RouteChoice } from './route.ts';
 import { carriageLanes, exitCarriage, laneDashOffsets, type CarriageLayout, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
@@ -160,29 +161,32 @@ export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage |
   return ribbon;
 }
 
-/** Пока клин уже этого, крайняя попутная ещё успевает уйти на ленту. Дальше на неё не садятся. */
-export const RIBBON_JOIN_GAP = 8;
-
 /**
- * Машина на боковой ленте.
- * Лента держит её, только пока сама ещё сбоку. Когда съезд стал дорогой,
- * полосы машины уже его: второй сдвиг к ленте сдвинул бы их ещё раз.
- * Закрытая лента машину не держит.
+ * Крайняя попутная принадлежит боковой ленте, пока та отдельная дорога.
+ * Прямая её отпускает. Когда съезд сам стал дорогой, полосы машины уже его.
  */
 export function carFollowsRibbon(args: {
   phase: CarriagePhase;
+  choice: RouteChoice;
   open: boolean;
   following: boolean;
   changingLane: boolean;
   lane: number;
   lastLane: number;
   runLanes: number;
-  gap: number;
 }): boolean {
-  if (args.phase !== 'ribbon' || !args.open) return false;
+  if (args.choice === 'straight' || args.phase !== 'ribbon' || !args.open) return false;
   if (args.following) return true;
   if (args.changingLane || args.runLanes < 1 || args.lane !== args.lastLane) return false;
-  return args.gap < RIBBON_JOIN_GAP;
+  return true;
+}
+
+/** Мир крайней полосы ленты. Машина съезда стоит на ней, не на шоссе. */
+export function ribbonCarLat(ribbon: LiveCarriage): number {
+  const offsets = ribbon.lanes.offsets;
+  const offset = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
+  const scale = Number.isFinite(ribbon.scale) && ribbon.scale !== 0 ? ribbon.scale : 1;
+  return ribbon.axis + offset * scale;
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */

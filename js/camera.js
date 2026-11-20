@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { button, heading, panel } from '@bajajgo/design';
+import { button, heading, panel, slider } from '@bajajgo/design';
 import { bikePaint, isQuteBody, isYuraType } from './engine/vehicle.js';
 import { grouped, rubles, runDistance } from './engine/money.js';
 import { G } from './state.js';
@@ -652,22 +652,28 @@ export function initCamera() {
               Профиль камеры хранится отдельно для каждого мотоцикла и восстанавливается при его выборе.
               Вид от третьего лица фиксированный.
             </div>
-            <div class="cam-slider-block">
-              <div class="cam-slider-head">
-                <span>УГОЛ ОБЗОРА (FOV)</span>
-                <b><span id="cam-fov-val">${Math.round(draftCamFov)}</span>°</b>
-              </div>
-              <input type="range" id="cam-fov" min="${CAM_FOV_MIN}" max="${CAM_FOV_MAX}" step="1" value="${Math.round(draftCamFov)}">
-              <div class="cam-slider-hint">${CAM_FOV_MIN}° — узкий кадр · ${CAM_FOV_MAX}° — широкий обзор</div>
-            </div>
-            <div class="cam-slider-block">
-              <div class="cam-slider-head">
-                <span>ВЫСОТА КАМЕРЫ</span>
-                <b><span id="cam-height-val">${draftCamHeight.toFixed(2)}</span> м</b>
-              </div>
-              <input type="range" id="cam-height" min="${CAM_HEIGHT_MIN}" max="${CAM_HEIGHT_MAX}" step="0.05" value="${draftCamHeight}">
-              <div class="cam-slider-hint">${CAM_HEIGHT_MIN.toFixed(2)} м — ниже · +${CAM_HEIGHT_MAX.toFixed(2)} м — выше</div>
-            </div>
+            ${slider({
+              id: 'cam-fov',
+              valueId: 'cam-fov-val',
+              label: 'Угол обзора (FOV)',
+              min: CAM_FOV_MIN,
+              max: CAM_FOV_MAX,
+              step: 1,
+              value: Math.round(draftCamFov),
+              suffix: '°',
+              hint: `${CAM_FOV_MIN}° — узкий кадр · ${CAM_FOV_MAX}° — широкий обзор`
+            })}
+            ${slider({
+              id: 'cam-height',
+              valueId: 'cam-height-val',
+              label: 'Высота камеры',
+              min: CAM_HEIGHT_MIN,
+              max: CAM_HEIGHT_MAX,
+              step: 0.05,
+              value: draftCamHeight.toFixed(2),
+              suffix: ' м',
+              hint: `${CAM_HEIGHT_MIN.toFixed(2)} м — ниже · +${CAM_HEIGHT_MAX.toFixed(2)} м — выше`
+            })}
             <div class="cam-status" id="cam-status"></div>
             ${button({ id: 'cam-apply', variant: 'primary', icon: '✓', label: 'ПРИМЕНИТЬ' })}
             ${button({ id: 'cam-reset', icon: '↺', label: 'СБРОСИТЬ ПО УМОЛЧАНИЮ' })}

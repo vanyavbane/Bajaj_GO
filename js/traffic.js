@@ -1,5 +1,5 @@
-import { carFollowsRibbon } from './engine/carriage.js';
-import { exitLaneOpen, exitLaneWorld } from './engine/fork.js';
+import { carFollowsRibbon, ribbonCarLat } from './engine/carriage.js';
+import { exitLaneOpen } from './engine/fork.js';
 import { carriageLanes, clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
@@ -185,19 +185,18 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Крайняя попутная уходит на боковую ленту, пока та ещё сбоку и клин узкий. */
-  function followExit(car, edges, phase, runLanes, lastLane) {
+  /** Крайняя попутная едет по боковой ленте, пока та отдельная дорога. */
+  function followExit(car, edges, phase, choice, runLanes, lastLane) {
     const open = !!edges && exitLaneOpen(edges);
-    const gap = edges ? edges.rightInner - edges.leftInner : 0;
     car.onExit = carFollowsRibbon({
       phase,
+      choice,
       open,
       following: !!car.onExit,
       changingLane: !!car.changingLane,
       lane: car.laneIdx,
       lastLane,
       runLanes,
-      gap,
     });
     return car.onExit;
   }
@@ -304,8 +303,10 @@ export function initTraffic() {
       const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
       const runLanes = road.count - road.oncomingCount;
       const phase = G.roadPhaseAt ? G.roadPhaseAt(car.s) : 'road';
-      if (followExit(car, edges, phase, runLanes, road.count - 1)) {
-        carWorldLat = exitLaneWorld(edges, carWorldLat, toWorld(car.s, 0));
+      const choice = G.roadChoiceAt ? G.roadChoiceAt(car.s) : 'open';
+      if (followExit(car, edges, phase, choice, runLanes, road.count - 1)) {
+        const ribbon = G.sideRibbonAt ? G.sideRibbonAt(car.s) : null;
+        if (ribbon) carWorldLat = ribbonCarLat(ribbon);
       }
       const playerWorldLat = G.riderLatAt(G.playerS);
 

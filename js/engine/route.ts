@@ -42,6 +42,11 @@ export function decideZone(vote: ZoneVote): ZoneDecision {
   return decision('straight', -1, 0, false);
 }
 
+/** Курс съезда жив, пока зона его не отвергла. Прямая гасит вектор, даже если асфальт ещё сходится. */
+export function courseBranches<T>(choice: RouteChoice, branches: readonly T[]): readonly T[] {
+  return choice === 'straight' ? [] : branches;
+}
+
 /** Дорога зоны для переноса оси. Прямая и открытая развилка центр не несут. */
 export function zoneRoadOf(decision: ZoneDecision, half: number, keptOrigin?: number | null): ZoneRoad {
   const width = Number.isFinite(half) ? half : 0;

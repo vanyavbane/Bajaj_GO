@@ -35,6 +35,63 @@ export function field(label, body) {
   return `<div class="ds-field"><span>${esc(label)}</span><div class="ds-seg">${body}</div></div>`;
 }
 
+/** @param {[string, string][]} items @param {string} active */
+export function tabs(items, active) {
+  const buttons = items.map(([id, label]) => {
+    const on = id === active ? ' ds-tab-on' : '';
+    return `<button type="button" class="ds-tab${on}" data-tab="${esc(id)}">${esc(label)}</button>`;
+  }).join('');
+  return `<div class="ds-tabs">${buttons}</div>`;
+}
+
+/** @param {string} inner */
+export function tabBody(inner) {
+  return `<div class="ds-tab-body">${inner}</div>`;
+}
+
+/**
+ * @param {{ id?: string, valueId?: string, label: string, min: number, max: number, step?: number, value: string|number, suffix?: string, hint?: string }} options
+ */
+export function slider(options) {
+  const id = options.id ? ` id="${esc(options.id)}"` : '';
+  const valueId = options.valueId ? ` id="${esc(options.valueId)}"` : '';
+  const suffix = options.suffix ? esc(options.suffix) : '';
+  const step = options.step == null ? '' : ` step="${esc(options.step)}"`;
+  const hint = options.hint ? `<div class="ds-slider-hint">${esc(options.hint)}</div>` : '';
+  return `<div class="ds-slider">
+    <div class="ds-slider-head">
+      <span>${esc(options.label)}</span>
+      <b><span${valueId}>${esc(options.value)}</span>${suffix}</b>
+    </div>
+    <input type="range"${id} min="${esc(options.min)}" max="${esc(options.max)}"${step} value="${esc(options.value)}">
+    ${hint}
+  </div>`;
+}
+
+/** @param {{ id: string, label: string, checked?: boolean }} options */
+export function check(options) {
+  const checked = options.checked ? ' checked' : '';
+  return `<label class="ds-check"><input type="checkbox" id="${esc(options.id)}"${checked}><span>${esc(options.label)}</span></label>`;
+}
+
+/**
+ * @param {string} title
+ * @param {{ on?: boolean, disabled?: boolean, preview?: string, label: string, detail: string, data?: Record<string, string|number|boolean> }[]} cards
+ */
+export function choiceGrid(title, cards) {
+  const items = cards.map((card) => {
+    const on = card.on ? ' ds-choice-on' : '';
+    const disabled = card.disabled ? ' disabled' : '';
+    return `<button type="button" class="ds-choice${on}"${disabled}${dataAttrs(card.data)}>
+      <div class="ds-choice-preview">${card.preview || ''}</div>
+      <div class="ds-choice-label">${esc(card.label)}</div>
+      <div class="ds-choice-desc">${esc(card.detail)}</div>
+    </button>`;
+  }).join('');
+  const head = title ? `<div class="ds-choice-title">${esc(title)}</div>` : '';
+  return `<div class="ds-choices">${head}<div class="ds-choice-grid">${items}</div></div>`;
+}
+
 /** @param {string} title @param {string} [kicker] */
 export function heading(title, kicker) {
   return `<h2 class="ds-title">${esc(title)}</h2>${kicker ? `<p class="ds-kicker">${esc(kicker)}</p>` : ''}`;

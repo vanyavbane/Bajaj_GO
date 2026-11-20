@@ -4,8 +4,8 @@ import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, tra
 import { carriageAt, inheritedWiden, laneMarks, riderCarriage, sideRibbon } from './engine/carriage.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
-import { decideZone, zoneRoadOf } from './engine/route.js';
+import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
@@ -484,6 +484,7 @@ function roadHeading(s) {
   const hold = live.phase === 'seal'
     ? { t: frame.phase.t, axis: live.axis, half: live.half }
     : null;
+  const decision = decisionAt(at.zone);
   headKey = s;
   headHit = vectors.heading({
     s,
@@ -491,7 +492,7 @@ function roadHeading(s) {
     nose: at.nose,
     edges: frame.world,
     owned: ownedCourse(RIGHT_FORK, s, at.layout, coursePick),
-    branches: openCourse(RIGHT_FORK, s, at.layout),
+    branches: courseBranches(decision.choice, openCourse(RIGHT_FORK, s, at.layout)),
     origin: roadCenter(frame),
     turn: at.layout.turn,
     ownedHere: courseOwns(RIGHT_FORK, at.pick, s, at.nose, at.layout.ownAfter),
@@ -1145,8 +1146,6 @@ function updateTerrainTint(weights) {
 
 let lastLaneBiome = -1;
 let lastExitLaneMode = false;
-let lastSplitZone = -1;
-let lastSplitSide = -1;
 
 /** 0..1 в начале зоны после взятого съезда предыдущей зоны, иначе -1. */
 function carryInAt(s) {
@@ -1236,8 +1235,6 @@ function commitSplit(zone, side, commitMeters) {
   chosenZones.add(zone);
   chosenExit[zone] = side === 1 ? 1 : -1;
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
-  lastSplitZone = zone;
-  lastSplitSide = side === 1 ? 1 : 0;
   zoneBiomes[zone + 1] = chosen;
   // Снимаем фикс профиля следующей зоны, чтобы он совпал с фактическим выбором.
   delete roadLock[zone + 1];
@@ -1319,16 +1316,9 @@ function updateBiome(dt) {
 
   updateExitHold();
   const chosenBefore = chosenZones.has(zone);
-  let previewSide = chosenBefore
+  const previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
     : (riderSeat.kind === 'exit' ? 1 : 0);
-  // На момент выбора считаем съезд взятым, если байк реально стоит на его ленте.
-  // Это страхует от потери захвата в кадр фиксации.
-  if (!chosenBefore && !previewSide) {
-    const frame = frameAt(G.playerS);
-    const logical = riderLatAt(G.playerS) - frame.origin;
-    if (onExitRibbon(logical, frame.local)) previewSide = 1;
-  }
 
   // Выбор фиксируется в конце параллельного участка. До этого следующая
   // локация не переписывается: уход со съезда обратно на прямую остаётся прямым.
@@ -1387,27 +1377,7 @@ function updateBiome(dt) {
   updateBiomeChip(G.currentBiome);
   applyLaneConfig(roadBiomeAtS(G.playerS), G.playerS);
 
-  // Lane-assist после развилки: съезд должен мягко вывести байк в ближайшую
-  // попутную полосу объединённой дороги, а не бросать «как поедет».
-  if (G.started && !G.ended) {
-    const cfg = lanesAtS(G.playerS);
-    if (riderSeat.kind === 'exit') G.laneAssistTarget = null;
-    else if (lastSplitZone >= 0) {
-      const since = meters - (lastSplitZone + 1) * ZONE_M;
-      // После развилки мягко ведём байк в попутную полосу.
-      if (since > -20 && since < 420) {
-        const target = nearestRunLane(G.laneOffset, cfg);
-        if (Math.abs(G.laneOffset - target) > 0.35) G.laneAssistTarget = target;
-      } else if (since >= 420) {
-        lastSplitZone = -1;
-        lastSplitSide = -1;
-      }
-    }
-    if (G.laneAssistTarget != null
-      && Math.abs(G.laneOffset - G.laneAssistTarget) < 0.3) {
-      G.laneAssistTarget = null;
-    }
-  }
+  if (G.started && !G.ended && riderSeat.kind === 'exit') G.laneAssistTarget = null;
 
   updateTerrainTint(weights);
   G.biomeTraffic = BIOMES[dominant].traffic;
@@ -1453,8 +1423,6 @@ function resetBiomeRun() {
   lastRunZone = zone;
   lastLaneBiome = -1;
   lastExitLaneMode = false;
-  lastSplitZone = -1;
-  lastSplitSide = -1;
   riderSeat = { kind: 'road', lane: G.laneOffset };
   riderSpan = NaN;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
@@ -1535,6 +1503,8 @@ export function initBiome() {
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
   G.roadPhaseAt = roadPhaseAt;
+  G.roadChoiceAt = (s) => decisionAt(routeAt(s).zone).choice;
+  G.sideRibbonAt = (s) => sideRibbon(roadCarriageAt(s), frameAt(s));
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;

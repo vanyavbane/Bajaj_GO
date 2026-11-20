@@ -1,4 +1,4 @@
-import { button, callout, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, stats, swatch, swatchRow } from '@bajajgo/design';
+import { button, callout, check, choiceGrid, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabBody, tabs } from '@bajajgo/design';
 import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
@@ -74,16 +74,13 @@ export function initUi() {
       data: { gfx: key, value }
     });
 
-    const tabs = [
+    const tabItems = [
       ['graphics', 'Графика'],
       ['lighting', 'Освещение'],
       ['camera', 'Вид камеры'],
       ['controls', 'Управление'],
       ['sound', 'Звук']
     ];
-    const tabsHtml = `<div class="ds-tabs">${tabs.map(([key, label]) => (
-      `<button type="button" class="ds-tab${tab === key ? ' ds-tab-on' : ''}" data-tab="${key}">${label}</button>`
-    )).join('')}</div>`;
 
     let body = '';
     if (tab === 'graphics') {
@@ -93,22 +90,26 @@ export function initUi() {
         ${field('Тени', option('shadows', 'off', 'Нет') + option('shadows', 'low', 'Рядом') + option('shadows', 'high', 'Чётче'))}
         ${field('Масштаб кадра', option('scale', 0.75, '0.75') + option('scale', 1, '1') + option('scale', 1.25, '1.25'))}
         ${field('Фонари', option('lamps', 0, '0') + option('lamps', 2, '2') + option('lamps', 4, '4') + option('lamps', 6, '6'))}
-        <div class="cam-slider-block">
-          <div class="cam-slider-head">
-            <span>РЕЗКОСТЬ</span>
-            <b><span id="gfx-sharp-val">${Math.round(g.sharpness || 0)}</span></b>
-          </div>
-          <input type="range" id="gfx-sharp-range" min="-100" max="100" step="1" value="${Math.round(g.sharpness || 0)}">
-          <div class="cam-slider-hint">0 — как сейчас · &lt; 0 мягче · &gt; 0 чётче. Двойной тап по значению — сброс в 0.</div>
-        </div>
-        <div class="cam-slider-block">
-          <div class="cam-slider-head">
-            <span>ЯРКОСТЬ</span>
-            <b><span id="gfx-bright-val">${Math.round(g.brightness || 0)}</span></b>
-          </div>
-          <input type="range" id="gfx-bright-range" min="-100" max="100" step="1" value="${Math.round(g.brightness || 0)}">
-          <div class="cam-slider-hint">0 — как сейчас · мягкая регулировка без пересветов. Двойной тап по значению — сброс в 0.</div>
-        </div>
+        ${slider({
+          id: 'gfx-sharp-range',
+          valueId: 'gfx-sharp-val',
+          label: 'Резкость',
+          min: -100,
+          max: 100,
+          step: 1,
+          value: Math.round(g.sharpness || 0),
+          hint: '0 — как сейчас · < 0 мягче · > 0 чётче. Двойной тап по значению — сброс в 0.'
+        })}
+        ${slider({
+          id: 'gfx-bright-range',
+          valueId: 'gfx-bright-val',
+          label: 'Яркость',
+          min: -100,
+          max: 100,
+          step: 1,
+          value: Math.round(g.brightness || 0),
+          hint: '0 — как сейчас · мягкая регулировка без пересветов. Двойной тап по значению — сброс в 0.'
+        })}
         ${note('Отражения и HDR+ — во вкладке «Освещение».')}
       `;
     } else if (tab === 'lighting') {
@@ -149,50 +150,47 @@ export function initUi() {
         ? `Калибровка: ${calibrationAxis}=${Number(calibration.axis === 'beta' ? calibration.beta : calibration.gamma).toFixed(1)}° · ${new Date(calibration.calibratedAt).toLocaleDateString('ru-RU')}`
         : 'Калибровка ещё не выполнена — она пройдёт автоматически в первые секунды заезда.';
 
+      const keyPreview = (glyphs) => `<div class="ds-choice-keys">${glyphs.map((glyph) => `<span>${glyph}</span>`).join('')}</div>`;
       body = `
-        <div class="ctrl-mode-block">
-          <div class="ctrl-mode-title">СПОСОБ УПРАВЛЕНИЯ</div>
-          <div class="ctrl-mode-options">
-            <button type="button" class="ctrl-mode-card ${mode === 'stick' ? 'on' : ''}" data-ctrl-mode="stick">
-              <div class="ctrl-mode-preview">
-                <div class="ctrl-preview-buttons"><span>◉</span><span>▲</span><span>▼</span></div>
-              </div>
-              <div class="ctrl-mode-label">Джойстик</div>
-              <div class="ctrl-mode-desc">Стик справа вместо кнопок: влево и вправо — руль, вверх — газ, вниз — тормоз. Клавиатура работает вместе с ним.</div>
-            </button>
-            <button type="button" class="ctrl-mode-card ${mode === 'buttons' ? 'on' : ''}" data-ctrl-mode="buttons">
-              <div class="ctrl-mode-preview">
-                <div class="ctrl-preview-buttons"><span>←</span><span>▼</span><span>▲</span><span>→</span></div>
-              </div>
-              <div class="ctrl-mode-label">Кнопки</div>
-              <div class="ctrl-mode-desc">Экранные кнопки газа, тормоза и поворота. Работает на любом устройстве.</div>
-            </button>
-            <button type="button" class="ctrl-mode-card ${mode === 'tilt' ? 'on' : ''}" data-ctrl-mode="tilt"${tiltAvailable ? '' : ' disabled'}>
-              <div class="ctrl-mode-preview">
-                <div class="ctrl-preview-phone">
-                  <span class="cpp-signal">💡</span>
-                  <span class="cpp-steer">← →</span>
-                  <span class="cpp-pedals">▲<br>▼</span>
-                  <span class="cpp-center"></span>
-                </div>
-              </div>
-              <div class="ctrl-mode-label">Акселерометр</div>
-              <div class="ctrl-mode-desc">Наклон устройства — руление. Правая часть экрана — газ, левая — тормоз. Кнопка «Сигнал» справа. Для мобильных.</div>
-            </button>
-          </div>
-        </div>
+        ${choiceGrid('Способ управления', [
+          {
+            on: mode === 'stick',
+            data: { 'ctrl-mode': 'stick' },
+            preview: keyPreview(['◉', '▲', '▼']),
+            label: 'Джойстик',
+            detail: 'Стик справа вместо кнопок: влево и вправо — руль, вверх — газ, вниз — тормоз. Клавиатура работает вместе с ним.'
+          },
+          {
+            on: mode === 'buttons',
+            data: { 'ctrl-mode': 'buttons' },
+            preview: keyPreview(['←', '▼', '▲', '→']),
+            label: 'Кнопки',
+            detail: 'Экранные кнопки газа, тормоза и поворота. Работает на любом устройстве.'
+          },
+          {
+            on: mode === 'tilt',
+            disabled: !tiltAvailable,
+            data: { 'ctrl-mode': 'tilt' },
+            preview: `<div class="ds-choice-phone"><span class="ds-choice-signal">💡</span><span class="ds-choice-steer">← →</span><span class="ds-choice-pedals">▲<br>▼</span><span class="ds-choice-mark"></span></div>`,
+            label: 'Акселерометр',
+            detail: 'Наклон устройства — руление. Правая часть экрана — газ, левая — тормоз. Кнопка «Сигнал» справа. Для мобильных.'
+          }
+        ])}
         ${noticeText ? callout(noticeText, 'err') : ''}
         ${infoText ? note(infoText) : ''}
         ${!tiltAvailable ? callout('Акселерометр недоступен на этом устройстве. Используйте кнопки.', 'err') : ''}
         ${mode === 'tilt' && tiltAvailable ? `
-          <div class="cam-slider-block">
-            <div class="cam-slider-head">
-              <span>ЧУВСТВИТЕЛЬНОСТЬ АКСЕЛЕРОМЕТРА</span>
-              <b><span id="tilt-sens-val">${Math.round(G.tiltSensitivity * 100)}</span>%</b>
-            </div>
-            <input type="range" id="tilt-sens-range" min="50" max="200" step="5" value="${Math.round(G.tiltSensitivity * 100)}">
-            <div class="cam-slider-hint">50% — плавное руление (нужен большой наклон) · 200% — резкое (маленький наклон)</div>
-          </div>
+          ${slider({
+            id: 'tilt-sens-range',
+            valueId: 'tilt-sens-val',
+            label: 'Чувствительность акселерометра',
+            min: 50,
+            max: 200,
+            step: 5,
+            value: Math.round(G.tiltSensitivity * 100),
+            suffix: '%',
+            hint: '50% — плавное руление (нужен большой наклон) · 200% — резкое (маленький наклон)'
+          })}
           ${inline('Инверсия наклона', button({ id: 'tilt-invert', variant: 'compact', label: G.tiltInvert ? 'Вкл' : 'Выкл', pressed: G.tiltInvert }))}
           ${button({ id: 'tilt-calibrate', variant: 'primary', icon: '🎯', label: 'КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)' })}
           ${note(calibrationText)}
@@ -216,8 +214,8 @@ export function initUi() {
 
     overlay.innerHTML = panel(`
         ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · УПРАВЛЕНИЕ · ЗВУК')}
-        ${tabsHtml}
-        <div class="ds-tab-body">${body}</div>
+        ${tabs(tabItems, tab)}
+        ${tabBody(body)}
         ${button({ id: 'settings-back', label: '← НАЗАД' })}
     `, { size: 'narrow' });
 
@@ -403,18 +401,18 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${heading('💨 MOTION BLUR', 'КИНЕМАТОГРАФИЧНОЕ РАЗМЫТИЕ НА СКОРОСТИ')}
         ${inline('Включить эффект', button({ id: 'mb-toggle', variant: 'compact', label: fxState(v.motionBlur), pressed: v.motionBlur }))}
-        <div class="cam-slider-block">
-          <div class="cam-slider-head">
-            <span>ИНТЕНСИВНОСТЬ</span>
-            <b><span id="mb-val">${Math.round(v.motionBlurIntensity)}</span>%</b>
-          </div>
-          <input type="range" id="mb-range" min="0" max="100" step="1" value="${Math.round(v.motionBlurIntensity)}">
-          <div class="cam-slider-hint">Проявляется от ~35% максимальной скорости (≈80 км/ч) и плавно усиливается.</div>
-        </div>
-        <label class="fx-check">
-          <input type="checkbox" id="mb-comfort"${v.motionBlurComfort ? ' checked' : ''}>
-          <span>Уменьшить укачивание</span>
-        </label>
+        ${slider({
+          id: 'mb-range',
+          valueId: 'mb-val',
+          label: 'Интенсивность',
+          min: 0,
+          max: 100,
+          step: 1,
+          value: Math.round(v.motionBlurIntensity),
+          suffix: '%',
+          hint: 'Проявляется от ~35% максимальной скорости (≈80 км/ч) и плавно усиливается.'
+        })}
+        ${check({ id: 'mb-comfort', label: 'Уменьшить укачивание', checked: v.motionBlurComfort })}
         ${note('Размытие сильнее по краям, центр и полосы сверху/снизу остаются чёткими. HUD и мотоцикл игрока не размываются.')}
         ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
         ${button({ id: 'mb-reset', icon: '↺', label: 'СБРОСИТЬ' })}
@@ -466,20 +464,26 @@ export function initUi() {
     overlay.innerHTML = panel(`
         ${heading('☀️ ЛУЧИ ОТ СОЛНЦА', 'GOD RAYS · СВЕТОВЫЕ ЛУЧИ СКВОЗЬ ОБЛАКА')}
         ${inline('Включить эффект', button({ id: 'gr-toggle', variant: 'compact', label: fxState(v.godRays), pressed: v.godRays }))}
-        <div class="cam-slider-block">
-          <div class="cam-slider-head">
-            <span>ИНТЕНСИВНОСТЬ</span>
-            <b><span id="gr-val">${Math.round(v.godRaysIntensity)}</span>%</b>
-          </div>
-          <input type="range" id="gr-range" min="0" max="100" step="1" value="${Math.round(v.godRaysIntensity)}">
-        </div>
-        <div class="cam-slider-block">
-          <div class="cam-slider-head">
-            <span>ДЛИНА ЛУЧЕЙ</span>
-            <b><span id="gr-len-val">${Math.round(v.godRaysLength)}</span>%</b>
-          </div>
-          <input type="range" id="gr-len" min="0" max="100" step="1" value="${Math.round(v.godRaysLength)}">
-        </div>
+        ${slider({
+          id: 'gr-range',
+          valueId: 'gr-val',
+          label: 'Интенсивность',
+          min: 0,
+          max: 100,
+          step: 1,
+          value: Math.round(v.godRaysIntensity),
+          suffix: '%'
+        })}
+        ${slider({
+          id: 'gr-len',
+          valueId: 'gr-len-val',
+          label: 'Длина лучей',
+          min: 0,
+          max: 100,
+          step: 1,
+          value: Math.round(v.godRaysLength),
+          suffix: '%'
+        })}
         ${note('Лучи видны только днём и на закате, когда солнце не закрыто тучами. Во время дождя, ночью и в тоннеле лучи автоматически скрываются.')}
         ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
         ${button({ id: 'gr-reset', icon: '↺', label: 'СБРОСИТЬ' })}

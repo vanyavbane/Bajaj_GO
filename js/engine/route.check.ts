@@ -1,7 +1,7 @@
 /**
  * Запись развилки: открыто, прямая и съезд не схлопываются в одно число.
  */
-import { decideZone, zoneRoadOf } from './route.ts';
+import { courseBranches, decideZone, zoneRoadOf } from './route.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -31,6 +31,10 @@ assert(!straightRoad.tookExit && straightRoad.half === 10 && !('keptOrigin' in s
 
 const kept = zoneRoadOf(exit, 10, 40);
 assert(kept.tookExit && kept.half === 10 && kept.keptOrigin === 40, 'взятый съезд оставляет сверенный центр');
+
+assert(courseBranches('open', ['exit']).length === 1, 'открытая развилка держит вектор съезда');
+assert(courseBranches('exit', ['exit']).length === 1, 'взятый съезд держит свой вектор');
+assert(courseBranches('straight', ['exit']).length === 0, 'прямая гасит вектор съезда');
 
 const fresh = zoneRoadOf(exit, 8, null);
 assert(fresh.tookExit && fresh.half === 8 && !('keptOrigin' in fresh), 'без сверки центр считает формула');
