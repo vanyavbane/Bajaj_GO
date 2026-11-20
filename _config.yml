@@ -1,0 +1,4 @@
+# Ветка main иначе публикует исходный index.html и затирает собранную игру.
+# Неизвестный плагин останавливает эту публикацию. Сайт обновляет workflow Publish game.
+plugins:
+  - jekyll-bajaj-block-source-publish
