@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EXIT_DIVERGE, EXIT_RUN } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, goreSpan } from './engine/fork.js';
 import { box, cylinder } from './geom.js';
 import { G } from './state.js';
 
@@ -154,15 +154,14 @@ export function initForkPark() {
   }
   if (walkTorso.instanceColor) walkTorso.instanceColor.needsUpdate = true;
 
-  /** Точка внутри клина. u = -1 у прямой дороги, +1 у съезда. */
+  /** Точка внутри клина. u = -1 у прямой дороги, +1 у съезда. null — клина нет. */
   function goreLat(s, u) {
-    const edge = G.roadEdgesAt(s);
-    const inner = edge.leftInner;
-    const width = edge.rightInner - inner;
-    if (width < 1) return inner;
+    const gore = goreSpan(G.roadEdgesAt(s));
+    if (!gore) return null;
+    const width = gore.right - gore.left;
     const pad = Math.min(PARK_MARGIN, width * 0.3);
     const t = (Math.max(-1, Math.min(1, u)) + 1) * 0.5;
-    return inner + pad + t * Math.max(0, width - pad * 2);
+    return gore.left + pad + t * Math.max(0, width - pad * 2);
   }
 
   const dummy = new THREE.Object3D();
@@ -177,8 +176,9 @@ export function initForkPark() {
     let firConeI = 0;
     for (const t of kept) {
       const s = center + t.d;
-      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < PARK_MARGIN * 2) continue;
-      G.placeOnRoad(dummy, s, goreLat(s, t.u), 0);
+      const lat = goreLat(s, t.u);
+      if (lat == null) continue;
+      G.placeOnRoad(dummy, s, lat, 0);
       const x0 = dummy.position.x;
       const y0 = dummy.position.y;
       const z0 = dummy.position.z;
@@ -231,8 +231,9 @@ export function initForkPark() {
     let i = 0;
     for (const b of bushSpots) {
       const s = center + b.d;
-      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < 2.4) continue;
-      G.placeOnRoad(dummy, s, goreLat(s, b.u), 0);
+      const lat = goreLat(s, b.u);
+      if (lat == null) continue;
+      G.placeOnRoad(dummy, s, lat, 0);
       dummy.rotation.set(0, b.yaw, 0);
       dummy.position.y += b.scale * 0.45;
       dummy.scale.set(b.scale * 1.5, b.scale * 0.9, b.scale * 1.5);
@@ -249,8 +250,9 @@ export function initForkPark() {
     let legI = 0;
     for (const b of benches) {
       const s = center + b.d;
-      if (G.roadEdgesAt(s).rightInner - G.roadEdgesAt(s).leftInner < PARK_MARGIN * 2) continue;
-      G.placeOnRoad(dummy, s, goreLat(s, b.u), 0);
+      const lat = goreLat(s, b.u);
+      if (lat == null) continue;
+      G.placeOnRoad(dummy, s, lat, 0);
       const x0 = dummy.position.x;
       const y0 = dummy.position.y;
       const z0 = dummy.position.z;
@@ -288,6 +290,15 @@ export function initForkPark() {
       const d = w.d0 + Math.cos(th) * w.rd;
       const s = center + d;
       const lat = goreLat(s, w.u * Math.abs(Math.sin(th)));
+      if (lat == null) {
+        dummy.scale.set(0, 0, 0);
+        dummy.updateMatrix();
+        walkTorso.setMatrixAt(i, dummy.matrix);
+        walkHead.setMatrixAt(i, dummy.matrix);
+        walkLegL.setMatrixAt(i, dummy.matrix);
+        walkLegR.setMatrixAt(i, dummy.matrix);
+        continue;
+      }
 
       // Направление шага — производная пути, чтобы пешеход смотрел вперёд.
       const dd = -Math.sin(th) * w.rd * Math.sign(w.speed);

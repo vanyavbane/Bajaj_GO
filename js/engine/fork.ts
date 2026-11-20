@@ -517,13 +517,16 @@ export function outwardFrom(edge: number, origin: number, gap: number): number {
   return edge + outward * clearance;
 }
 
-/** Весь асфальт в точке: прямая и съезд вместе. После сжатия чужой ленты остаётся живая. */
-export function asphaltSpan(edges: AsphaltEdges, center = 0): { left: number; right: number; mid: number; width: number } {
-  const left = worldEdge(edges, -1, center);
-  const right = worldEdge(edges, 1, center);
-  const lo = Math.min(left, right);
-  const hi = Math.max(left, right);
-  return { left: lo, right: hi, mid: (lo + hi) * 0.5, width: Math.max(0, hi - lo) };
+/** Весь живой асфальт в точке: прямая и съезд вместе. Узкая прямая остаётся, пока у неё есть ширина. */
+export function asphaltSpan(edges: AsphaltEdges, _center = 0): { left: number; right: number; mid: number; width: number } {
+  void _center;
+  const shell = roadShell(edges);
+  return {
+    left: shell.left,
+    right: shell.right,
+    mid: (shell.left + shell.right) * 0.5,
+    width: Math.max(0, shell.right - shell.left),
+  };
 }
 
 /** Кусок асфальта одной ленты. Левый и правый слот кадра сюда не входят. */
@@ -663,6 +666,23 @@ export function innerTrackEdge(span: AsphaltSpan | null, side: -1 | 1, inset = 0
   return side < 0 ? span.right - pad : span.left + pad;
 }
 
+/**
+ * Клин между двумя живыми лентами.
+ * Узкая или увезённая в сторону лента клин не открывает: парк за ней не едет.
+ */
+export function goreSpan(edges: AsphaltEdges): AsphaltSpan | null {
+  const tracks = followAsphalt([null, null], edges);
+  const first = tracks[0];
+  const second = tracks[1];
+  if (!first || !second) return null;
+  if (first.right - first.left < 2 || second.right - second.left < 2) return null;
+  const left = first.left + first.right <= second.left + second.right ? first : second;
+  const right = left === first ? second : first;
+  const gap = right.left - left.right;
+  if (gap < 1 || gap > FORK_SPREAD + 2) return null;
+  return { left: left.right, right: right.left };
+}
+
 /** Оболочка кадра: внешние кромки живых лент. Центр слота для этого не нужен. */
 export function roadShell(edges: AsphaltEdges): AsphaltSpan {
   return asphaltShell(followAsphalt([null, null], edges)) ?? { left: 0, right: 0 };
@@ -703,20 +723,6 @@ export function pinchShell(shells: readonly (AsphaltSpan | null)[]): AsphaltSpan
     pinched[i] = collapsedSpan(here);
   }
   return pinched;
-}
-
-/** Дальний асфальт для откоса. Узкая умирающая лента не отодвигает землю. */
-export function worldEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
-  const leftGone = edges.leftInner - edges.leftOuter < 1;
-  const main = mainRoadOpen(edges, center);
-  if (side < 0) {
-    if (main) return edges.leftOuter;
-    if (leftGone && exitWidth(edges) > 1) return edges.rightInner;
-    return edges.leftOuter;
-  }
-  if (exitWidth(edges) > 1 && (main || leftGone)) return edges.rightOuter;
-  if (main) return edges.leftInner;
-  return Math.max(edges.leftInner, edges.rightOuter);
 }
 
 const RELEASE_INSET = 2.6;

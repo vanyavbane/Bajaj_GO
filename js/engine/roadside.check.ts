@@ -1,4 +1,4 @@
-import { asphaltSpan, branchEdges, carriageEdge, mainRoadOpen } from './fork.ts';
+import { asphaltSpan, branchEdges, carriageEdge, goreSpan, mainRoadOpen } from './fork.ts';
 import {
   besidePose,
   medianFits,
@@ -70,6 +70,17 @@ const highwaySpan = asphaltSpan(highway, 0);
 assert(highwaySpan.left === -10 && highwaySpan.right === highway.rightOuter, 'съезд: портал накрывает прямую и ленту');
 const carriedSpan = asphaltSpan(carried, 32);
 assert(carriedSpan.left === 22 && carriedSpan.right === 42 && carriedSpan.mid === 32, 'после съезда портал садится на новую дорогу');
+const sliver: AsphaltEdges = { leftOuter: -30, leftInner: -29.2, rightInner: 12, rightOuter: 22 };
+const sliverSpan = asphaltSpan(sliver, 0);
+assert(sliverSpan.left === -30 && sliverSpan.right === 22, 'узкая прямая ещё в портале, пока у неё есть ширина');
+const gone: AsphaltEdges = { leftOuter: -30, leftInner: -29.8, rightInner: 12, rightOuter: 22 };
+const goneSpan = asphaltSpan(gone, 0);
+assert(goneSpan.left === 12 && goneSpan.right === 22, 'когда прямая сошла, портал садится на съезд');
+const openGore = goreSpan(branchEdges(10, 22));
+assert(openGore != null && openGore.left >= 10 && openGore.right > openGore.left, 'парк стоит в клине открытого съезда');
+const towed: AsphaltEdges = { leftOuter: -10, leftInner: 10, rightInner: 40, rightOuter: 49.5 };
+assert(goreSpan(towed) == null, 'увезённый съезд не тащит парк за собой');
+assert(goreSpan(carried) == null, 'когда съезд стал дорогой, клина для парка нет');
 assert(Math.abs(medianRoom(shifted, 32) - 6) < 1e-9, 'клин после переноса центра сохраняет ширину');
 const shiftedMedian: AsphaltEdges = { leftOuter: 16, leftInner: 26, rightInner: 38, rightOuter: 48 };
 assert(Math.abs(medianRoom(shiftedMedian, 32) - 6) < 1e-9, 'островок считается от центра дороги, не от нуля маршрута');
