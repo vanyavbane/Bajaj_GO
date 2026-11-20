@@ -434,7 +434,7 @@ export function courseLocal(lat: number, place: CoursePlace): number {
  * Пока съезд закрывает прямую, полосы переезжают к roadCenter ленты.
  * К блоку carry они приходят уже в него, без скачка.
  */
-function laneAnchor(frame: RoadFrame): number {
+export function laneAnchor(frame: RoadFrame): number {
   const center = roadCenter(frame);
   if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') {
     return center;

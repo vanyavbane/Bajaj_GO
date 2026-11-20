@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BIOMES } from './engine/biomes.js';
 import { G } from './state.js';
 
 export function initAtmosphere() {
@@ -63,56 +64,17 @@ export function initAtmosphere() {
     }
   };
 
-  /* -------------------------------------------------------------------------
-   * БИОМНЫЕ ПОПРАВКИ К АТМОСФЕРЕ
-   * Цвета-множители (≈1.0) накладываются поверх палитры времени суток,
-   * поэтому цикл день → закат → ночь сохраняется, а локация меняет оттенок.
-   * fogMul — плотность дымки, cloudY/cloudScale — высота и размер облаков.
-   * ---------------------------------------------------------------------- */
-  const biomeAtmos = [
-    {
-      // Город: нейтральная городская дымка.
-      top: new THREE.Color(0xffffff), mid: new THREE.Color(0xffffff),
-      bot: new THREE.Color(0xffffff), fog: new THREE.Color(0xf4f6fa),
-      cloud: new THREE.Color(0xffffff),
-      fogMul: 1.0, cloudY: 0, cloudScale: 1
-    },
-    {
-      // Поле: тёплый горизонт, простор и ясный воздух.
-      top: new THREE.Color(0xdce9ff), mid: new THREE.Color(0xffeed0),
-      bot: new THREE.Color(0xfff3dd), fog: new THREE.Color(0xf6e9d0),
-      cloud: new THREE.Color(0xfff6e4),
-      fogMul: 0.78, cloudY: 5, cloudScale: 1.05
-    },
-    {
-      // Лес: зелёная влажная дымка, низкие плотные облака.
-      top: new THREE.Color(0xcfe1d2), mid: new THREE.Color(0xd9e8d1),
-      bot: new THREE.Color(0xdde9d4), fog: new THREE.Color(0xccdcc6),
-      cloud: new THREE.Color(0xdfe9da),
-      fogMul: 1.3, cloudY: 2, cloudScale: 1.02
-    },
-    {
-      // Горы: холодный разреженный воздух, облака ниже хребтов.
-      top: new THREE.Color(0xc6daf4), mid: new THREE.Color(0xdbe9f8),
-      bot: new THREE.Color(0xe6f0fa), fog: new THREE.Color(0xd6e3f2),
-      cloud: new THREE.Color(0xeaf1fa),
-      fogMul: 1.12, cloudY: -22, cloudScale: 1.16
-    },
-    {
-      // МКАД: сухая бетонная дымка, пыльный тёплый горизонт.
-      top: new THREE.Color(0xdfe6ee), mid: new THREE.Color(0xf0e7dc),
-      bot: new THREE.Color(0xf6ece2), fog: new THREE.Color(0xe4ded6),
-      cloud: new THREE.Color(0xf1eae1),
-      fogMul: 1.06, cloudY: -2, cloudScale: 1.08
-    },
-    {
-      // Набережная: ясный летний день, светлый простор над рекой.
-      top: new THREE.Color(0xd8ecff), mid: new THREE.Color(0xeaf6ff),
-      bot: new THREE.Color(0xf4fbff), fog: new THREE.Color(0xdceef8),
-      cloud: new THREE.Color(0xffffff),
-      fogMul: 0.72, cloudY: 8, cloudScale: 1.04
-    }
-  ];
+  /* Небо локации читается из каталога, в том же порядке, что и веса биома. */
+  const biomeAtmos = BIOMES.map((biome) => ({
+    top: new THREE.Color(biome.sky.top),
+    mid: new THREE.Color(biome.sky.mid),
+    bot: new THREE.Color(biome.sky.bot),
+    fog: new THREE.Color(biome.sky.fog),
+    cloud: new THREE.Color(biome.sky.cloud),
+    fogMul: biome.sky.fogMul,
+    cloudY: biome.sky.cloudY,
+    cloudScale: biome.sky.cloudScale,
+  }));
 
   const _tintTop = new THREE.Color();
   const _tintMid = new THREE.Color();

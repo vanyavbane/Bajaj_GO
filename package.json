@@ -12,6 +12,7 @@
     "check:blocks": "node --experimental-strip-types js/engine/blocks.check.ts",
     "check:branch": "node --experimental-strip-types js/engine/branch.check.ts",
     "check:vectors": "node --experimental-strip-types js/engine/vectors.check.ts",
+    "check:seat": "node --experimental-strip-types js/engine/seat.check.ts",
     "scene": "node scripts/scene.mjs"
   },
   "workspaces": [

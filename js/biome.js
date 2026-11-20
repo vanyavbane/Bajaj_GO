@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { BIOMES, biomeIndexOf, laneLayoutOf, transitionIndexes } from './engine/biomes.js';
-import { carriageLanes, laneDashOffsets } from './engine/lanes.js';
+import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
+import { carriageLanes, exitCarriage, laneDashOffsets } from './engine/lanes.js';
+import { seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, canReleaseExit, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, exitRibbonCenter, forkOffset, forkSpreadAt, landOnCarriage, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, chosenSideOf, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
 import { RIGHT_FORK, carriageWay, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
-import { cos, makeProfile, mixDeriv, mixSecond, mixValue, sin } from './engine/profile.js';
+import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
 import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
 import { G } from './state.js';
 
@@ -36,50 +37,9 @@ const MKAD = biomeIndexOf('mkad');
 const EMBANKMENT = biomeIndexOf('embankment');
 const TRANSITIONS = transitionIndexes();
 
-/* -------------------------------------------------------------------------
- * Профили дороги. Волны и производные считаются в js/engine/profile.js.
- * ---------------------------------------------------------------------- */
-const PROFILES = [
-  makeProfile(
-    [sin(34, 0.0042), cos(48, 0.0021)],
-    [sin(1.65, 0.055), cos(1.15, 0.029)]
-  ),
-  makeProfile(
-    [sin(14, 0.0035), cos(7, 0.0014)],
-    [sin(0.55, 0.0062), cos(0.35, 0.0031)]
-  ),
-  makeProfile(
-    [sin(18, 0.006), cos(10, 0.0027), sin(6, 0.0011)],
-    [sin(1.2, 0.008), cos(0.7, 0.0042)]
-  ),
-  // Горы: узкий серпантин. Частые сильные изгибы в плане и заметный
-  // перепад высот — дорога идёт террасами по склону, а не прямо вверх.
-  makeProfile(
-    [sin(46, 0.028), sin(22, 0.013), cos(9, 0.0045)],
-    [sin(30, 0.006), cos(14, 0.010), sin(6, 0.019)]
-  ),
-  makeProfile(
-    [sin(70, 0.0045), sin(30, 0.0018), cos(12, 0.0009)],
-    [sin(1.15, 0.0022), cos(0.75, 0.0011)]
-  ),
-  // Набережная: почти прямая панорамная дорога вдоль реки.
-  makeProfile(
-    [sin(18, 0.0032), cos(9, 0.0013)],
-    [sin(0.5, 0.006), cos(0.3, 0.003)]
-  )
-];
-
-const TERRAIN_COLORS = [
-  new THREE.Color(0x2a4d31), // city
-  new THREE.Color(0x6f6a36), // field
-  new THREE.Color(0x1e3d29), // forest
-  new THREE.Color(0x5a6066), // mountain
-  new THREE.Color(0x3a4048), // mkad
-  new THREE.Color(0x5a6670)  // embankment
-];
-if (PROFILES.length !== BIOMES.length || TERRAIN_COLORS.length !== BIOMES.length) {
-  throw new Error('Профиль и цвет земли должны идти в том же порядке и количестве, что каталог биомов');
-}
+/* Профиль и цвет земли берутся из записи каталога, в том же порядке, что и индекс сохранения. */
+const PROFILES = BIOMES.map((biome) => makeProfile(biome.road.x, biome.road.y));
+const TERRAIN_COLORS = BIOMES.map((biome) => new THREE.Color(biome.ground));
 
 /* ---------- Конфигурация полос ---------- */
 function clampInt(value, min, max, fallback) {
@@ -131,9 +91,10 @@ function getBiomeChoices(currentBiome, visitCounts) {
     const n = visitCounts && Number(visitCounts[b]);
     return Number.isFinite(n) ? n : 0;
   };
-  let pool = allowed.filter((b) => visits(b) < 2);
-  if (pool.length === 0) pool = allowed.slice();
-  if (pool.length === 0) pool = BIOMES.map((_, index) => index).filter((b) => b !== cur);
+  const onRoute = (b) => !!(BIOMES[b] && BIOMES[b].route);
+  let pool = allowed.filter((b) => onRoute(b) && visits(b) < 2);
+  if (pool.length === 0) pool = allowed.filter(onRoute);
+  if (pool.length === 0) pool = BIOMES.map((_, index) => index).filter((b) => b !== cur && onRoute(b));
 
   const choices = [];
   if (pool.length >= 2) {
@@ -141,13 +102,14 @@ function getBiomeChoices(currentBiome, visitCounts) {
   } else {
     choices.push(pool[0]);
     const rest = [];
-    for (let b = 0; b < BIOMES.length; b++) if (b !== cur && b !== choices[0]) rest.push(b);
+    for (let b = 0; b < BIOMES.length; b++) if (b !== cur && b !== choices[0] && onRoute(b)) rest.push(b);
     rest.sort((a, b) => (visits(a) - visits(b)) || (a - b));
     choices.push(rest[0]);
   }
-  if (choices[1] === choices[0]) {
-    const alternate = allowed.find((b) => b !== choices[0]);
-    choices[1] = alternate == null ? (choices[0] + 1) % BIOMES.length : alternate;
+  if (choices[1] === choices[0] || !onRoute(choices[1])) {
+    const alternate = allowed.find((b) => b !== choices[0] && onRoute(b));
+    const step = BIOMES.findIndex((_, index) => index !== choices[0] && onRoute(index));
+    choices[1] = alternate == null ? step : alternate;
   }
   return choices;
 }
@@ -183,42 +145,23 @@ function readStoredMeters() {
   return 0;
 }
 
-function readInt(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw == null) return fallback;
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.round(n) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function readPending() {
   try {
     const raw = localStorage.getItem(PENDING_KEY);
     if (raw == null || raw === '') return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? biomeIndex(n) : null;
+    return storedBiomeIndex(raw);
   } catch {
     return null;
   }
 }
 
 function readVisits() {
-  let visits = ZERO_VISITS();
   try {
     const raw = localStorage.getItem(VISITS_KEY);
-    const parsed = raw ? safeParse(raw) : null;
-    if (Array.isArray(parsed)) {
-      for (let i = 0; i < visits.length; i++) {
-        visits[i] = clampInt(parsed[i], 0, 2, 0);
-      }
-    }
+    return storedVisits(raw ? safeParse(raw) : null);
   } catch {
-    /* сохранение недоступно — начинаем с чистого заезда */
+    return ZERO_VISITS();
   }
-  return visits;
 }
 
 function readPlan() {
@@ -229,15 +172,18 @@ function readPlan() {
     if (parsed.zones && typeof parsed.zones === 'object') {
       for (const key of Object.keys(parsed.zones)) {
         const zone = Number(key);
-        if (Number.isFinite(zone)) zoneBiomes[zone] = biomeIndex(parsed.zones[key]);
+        const zoneBiome = storedBiomeIndex(parsed.zones[key]);
+        if (Number.isFinite(zone) && zoneBiome != null) zoneBiomes[zone] = zoneBiome;
       }
     }
     if (parsed.choices && typeof parsed.choices === 'object') {
       for (const key of Object.keys(parsed.choices)) {
         const zone = Number(key);
         const pair = parsed.choices[key];
-        if (Number.isFinite(zone) && Array.isArray(pair) && pair.length >= 2) {
-          splitChoices[zone] = [biomeIndex(pair[0]), biomeIndex(pair[1])];
+        const left = Array.isArray(pair) ? storedBiomeIndex(pair[0]) : null;
+        const right = Array.isArray(pair) ? storedBiomeIndex(pair[1]) : null;
+        if (Number.isFinite(zone) && left != null && right != null) {
+          splitChoices[zone] = [left, right];
         }
       }
     }
@@ -295,16 +241,17 @@ function persistBiome() {
   try {
     const km = Math.max(0, Number.isFinite(G.biomeStoredMeters) ? G.biomeStoredMeters : 0) / 1000;
     localStorage.setItem(STORAGE_KEY, km.toFixed(3));
-    localStorage.setItem(CURRENT_KEY, String(biomeIndex(G.currentBiome)));
-    localStorage.setItem(VISITS_KEY, JSON.stringify((G.visitCounts || ZERO_VISITS()).slice(0, BIOMES.length)));
+    const visits = G.visitCounts || ZERO_VISITS();
+    localStorage.setItem(CURRENT_KEY, BIOMES[biomeIndex(G.currentBiome)].id);
+    localStorage.setItem(VISITS_KEY, JSON.stringify(Object.fromEntries(BIOMES.map((biome, index) => [biome.id, visits[index] || 0]))));
     if (G.pendingBiome == null) localStorage.removeItem(PENDING_KEY);
-    else localStorage.setItem(PENDING_KEY, String(biomeIndex(G.pendingBiome)));
+    else localStorage.setItem(PENDING_KEY, BIOMES[biomeIndex(G.pendingBiome)].id);
 
     const zone = currentZone();
     const plan = { zones: {}, choices: {}, chosen: [], exits: {} };
     for (let z = Math.max(0, zone - 2); z <= zone + 4; z++) {
-      if (zoneBiomes[z] != null) plan.zones[z] = biomeIndex(zoneBiomes[z]);
-      if (splitChoices[z]) plan.choices[z] = splitChoices[z].slice(0, 2);
+      if (zoneBiomes[z] != null) plan.zones[z] = BIOMES[biomeIndex(zoneBiomes[z])].id;
+      if (splitChoices[z]) plan.choices[z] = splitChoices[z].slice(0, 2).map((index) => BIOMES[biomeIndex(index)].id);
       if (chosenZones.has(z)) plan.chosen.push(z);
       if (chosenExit[z] === 1 || chosenExit[z] === -1) plan.exits[z] = chosenExit[z];
     }
@@ -374,11 +321,8 @@ function liveAtMeters(meters) {
 
 let roadCacheM = NaN;
 let roadCache = null;
-/** Стабильная сторона превью развилки: не даёт дороге/биому перескакивать
- *  от мелкого рыскания у центра, пока выбор ещё не зафиксирован. */
-/** Игрок в координатах ленты съезда. Середина ленты, от которой считалась полоса. */
-let exitHold = false;
-let heldCenter = 0;
+/** Сиденье байка. Ось и вливание съезда считает js/engine/seat.js. */
+let riderSeat = { kind: /** @type {'road' | 'exit'} */ ('road'), lane: 0 };
 
 function roadAtMeters(meters) {
   if (meters === roadCacheM && roadCache) return roadCache;
@@ -785,72 +729,19 @@ function roadMetersAt(s, laneOffset, riding) {
 }
 
 /** Мир байка в текущей системе полосы: от ленты, если она захвачена, иначе от центра дороги. */
-function riderPoint(frame, span) {
-  return frame.origin + (exitHold ? heldCenter : 0) + G.laneOffset * span;
-}
-
-function laneOf(world, axis, span) {
-  return (world - axis) / span;
-}
-
-/**
- * Полоса следует за тем асфальтом, на котором стоит байк.
- * Лента ещё есть — ось на её середине. Лента стала дорогой — центр уже там,
- * второй раз его не прибавляем. Отпущенный съезд возвращает ось на прямую.
- */
+/** Байк на дороге или на ленте съезда. Пропавшая взятая лента вливается в центр кадра. */
 function updateExitHold() {
   const frame = frameAt(G.playerS);
   const span = laneSpanAt(G.playerS);
-  const center = exitRibbonCenter(frame.local);
-  const world = riderPoint(frame, span);
-  if (center == null) {
-    // Лента съезда исчезла: если съезд стал дорогой, остаёмся на ней по миру.
-    if (exitHold) {
-      exitHold = false;
-      heldCenter = 0;
-      const nextSpan = laneSpanAt(G.playerS);
-      const ci = carryInAt(G.playerS);
-      if (frame.chosen === 1 || ci >= 0) {
-        G.laneOffset = laneOf(world, frame.origin, nextSpan);
-      } else {
-        G.laneOffset = landOnCarriage(frame.origin, frame.local, world, nextSpan);
-      }
-      return;
-    }
-    heldCenter = 0;
-    return;
-  }
-  const logical = world - frame.origin;
-  const onRibbon = onExitRibbon(logical, frame.local);
-  const hold = onRibbon || (exitHold && !canReleaseExit(logical, frame.local));
-  if (hold && !exitHold) {
-    // Захват съезда: переходим в его систему координат без прыжка по миру.
-    exitHold = true;
-    heldCenter = center;
-    const nextSpan = laneSpanAt(G.playerS);
-    let lane = laneOf(world, frame.origin + center, nextSpan);
-    if (onRibbon) {
-      const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
-      const limit = Math.max(0, (halfW - 0.7) / Math.max(nextSpan, 0.05));
-      if (lane < -limit) lane = -limit;
-      if (lane > limit) lane = limit;
-    }
-    G.laneOffset = lane;
-    return;
-  }
-  if (!hold && exitHold) {
-    // Возврат на прямую, пока съезд ещё рядом: сохраняем мировую позицию.
-    exitHold = false;
-    heldCenter = 0;
-    const nextSpan = laneSpanAt(G.playerS);
-    G.laneOffset = laneOf(world, frame.origin, nextSpan);
-    return;
-  }
-  if (exitHold) {
-    const nextSpan = laneSpanAt(G.playerS);
-    G.laneOffset = laneOf(world, frame.origin + center, nextSpan);
-    heldCenter = center;
-  }
+  const merged = frame.chosen === 1 || carryInAt(G.playerS) >= 0;
+  riderSeat = stepSeat(frame, { kind: riderSeat.kind, lane: G.laneOffset }, span, merged);
+  G.laneOffset = riderSeat.lane;
+}
+
+function riderFrameSeat(s, lane) {
+  const frame = frameAt(s);
+  const home = frameAt(G.playerS).origin;
+  return seatOnFrame(frame, { kind: riderSeat.kind, lane }, home);
 }
 
 /** Полоса машины или разметки: масштаб ширины, без съезда. */
@@ -858,18 +749,11 @@ function laneWorldOffsetAtS(s, lateralOffset) {
   return roadMetersAt(s, lateralOffset, false);
 }
 
-/** Полоса байка или камеры. На съезде — от центра его ленты, иначе от центра дороги. */
+/** Полоса байка или камеры. Ось берётся из кадра: дорога или середина ленты съезда. */
 function riderLatAt(s, laneOffset) {
   const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
-  const span = laneSpanAt(s);
-  if (!exitHold) return roadMetersAt(s, lane, false);
   const frame = frameAt(s);
-  const center = exitRibbonCenter(frame.local);
-  if (center != null) return frame.origin + center + lane * span;
-  // Впереди лента уже стала дорогой: её центр сидит в origin. Позади — ещё нет.
-  const home = frameAt(G.playerS).origin;
-  const axis = Math.abs(frame.origin - home) < 0.5 ? heldCenter : 0;
-  return frame.origin + axis + lane * span;
+  return seatWorld(frame, riderFrameSeat(s, lane), laneSpanAt(s));
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -937,16 +821,7 @@ function buildMaterials() {
     roof: new THREE.MeshLambertMaterial({ color: 0x3b3531 }),
     silo: new THREE.MeshLambertMaterial({ color: 0x9aa3a8 }),
     siloTop: new THREE.MeshLambertMaterial({ color: 0x767f85 }),
-    pineDark: new THREE.MeshLambertMaterial({ color: 0x1d4a31, flatShading: true }),
-    pineMid: new THREE.MeshLambertMaterial({ color: 0x275b3a, flatShading: true }),
-    pineLight: new THREE.MeshLambertMaterial({ color: 0x336e45, flatShading: true }),
-    rock: new THREE.MeshLambertMaterial({ color: 0x6d7078, flatShading: true }),
     rockDark: new THREE.MeshLambertMaterial({ color: 0x525761, flatShading: true }),
-    rockLight: new THREE.MeshLambertMaterial({ color: 0x83878f, flatShading: true }),
-    snow: new THREE.MeshLambertMaterial({ color: 0xe9eff7, flatShading: true }),
-    moss: new THREE.MeshLambertMaterial({ color: 0x3f6b3a, flatShading: true }),
-    bush: new THREE.MeshLambertMaterial({ color: 0x2f6038, flatShading: true }),
-    bushDark: new THREE.MeshLambertMaterial({ color: 0x244b2d, flatShading: true }),
     mkadPanel: new THREE.MeshStandardMaterial({ color: 0x4b5665, roughness: 0.82 }),
     mkadPanelLight: new THREE.MeshStandardMaterial({ color: 0x727f8e, roughness: 0.78 }),
     mkadGlass: new THREE.MeshStandardMaterial({ color: 0x9fc4e0, emissive: 0x2d4f66, emissiveIntensity: 0.9, roughness: 0.35 }),
@@ -1031,113 +906,6 @@ function buildFieldVariant(variant) {
   return { group: g, lat, spin };
 }
 
-/* ---------- Лес ---------- */
-function addPine(parent, x, z, h, mats) {
-  const trunk = addBox(parent, MAT.wood, 0.46, h * 0.34, 0.46, x, h * 0.17, z);
-  trunk.castShadow = true;
-  const tiers = 4;
-  for (let i = 0; i < tiers; i++) {
-    const w = (3.3 - i * 0.72) * (h / 9);
-    const y = h * 0.3 + i * h * 0.17;
-    addBox(parent, mats[i % mats.length], w, h * 0.19, w, x, y, z);
-  }
-  addBox(parent, mats[0], 0.7 * (h / 9), h * 0.15, 0.7 * (h / 9), x, h * 0.96, z);
-}
-
-function buildForestVariant(variant) {
-  const g = new THREE.Group();
-  let lat = 21;
-
-  if (variant === 0) {
-    lat = 19;
-    addPine(g, -2.4, -1.4, 9.5, [MAT.pineDark, MAT.pineMid, MAT.pineLight]);
-    addPine(g, 1.8, 1.2, 12.0, [MAT.pineMid, MAT.pineLight, MAT.pineDark]);
-    addPine(g, 4.6, -2.2, 7.4, [MAT.pineDark, MAT.pineMid]);
-  } else if (variant === 1) {
-    lat = 24;
-    const log = addBox(g, MAT.wood, 0.95, 0.95, 10.5, 0, 0.52, 0);
-    log.rotation.y = 0.32;
-    log.rotation.z = 0.05;
-    addBox(g, MAT.woodLight, 0.5, 0.4, 2.4, -1.8, 0.9, 2.6).rotation.y = 0.8;
-    addBox(g, MAT.rock, 2.0, 1.4, 1.8, 2.0, 0.7, -1.2).rotation.y = 0.5;
-    addBox(g, MAT.moss, 1.6, 0.18, 1.4, 2.0, 1.42, -1.2).rotation.y = 0.5;
-  } else if (variant === 2) {
-    lat = 27;
-    addBox(g, MAT.rock, 3.4, 2.3, 3.0, 0, 1.1, 0).rotation.y = 0.3;
-    addBox(g, MAT.rockDark, 2.2, 1.6, 2.0, 2.6, 0.75, 1.3).rotation.y = -0.4;
-    addBox(g, MAT.moss, 2.8, 0.2, 2.5, 0, 2.24, 0).rotation.y = 0.3;
-    addBox(g, MAT.rockLight, 1.4, 1.0, 1.2, -2.4, 0.5, 1.8).rotation.y = 0.9;
-  } else if (variant === 3) {
-    lat = 18;
-    addBox(g, MAT.bush, 2.4, 1.5, 2.0, 0, 0.75, 0);
-    addBox(g, MAT.bushDark, 1.8, 1.2, 1.6, 1.9, 0.6, 1.2);
-    addBox(g, MAT.bush, 1.4, 1.0, 1.3, -1.8, 0.5, 1.4);
-    addBox(g, MAT.bushDark, 1.2, 0.8, 1.1, 0.6, 0.4, -1.7);
-    addBox(g, MAT.wood, 0.3, 1.4, 0.3, -2.6, 0.7, -1.6);
-  } else {
-    lat = 22;
-    addBox(g, MAT.wood, 0.55, 7.2, 0.55, 0, 3.6, 0);
-    addBox(g, MAT.wood, 0.34, 3.0, 0.34, -1.2, 5.2, 0).rotation.z = 0.75;
-    addBox(g, MAT.wood, 0.3, 2.2, 0.3, 1.0, 6.0, 0.2).rotation.z = -0.6;
-    addPine(g, 3.2, -1.2, 8.0, [MAT.pineDark, MAT.pineMid]);
-    addPine(g, -3.6, 1.8, 6.6, [MAT.pineMid, MAT.pineDark]);
-  }
-
-  return { group: g, lat, spin: null };
-}
-
-/* ---------- Горы ---------- */
-function addSnowCap(parent, w, y, z, d = null) {
-  const depth = d == null ? w : d;
-  return addBox(parent, MAT.snow, w, 0.42, depth, 0, y, z);
-}
-
-function buildMountainVariant(variant) {
-  const g = new THREE.Group();
-  let lat = 34;
-
-  if (variant === 0) {
-    lat = 36;
-    addBox(g, MAT.rockDark, 7.0, 3.2, 6.0, 0, 1.6, 0).rotation.y = 0.18;
-    addBox(g, MAT.rock, 5.4, 3.8, 4.6, 0.3, 4.8, -0.1).rotation.y = 0.4;
-    addBox(g, MAT.rockLight, 3.8, 3.0, 3.2, -0.2, 7.8, 0.1).rotation.y = 0.1;
-    addSnowCap(g, 4.1, 9.4, 0.1, 3.5);
-    addBox(g, MAT.snow, 1.9, 0.8, 1.6, 0.7, 10.0, 0);
-  } else if (variant === 1) {
-    lat = 62;
-    addBox(g, MAT.rockDark, 17, 7.5, 9, 0, 3.5, 0).rotation.y = 0.22;
-    addBox(g, MAT.rock, 11, 8.0, 6.5, 3.4, 7.0, -1.2).rotation.y = 0.55;
-    addBox(g, MAT.rockLight, 7.0, 5.4, 4.4, -1.6, 10.2, 0.8).rotation.y = 0.1;
-    addSnowCap(g, 8.2, 12.1, 0.6, 4.8);
-    addSnowCap(g, 5.0, 8.0, 3.2, 3.0);
-  } else if (variant === 2) {
-    lat = 25;
-    const specs = [
-      [2.6, 1.1, 2.2, 0, 0.55, 0],
-      [1.7, 0.9, 1.5, 2.4, 0.45, 1.2],
-      [1.2, 0.7, 1.1, -2.2, 0.35, 1.6],
-      [0.9, 0.6, 0.8, 0.8, 0.3, -2.0],
-      [1.4, 0.7, 1.2, -1.5, 0.35, -1.8]
-    ];
-    for (const [w, h, d, x, y, z] of specs) {
-      addBox(g, MAT.rock, w, h, d, x, y, z).rotation.y = (x + z) * 0.3;
-    }
-  } else if (variant === 3) {
-    lat = 27;
-    addPine(g, 0, 0, 8.4, [MAT.pineDark, MAT.pineMid]);
-    addPine(g, 3.0, 1.4, 6.2, [MAT.pineMid, MAT.pineDark]);
-  } else {
-    lat = 46;
-    addBox(g, MAT.rockDark, 8.5, 8.0, 6.5, 0, 4.0, 0).rotation.y = 0.16;
-    addBox(g, MAT.rock, 6.6, 4.4, 5.2, -0.4, 10.0, 0.2).rotation.y = 0.35;
-    addBox(g, MAT.rockLight, 4.4, 2.6, 3.8, 0.1, 13.2, 0).rotation.y = 0.2;
-    addSnowCap(g, 5.0, 14.6, 0, 4.2);
-  }
-
-  return { group: g, lat, spin: null };
-}
-
-/* ---------- МКАД ---------- */
 function buildMkadVariant(variant) {
   const g = new THREE.Group();
   let lat = 42;
@@ -1202,42 +970,11 @@ function buildMkadVariant(variant) {
   return { group: g, lat, spin: null };
 }
 
-function buildEmbankmentVariant(variant) {
-  // Набережная строится в js/embankment.js. Здесь — только немного зелени
-  // и камней между домами, чтобы слот не оставался пустым.
-  const g = new THREE.Group();
-  let lat = 30;
-  if (variant === 0) {
-    lat = 34;
-    addBox(g, MAT.bush, 2.4, 1.6, 2.0, 0, 0.8, 0);
-    addBox(g, MAT.bushDark, 1.8, 1.2, 1.6, 2.0, 0.6, 1.2);
-  } else if (variant === 1) {
-    lat = 38;
-    addBox(g, MAT.rock, 3.0, 1.8, 2.6, 0, 0.9, 0).rotation.y = 0.4;
-    addBox(g, MAT.bush, 1.6, 1.0, 1.4, 2.4, 0.5, 1.0);
-  } else if (variant === 2) {
-    lat = 32;
-    addPine(g, 0, 0, 8.0, [MAT.pineDark, MAT.pineMid]);
-    addPine(g, 3.0, 1.4, 6.2, [MAT.pineMid, MAT.pineDark]);
-  } else if (variant === 3) {
-    lat = 36;
-    addBox(g, MAT.moss, 5.0, 0.3, 4.0, 0, 0.15, 0);
-    addBox(g, MAT.bush, 1.8, 1.2, 1.6, 2.2, 0.6, 1.0);
-  } else {
-    lat = 30;
-    addBox(g, MAT.bushDark, 2.0, 1.4, 1.8, 0, 0.7, 0);
-  }
-  return { group: g, lat, spin: null };
-}
-
 function buildVariant(biome, variant) {
   const id = BIOMES[biome] && BIOMES[biome].id;
   if (id === 'field') return buildFieldVariant(variant);
-  if (id === 'forest') return buildForestVariant(variant);
-  if (id === 'mountain') return buildMountainVariant(variant);
   if (id === 'mkad') return buildMkadVariant(variant);
-  if (id === 'embankment') return buildEmbankmentVariant(variant);
-  throw new Error(`Для биома «${id || biome}» нет пула декораций: город собирается в roadside.js`);
+  throw new Error(`Для биома «${id || biome}» нет слота: лес, горы и набережная строятся своими модулями, город — в roadside.js`);
 }
 
 /* Профиль откоса. Те же точки рисует лента в roadSurface.js через G.shoulder. */
@@ -1430,24 +1167,11 @@ let lastSplitSide = -1;
 /** @returns {import('./engine/lanes.js').CarriageLayout} */
 function exitLaneLayout(dominant) {
   const base = LANE_CONFIG[dominant] || LANE_CONFIG[0];
-  const lw = 4.75;
-  const offsets = [-lw * 0.5, lw * 0.5];
-  return {
-    id: base.id,
-    count: 2,
-    oncomingCount: 0,
-    biomeOncoming: 0,
-    way: /** @type {import('./engine/lanes.js').RoadWay} */ ('one-way'),
-    laneWidth: lw,
-    width: lw * 2,
-    offsets,
-    speeds: [60, 70],
-    startLane: 0,
-  };
+  return exitCarriage(base.id);
 }
 
 function onExitPath(s) {
-  if (exitHold) return true;
+  if (riderSeat.kind === 'exit') return true;
   const ci = carryInAt(s);
   if (ci >= 0 && ci < 0.85) return true;
   const at = layoutAt(s);
@@ -1483,28 +1207,13 @@ function carryInAt(s) {
 
 function riderAxisAt(s) {
   const frame = frameAt(s);
-  if (exitHold) {
-    const center = exitRibbonCenter(frame.local);
-    if (center != null) return frame.origin + center;
-    const home = frameAt(G.playerS).origin;
-    return frame.origin + (Math.abs(frame.origin - home) < 0.5 ? heldCenter : 0);
-  }
-  // laneAnchor используется в roadMetersAt(..., riding=false)
-  const chosen = frame.chosen;
-  if (chosen === 1 && frame.block && frame.block.built && frame.block.kind === 'seal') {
-    const local = exitRibbonCenter(frame.local);
-    if (local != null) {
-      const t = frame.phase.kind === 'end' ? Math.max(0, Math.min(1, frame.phase.t)) : 1;
-      return roadCenter(frame) + local * t;
-    }
-  }
-  return roadCenter(frame);
+  return seatAxis(frame, riderFrameSeat(s, G.laneOffset).kind);
 }
 
 function applyLaneConfig(dominant, playerS) {
   const base = LANE_CONFIG[dominant];
   const isExit = onExitPath(playerS);
-  const cfg = isExit ? exitLaneLayout(dominant) : carriageLanes(base, roadWayAt(playerS, exitHold));
+  const cfg = isExit ? exitLaneLayout(dominant) : carriageLanes(base, roadWayAt(playerS, riderSeat.kind === 'exit'));
   const worldBefore = riderLatAt(playerS, G.laneOffset);
   const modeChanged = isExit !== lastExitLaneMode;
   const biomeChanged = dominant !== lastLaneBiome;
@@ -1540,7 +1249,7 @@ function applyLaneConfig(dominant, playerS) {
     lastExitLaneMode = isExit;
   }
 
-  const limits = logicalRoadLimits(localEdgesAt(playerS), laneDisplayScaleAtS(playerS), exitHold);
+  const limits = logicalRoadLimits(localEdgesAt(playerS), laneDisplayScaleAtS(playerS), riderSeat.kind === 'exit');
   G.roadEdgeMin = limits.min;
   G.roadEdgeMax = limits.max;
   G.ROAD_EDGE = Math.max(Math.abs(limits.min), limits.max);
@@ -1659,13 +1368,13 @@ function updateBiome(dt) {
   const chosenBefore = chosenZones.has(zone);
   let previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
-    : (exitHold ? 1 : 0);
+    : (riderSeat.kind === 'exit' ? 1 : 0);
   // На момент выбора считаем съезд взятым, если байк реально стоит на его ленте.
   // Это страхует от потери захвата в кадр фиксации.
   if (!chosenBefore && !previewSide) {
     const frame = frameAt(G.playerS);
     const span = laneSpanAt(G.playerS);
-    const world = riderPoint(frame, span);
+    const world = seatWorld(frame, riderFrameSeat(G.playerS, G.laneOffset), span);
     const logical = world - frame.origin;
     if (onExitRibbon(logical, frame.local)) previewSide = 1;
   }
@@ -1731,7 +1440,7 @@ function updateBiome(dt) {
   // попутную полосу объединённой дороги, а не бросать «как поедет».
   if (G.started && !G.ended) {
     const cfg = lanesAtS(G.playerS);
-    if (exitHold) G.laneAssistTarget = null;
+    if (riderSeat.kind === 'exit') G.laneAssistTarget = null;
     else if (lastSplitZone >= 0) {
       const since = meters - (lastSplitZone + 1) * ZONE_M;
       // После развилки мягко ведём байк в попутную полосу.
@@ -1795,8 +1504,7 @@ function resetBiomeRun() {
   lastExitLaneMode = false;
   lastSplitZone = -1;
   lastSplitSide = -1;
-  exitHold = false;
-  heldCenter = 0;
+  riderSeat = { kind: 'road', lane: G.laneOffset };
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
@@ -1927,8 +1635,13 @@ export function initBiome() {
 
   const zone = Math.max(0, Math.floor(stored / ZONE_M));
   readPlan();
-  const savedCurrent = readInt(CURRENT_KEY, -1);
-  G.currentBiome = savedCurrent >= 0 && savedCurrent < BIOMES.length ? savedCurrent : 0;
+  let savedCurrent = null;
+  try {
+    savedCurrent = storedBiomeIndex(localStorage.getItem(CURRENT_KEY));
+  } catch {
+    savedCurrent = null;
+  }
+  G.currentBiome = savedCurrent == null ? 0 : savedCurrent;
   if (zoneBiomes[zone] == null) zoneBiomes[zone] = G.currentBiome;
   if (zoneBiomes[zone - 1] == null) zoneBiomes[zone - 1] = G.currentBiome;
   const pending = readPending();
@@ -1984,6 +1697,7 @@ export function initBiomeWorld() {
     for (const side of [-1, 1]) {
       const list = side < 0 ? slot.left : slot.right;
       for (let biome = 1; biome < BIOMES.length; biome++) {
+        if (BIOMES[biome].decor !== 'slots') continue;
         const variant = ((i * 3 + (side > 0 ? 2 : 0) + biome) % 5 + 5) % 5;
         const built = buildVariant(biome, variant);
         const meshes = [];

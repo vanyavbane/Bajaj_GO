@@ -33,6 +33,25 @@ type CarriageInput = {
   way?: RoadWay;
 };
 
+/** Съезд — две попутные полосы. Ширина не берётся у биома: лента одна и та же на любой дороге. */
+export const EXIT_LANE_WIDTH = 4.75;
+
+export function exitCarriage(id: LaneLayout['id']): CarriageLayout {
+  const offsets = [-EXIT_LANE_WIDTH * 0.5, EXIT_LANE_WIDTH * 0.5];
+  return {
+    id,
+    count: 2,
+    oncomingCount: 0,
+    biomeOncoming: 0,
+    way: 'one-way',
+    laneWidth: EXIT_LANE_WIDTH,
+    width: EXIT_LANE_WIDTH * 2,
+    offsets,
+    speeds: [60, 70],
+    startLane: 0,
+  };
+}
+
 /** На односторонней встречная полоса становится попутной. Смещения полос те же. */
 export function carriageLanes<T extends CarriageInput>(
   lanes: T,

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BIOMES, PROCEDURAL_BOARDS } from './engine/biomes.js';
 import { keepInWindow, placeIfMoved } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -90,64 +91,30 @@ export function initRoadside() {
       }
     ];
     for (const fn of specs) billboardTextures.push(G.createCanvasTexture(512, 192, fn));
+    if (billboardTextures.length !== PROCEDURAL_BOARDS) {
+      throw new Error(`Процедурных щитов ${billboardTextures.length}, каталог ждёт ${PROCEDURAL_BOARDS}`);
+    }
   }
   buildBillboardTextures();
 
-  const mkadDestinations = [
-    ['САДОВОД · 14 КМ', 'МЕГА БЕЛАЯ ДАЧА'],
-    ['ТРК VEGAS · 24 КМ', 'КАШИРСКОЕ ШОССЕ'],
-    ['КРОКУС СИТИ · 66 КМ', 'ВОЛОКОЛАМСКОЕ Ш.'],
-    ['ЛОСИНЫЙ ОСТРОВ · 95 КМ', 'ЯРОСЛАВСКОЕ ШОССЕ'],
-    ['ЩЁЛКОВСКОЕ Ш. · 104 КМ', 'ЦЕНТР · БАЛАШИХА'],
-    ['ХИМКИ · 74 КМ', 'ЛЕНИНГРАДСКОЕ ШОССЕ']
-  ];
-  const overheadSignTextures = mkadDestinations.map(([t1, t2]) =>
-    G.createCanvasTexture(512, 140, (ctx, w, h) => {
-      ctx.fillStyle = '#006b2d'; ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
-      ctx.fillStyle = '#ffffff'; ctx.font = '900 32px Arial'; ctx.textAlign = 'center';
-      ctx.fillText(t1, w / 2, 54);
-      ctx.fillStyle = '#ffeb3b'; ctx.font = '800 24px Arial';
-      ctx.fillText(t2 + '  ⬇  ⬇', w / 2, 102);
-    })
-  );
-
-  /* Зелёные указатели новых локаций: рисуются той же процедурой, что и МКАД. */
-  function biomeSignTexture(title, subtitle) {
+  /* Указатели и набор щитов читаются из записи локации, в порядке каталога. */
+  function paintSign(title, subtitle, arrows) {
+    const mark = arrows === 2 ? '  ⬇  ⬇' : '  ⬇';
+    const titleSize = arrows === 2 ? 32 : 30;
+    const subSize = arrows === 2 ? 24 : 22;
     return G.createCanvasTexture(512, 140, (ctx, w, h) => {
       ctx.fillStyle = '#006b2d'; ctx.fillRect(0, 0, w, h);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
-      ctx.fillStyle = '#ffffff'; ctx.font = '900 30px Arial'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff'; ctx.font = `900 ${titleSize}px Arial`; ctx.textAlign = 'center';
       ctx.fillText(title, w / 2, 54);
-      ctx.fillStyle = '#ffeb3b'; ctx.font = '800 22px Arial';
-      ctx.fillText(subtitle + '  ⬇', w / 2, 102);
+      ctx.fillStyle = '#ffeb3b'; ctx.font = `800 ${subSize}px Arial`;
+      ctx.fillText(subtitle + mark, w / 2, 102);
     });
   }
-  const biomeSignTextures = [
-    overheadSignTextures,
-    [
-      biomeSignTexture('ПОДМОСКОВНЫЕ ПОЛЯ', 'ПШЕНИЦА · ВЕТРЯКИ · АМБАРЫ')
-    ],
-    [
-      biomeSignTexture('ЛЕСНАЯ ДОРОГА', 'ЕЛИ · ВАЛУНЫ · ПРОСЕКИ')
-    ],
-    [
-      biomeSignTexture('ГОРНЫЙ СЕРПАНТИН', 'ПЕРЕВАЛ · СМОТРОВАЯ ПЛОЩАДКА'),
-      biomeSignTexture('ПЕРЕВАЛ', 'ВНИМАНИЕ · КРУТЫЕ ПОВОРОТЫ'),
-      biomeSignTexture('СМОТРОВАЯ ПЛОЩАДКА', 'ОСТАНОВКА · ОТДЫХ · ВИД')
-    ],
-    overheadSignTextures
-  ];
-
-  // Индексы текстур билбордов по биомам: город и МКАД — весь набор,
-  // остальным достаются только логотип, PULSAR/DOMINAR и заправка.
-  const billboardIndexByBiome = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8],
-    [2, 0, 8],
-    [2, 0],
-    [1, 2],
-    [0, 1, 2, 3, 4, 5, 6, 7, 8]
-  ];
+  const biomeSignTextures = BIOMES.map((biome) =>
+    biome.signs.map((sign) => paintSign(sign.title, sign.subtitle, biome.signArrows))
+  );
+  const billboardIndexByBiome = BIOMES.map((biome) => biome.boards);
 
   G.NUM_ROADSIDE_SLOTS = 24;
   G.SLOT_STEP = 20;
