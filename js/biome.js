@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, departedRoad, inheritedWiden, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
+import { carriageAt, carriageLat, departedRoad, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
+import { EXIT_LANE_HALF, arrivalHalf, asphaltSpan, branchPick, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
 import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -409,15 +409,17 @@ function forkSpreadAtS(s) {
   return liveForkAtS(s, courseLayout().spread);
 }
 
-/** 0…1, если прошлая зона взяла съезд и точка ещё в хвосте. Иначе null. */
-function widenAt(s) {
-  const ci = carryInAt(s);
-  return ci >= 0 ? ci : null;
-}
-
-/** Полуширина каталога. Съезд её не наследует: ширина следующей зоны — ширина её биома. */
+/** Полуширина кадра. После съезда дорога дорастает до нового биома и не возвращается к ширине шоссе. */
 function catalogHalfAt(s) {
-  return baseRoadWidthAtMeters(blendMetersAt(s)) * 0.5;
+  const meters = blendMetersAt(s);
+  const sample = zoneSample(meters);
+  if (sample.zone > 0 && zoneTookExit(sample.zone - 1)) {
+    const from = Math.min(zoneRoadHalf(sample.zone - 1), EXIT_LANE_HALF);
+    const next = LANE_CONFIG[roadAtMeters(meters).b];
+    const biomeHalf = next && Number.isFinite(next.width) ? next.width * 0.5 : from;
+    return arrivalHalf(sample.local, ROAD_FADE_M, from, biomeHalf);
+  }
+  return baseRoadWidthAtMeters(meters) * 0.5;
 }
 
 function splitAmountAtS(s) {
@@ -671,16 +673,10 @@ function forkCloseAtS(s) {
   return 0;
 }
 
-/** Кромка живой дороги. Пока прямая на месте, справа это её край, не внешний край съезда.
- *  Когда съезд заменил прямую, кромки переходят на него. */
+/** Оболочка живого асфальта: прямая и съезд, пока у каждой есть ширина. */
 function asphaltSpanAt(s) {
   const frame = frameAt(s);
   return asphaltSpan(frame.world, frame.origin);
-}
-
-function roadOuterLat(s, side) {
-  const frame = frameAt(s);
-  return carriageEdge(frame.world, side < 0 ? -1 : 1, frame.origin);
 }
 
 function laneSpanAt(s) {
@@ -694,7 +690,6 @@ function roadCarriageAt(s) {
   return carriageAt({
     frame: frameAt(s),
     biome: LANE_CONFIG[dom] || LANE_CONFIG[0],
-    widen: widenAt(s),
   });
 }
 
@@ -730,7 +725,7 @@ function updateExitHold() {
     scale,
     seatAxis(frame, riderSeat.kind),
   );
-  const merged = live.phase === 'seal' || live.phase === 'carry' || live.phase === 'widen';
+  const merged = live.phase === 'seal' || live.phase === 'carry';
   riderSeat = stepSeat(frame, seated, scale, merged);
   riderSpan = scale;
   G.laneOffset = riderSeat.lane;
@@ -1168,22 +1163,6 @@ function updateTerrainTint(weights) {
 let lastLaneBiome = -1;
 let lastExitLaneMode = false;
 
-/** 0..1 в начале зоны после взятого съезда предыдущей зоны, иначе -1. */
-function carryInAt(s) {
-  const at = layoutAt(s);
-  const along = Number.isFinite(s) ? s : 0;
-  const meters = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0) + along;
-  const widen = inheritedWiden({
-    meters,
-    zoneLength: ZONE_M,
-    nose: at.nose + at.layout.offset,
-    choiceAt: at.layout.choiceAt,
-    previousTookExit: at.zone > 0 && zoneTookExit(at.zone - 1),
-    tookExit: coursePick(at.zone) === 1,
-  });
-  return widen == null ? -1 : widen;
-}
-
 function riderAxisAt(s) {
   const frame = frameAt(s);
   return seatAxis(frame, riderFrameSeat(s, G.laneOffset).kind);
@@ -1192,7 +1171,7 @@ function riderAxisAt(s) {
 function applyLaneConfig(dominant, playerS) {
   const live = playerLive(playerS);
   const cfg = live.lanes;
-  const isExit = live.phase === 'seal' || live.phase === 'carry' || live.phase === 'widen'
+  const isExit = live.phase === 'seal' || live.phase === 'carry'
     || (live.phase === 'ribbon' && riderSeat.kind === 'exit');
   const worldBefore = riderLatAt(playerS, G.laneOffset);
   const modeChanged = isExit !== lastExitLaneMode;
@@ -1547,7 +1526,6 @@ export function initBiome() {
   G.medianFits = medianFits;
   G.medianPose = medianPose;
   G.asphaltSpan = asphaltSpanAt;
-  G.roadOuterLat = roadOuterLat;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;

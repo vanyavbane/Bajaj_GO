@@ -1,7 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
 import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, lanesOf, nearestLaneOffset, offsetDirection, outerLane } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, landOnCarriage, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
+import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, arrivalHalf, branchEdges, branchPick, carriedOriginAt, chosenSideOf, courseLocal, exitCarryOrigin, exitClock, exitLaneWorld, exitReserved, landOnCarriage, exitRibbonMid, exitSeam, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, pickToSide, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -180,7 +180,7 @@ assert(settled.leftOuter === -EXIT_LANE_HALF && settled.leftInner === EXIT_LANE_
 assert(exitCarryOrigin(10, 0) > 10, 'мировой центр взятого съезда остаётся справа от оси');
 const declinedSettle = roadAt(afterSeal, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.leftInner === 10, 'после отказа прямая остаётся своей ширины');
-assert(declinedSettle.rightOuter === declinedSettle.rightInner && declinedSettle.rightInner > 12, 'отказанный съезд заканчивается в стороне и не вливается в прямую');
+assert(declinedSettle.rightOuter === declinedSettle.rightInner && declinedSettle.rightInner === declinedSettle.leftInner, 'после отказа съезда уже нет, осталась одна прямая');
 const openRibbon = branchEdges(10, FORK_SPREAD);
 assert(roadLateral(9, 10, openRibbon, false) === 9, 'вне съезда полоса и есть метры от оси');
 const ride = roadLateral(9, 10, openRibbon, true);
@@ -218,6 +218,9 @@ assert(Math.abs(handed) < 10, 'после переноса полоса оста
 const joined = branchEdges(10, 4);
 const joinedLimits = logicalRoadLimits(joined, 1, false);
 assert(joinedLimits.max > joined.leftInner, 'пока съезд приклеен, правая стена стоит за ним, а не на кромке прямой');
+assert(arrivalHalf(0, 350, EXIT_LANE_HALF, 10) === EXIT_LANE_HALF, 'сразу после съезда ширина равна ширине съезда');
+assert(Math.abs(arrivalHalf(350, 350, EXIT_LANE_HALF, 10) - 10) < 1e-9, 'к концу кросс-фейда дорога дорастает до биома');
+assert(arrivalHalf(0, 350, EXIT_LANE_HALF, 10) < 10, 'после съезда дорога не прыгает на ширину шоссе');
 const splitRoad = branchEdges(10, FORK_SPREAD);
 const blocked = logicalRoadLimits(splitRoad, 1, false);
 const riding = logicalRoadLimits(splitRoad, 1, true);

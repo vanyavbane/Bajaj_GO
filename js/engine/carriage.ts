@@ -16,9 +16,9 @@ import type { SeatKind } from './seat.ts';
  * ribbon — лента ещё сбоку, полосы дороги остаются биомом.
  * seal — выбранный съезд закрывает прямую, полосы уже его.
  * carry — съезд стал дорогой и своей ширины не отдаёт.
- * road — обычная дорога биома. widen оставлен в типе, фаза больше не возникает.
+ * road — обычная дорога биома.
  */
-export type CarriagePhase = 'road' | 'ribbon' | 'seal' | 'carry' | 'widen';
+export type CarriagePhase = 'road' | 'ribbon' | 'seal' | 'carry';
 
 export interface LiveCarriage {
   phase: CarriagePhase;
@@ -36,10 +36,6 @@ export interface CarriageQuery {
   frame: RoadFrame;
   /** Полосы биома в этой точке. На стыке это доминирующий биом. */
   biome: LaneLayout;
-  /**
-   * Раньше 0…1 растягивали съезд до биома. Поле остаётся у вызова, на кромки не влияет.
-   */
-  widen: number | null;
 }
 
 function mainHalf(frame: RoadFrame): number {
@@ -87,23 +83,6 @@ function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, h
     half,
     way: lanes.way,
   };
-}
-
-/**
- * Хвоста нет. Раньше первые 100 м следующей зоны растягивали съезд до ширины
- * исходной дороги. Съезд в неё не вливается.
- */
-export function inheritedWiden(args: {
-  meters: number;
-  zoneLength: number;
-  /** Нос текущей зоны в тех же метрах, что и meters. */
-  nose: number;
-  choiceAt: number;
-  previousTookExit: boolean;
-  tookExit: boolean;
-}): number | null {
-  void args;
-  return null;
 }
 
 /** Полосы, встречные, ось и ширина одной точки. */
@@ -238,7 +217,7 @@ export function solidMarks(road: LiveCarriage): LaneMark[] {
  */
 export function riderCarriage(road: LiveCarriage, frame: RoadFrame, seat: SeatKind): LiveCarriage {
   if (seat !== 'exit') return road;
-  if (road.phase === 'seal' || road.phase === 'carry' || road.phase === 'widen') return road;
+  if (road.phase === 'seal' || road.phase === 'carry') return road;
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) return road;
   const half = Math.max(0, exitWidth(frame.local) * 0.5);

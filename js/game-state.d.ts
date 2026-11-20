@@ -329,7 +329,6 @@ export interface GameState {
   forkChosenSideAtS: (s: number) => ChosenSide;
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
-  roadOuterLat: (s: number, side: number) => number;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
   roadBiomeAtS: (s: number) => number;
   splitCenterS: (playerS: number) => number;

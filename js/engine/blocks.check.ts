@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitCarryOrigin, exitChain, exitClock, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
+import { exitCarryOrigin, exitChain, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -88,6 +88,13 @@ const exitAfter = frameAt(330 + 0.02, 1).world;
 assert(
   close(exitBefore.rightInner, exitAfter.leftOuter) && close(exitBefore.rightOuter, exitAfter.leftInner),
   'блок carry продолжает ленту съезда, без скачка',
+);
+const declinedBefore = frameAt(330 - 0.02, -1).local;
+const declinedAfter = frameAt(330 + 0.02, -1).local;
+assert(exitRibbonMid(declinedBefore) > 12, 'закрытие отказа уводит съезд в сторону');
+assert(
+  declinedAfter.rightInner === declinedAfter.leftInner && declinedAfter.rightOuter === declinedAfter.rightInner,
+  'после закрытия кончика уже нет',
 );
 
 let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];

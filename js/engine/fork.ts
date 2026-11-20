@@ -264,12 +264,8 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
     };
   }
   if (block.kind === 'road') {
-    // Отказ оставляет съезд в стороне. Его кромка не возвращается на прямую.
-    const edge = branchEdges(road, FORK_SPREAD);
-    const mid = exitRibbonMid(edge) + FORK_SPREAD * 1.5;
-    edge.rightInner = mid;
-    edge.rightOuter = mid;
-    return edge;
+    // Съезд уже сошёл на нет в закрытии. Дальше одна прямая, без кончика в стороне.
+    return branchEdges(road, 0);
   }
   return branchEdges(road, 0);
 }
@@ -874,6 +870,20 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
 
 /** Ширина съезда: две полосы в одну сторону. */
 export const EXIT_LANE_HALF = 4.75;
+
+/**
+ * Полуширина дороги после взятого съезда.
+ * На границе зоны она равна ширине съезда и за `fade` метров дорастает до биома.
+ * К ширине шоссе, с которого съехали, не возвращается.
+ */
+export function arrivalHalf(local: number, fade: number, exitHalf: number, biomeHalf: number): number {
+  const from = Number.isFinite(exitHalf) ? exitHalf : 0;
+  const to = Number.isFinite(biomeHalf) ? biomeHalf : from;
+  if (!(fade > 0) || !(local < fade)) return to;
+  const u = Math.max(0, local / fade);
+  const t = u * u * (3 - 2 * u);
+  return from + (to - from) * t;
+}
 
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs: number, cityOuter: number, shoulder: ShoulderProfile): ShoulderLats {
