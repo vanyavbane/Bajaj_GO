@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cylinder } from './geom.js';
-import { asphaltSpan, worldEdge } from './engine/fork.js';
+import { roadShell, shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -165,10 +165,10 @@ export function initForest() {
   /** Общая часть постановки: кромка → смещение → проверка коридора → вес биома. */
   function makePlacement(s, depth, side, type, scale, yaw, tiltX, tiltZ) {
     const frame = G.roadsideFrameAt(s);
-    const edge = worldEdge(frame.edges, side, frame.origin);
+    const shell = roadShell(frame.edges);
+    const edge = shellEdge(frame.edges, side);
     const lat = edge + side * depth;
-    const span = asphaltSpan(frame.edges, frame.origin);
-    if (lat > span.left - CFG.CORRIDOR_MARGIN && lat < span.right + CFG.CORRIDOR_MARGIN) {
+    if (lat > shell.left - CFG.CORRIDOR_MARGIN && lat < shell.right + CFG.CORRIDOR_MARGIN) {
       return null;
     }
     let k = 1;

@@ -1,4 +1,4 @@
-import { exitWidth, mainRoadOpen, outwardFrom, worldEdge } from './fork.ts';
+import { exitWidth, mainRoadOpen, outwardFrom, shellEdge } from './fork.ts';
 import type { AsphaltEdges, ChosenSide } from './fork.ts';
 
 export type { AsphaltEdges, ChosenSide };
@@ -6,8 +6,8 @@ export type { AsphaltEdges, ChosenSide };
 /**
  * Контракт постановки окружения.
  *
- * Боковое смещение — готовые метры для `placeOnRoad`. Знак берётся от центра
- * дороги, поэтому после съезда левый декор остаётся слева от полотна.
+ * Боковое смещение — готовые метры для `placeOnRoad`. Знак берётся от середины
+ * живого асфальта, поэтому декор остаётся снаружи съезда, даже если старый центр ещё в стороне.
  *
  * Кромки приходят снаружи (`roadEdgesAt`): две ленты, разъезд и схлопывание
  * чужой ветки уже внутри них. Этот модуль решает только, можно ли ставить
@@ -73,9 +73,10 @@ export function sideOpen(_chosenSide: ChosenSide, _side: AssetSide): boolean {
   return true;
 }
 
-/** Дальний живой асфальт. Декор стоит снаружи него, в том числе снаружи съезда. */
-export function outerEdge(edges: AsphaltEdges, side: AssetSide, center = 0): number {
-  return worldEdge(edges, side, center);
+/** Дальний живой асфальт. Декор стоит снаружи оболочки, не снаружи слота. */
+export function outerEdge(edges: AsphaltEdges, side: AssetSide, _center = 0): number {
+  void _center;
+  return shellEdge(edges, side);
 }
 
 /**
@@ -85,7 +86,8 @@ export function outerEdge(edges: AsphaltEdges, side: AssetSide, center = 0): num
 export function besidePose(frame: RoadsideFrame, asset: BesideAsset): RoadsidePose {
   if (!sideOpen(frame.chosenSide, asset.side)) return HIDDEN;
   const edge = outerEdge(frame.edges, asset.side, frame.origin);
-  const lateral = outwardFrom(edge, frame.origin, outward(asset.gap) + outward(asset.inset));
+  const shellMid = (shellEdge(frame.edges, -1) + shellEdge(frame.edges, 1)) * 0.5;
+  const lateral = outwardFrom(edge, shellMid, outward(asset.gap) + outward(asset.inset));
   return { lateral, absLat: Math.abs(lateral - frame.origin) };
 }
 

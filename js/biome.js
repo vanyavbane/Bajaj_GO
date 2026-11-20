@@ -5,7 +5,7 @@ import { carriageAt, carriageLat, departedRoad, inheritedWiden, laneMarks, rider
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
 import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -1001,12 +1001,14 @@ function smooth01(v) {
 
 function groundOffset(lat, s) {
   const frame = frameAt(s);
-  const side = lat < frame.origin ? -1 : 1;
-  const edge = worldEdge(frame.world, side, frame.origin);
-  const fromCenter = Math.abs(edge - frame.origin);
+  const shell = roadShell(frame.world);
+  const mid = (shell.left + shell.right) * 0.5;
+  const side = lat < mid ? -1 : 1;
+  const edge = side < 0 ? shell.left : shell.right;
+  const fromCenter = Math.abs(edge - mid);
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
   const lats = shoulderLats(fromCenter, cityOuter, SHOULDER);
-  const dist = Math.abs(lat - frame.origin);
+  const dist = Math.abs(lat - mid);
   // Набережная: справа пологая пешеходная зона и спуск к воде вместо откоса.
   let embW = 0;
   if (side > 0 && EMBANKMENT >= 0) {
@@ -1682,8 +1684,9 @@ export function initBiomeWorld() {
           entry.group.scale.setScalar(sceneryScale);
           const sideSign = side < 0 ? -1 : 1;
           const frame = frameAt(s);
-          const edge = worldEdge(frame.world, sideSign, frame.origin);
-          const gap = Math.max(8, entry.lat - Math.abs(edge - frame.origin));
+          const shell = roadShell(frame.world);
+          const edge = sideSign < 0 ? shell.left : shell.right;
+          const gap = Math.max(8, entry.lat - Math.abs(edge - (shell.left + shell.right) * 0.5));
           const pose = besidePose(
             { edges: frame.world, chosenSide: frame.chosen, origin: frame.origin },
             { side: sideSign, gap, inset: 0 }

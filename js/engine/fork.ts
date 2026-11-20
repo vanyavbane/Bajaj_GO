@@ -663,6 +663,17 @@ export function innerTrackEdge(span: AsphaltSpan | null, side: -1 | 1, inset = 0
   return side < 0 ? span.right - pad : span.left + pad;
 }
 
+/** Оболочка кадра: внешние кромки живых лент. Центр слота для этого не нужен. */
+export function roadShell(edges: AsphaltEdges): AsphaltSpan {
+  return asphaltShell(followAsphalt([null, null], edges)) ?? { left: 0, right: 0 };
+}
+
+/** Внешняя кромка оболочки. Декор и земля стоят снаружи неё. */
+export function shellEdge(edges: AsphaltEdges, side: -1 | 1): number {
+  const shell = roadShell(edges);
+  return side < 0 ? shell.left : shell.right;
+}
+
 /** Внешние кромки живого асфальта. Схлопнутая лента в оболочку не входит. */
 export function asphaltShell(spans: readonly (AsphaltSpan | null)[]): AsphaltSpan | null {
   let left = Infinity;

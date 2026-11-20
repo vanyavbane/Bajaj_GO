@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { worldEdge } from './engine/fork.js';
+import { shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -261,7 +261,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.03) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, -1, frame.origin);
+      const edge = shellEdge(frame.edges, -1);
       const lat = edge - CFG.FACADE_DEPTH;
       const h = (CFG.FACADE_H_MIN + rng() * (CFG.FACADE_H_MAX - CFG.FACADE_H_MIN)) * k;
       const w = CFG.FACADE_W * (0.96 + rng() * 0.08);
@@ -278,7 +278,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.03) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, 1, frame.origin);
+      const edge = shellEdge(frame.edges, 1);
       const lat = edge + CFG.PARAPET_DEPTH;
       put(pools.parapet, s, lat, 0.55 * k, 8, 1.1 * k, 0.7 * k, 0, counters.parapet);
     }
@@ -287,7 +287,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.03) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, 1, frame.origin);
+      const edge = shellEdge(frame.edges, 1);
       for (let step = 0; step < 5; step++) {
         const lat = edge + CFG.PARAPET_DEPTH + 1 + step * 1.6;
         const y = -0.4 - step * 1.1;
@@ -301,8 +301,8 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.03) continue;
       const frame = G.roadsideFrameAt(s);
-      const rightEdge = worldEdge(frame.edges, 1, frame.origin);
-      const leftEdge = worldEdge(frame.edges, -1, frame.origin);
+      const rightEdge = shellEdge(frame.edges, 1);
+      const leftEdge = shellEdge(frame.edges, -1);
       const h = 5.2 * k;
       put(pools.lampPole, s, rightEdge + 15.5 * k, h * 0.5, k, h, k, 0, counters.lampPole);
       put(pools.lampArm, s, rightEdge + 15.5 * k, h + 0.1, 1.6 * k, 0.16 * k, 0.16 * k, 0, counters.lampArm);
@@ -320,7 +320,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.03) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, 1, frame.origin);
+      const edge = shellEdge(frame.edges, 1);
       put(pools.signPole, s, edge + 13 * k, 1.4 * k, k, 2.8 * k, k, 0, counters.signPole);
       put(pools.signBoard, s, edge + 13 * k, 2.9 * k, 1.2 * k, 0.8 * k, 0.1 * k, 0, counters.signBoard);
     }
@@ -331,7 +331,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.05) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, 1, frame.origin);
+      const edge = shellEdge(frame.edges, 1);
       const lat = edge + CFG.BANK_LAT + rng() * 50;
       const h = (12 + rng() * 22) * k;
       put(pools.bank, s, lat, h * 0.5 - 2, 16 + rng() * 14, h, 14, 0, counters.bank);
@@ -348,7 +348,7 @@ export function initEmbankment() {
       if (k < 0.05) continue;
       const frame = G.roadsideFrameAt(s);
       const left = rng() < 0.55;
-      const edge = worldEdge(frame.edges, left ? -1 : 1, frame.origin);
+      const edge = shellEdge(frame.edges, left ? -1 : 1);
       const lat = edge + (left ? -1 : 1) * (11 + rng() * 3.5) * k;
       const h = (1.7 + rng() * 0.25) * k;
       const yaw = rng() * Math.PI * 2;
@@ -361,7 +361,7 @@ export function initEmbankment() {
       const k = embK(s);
       if (k < 0.05) continue;
       const frame = G.roadsideFrameAt(s);
-      const edge = worldEdge(frame.edges, 1, frame.origin);
+      const edge = shellEdge(frame.edges, 1);
       const lat = edge + (40 + rng() * 25) * k;
       const yaw = rng() * Math.PI * 2;
       put(pools.boatHull, s, lat, CFG.WATER_Y + 0.5 * k, 7 * k, 1.2 * k, 2.6 * k, yaw, counters.boatHull);

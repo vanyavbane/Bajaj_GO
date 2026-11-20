@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { worldEdge } from './engine/fork.js';
+import { shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -129,7 +129,7 @@ export function initMountain() {
       const curv = G.roadCurvature(s);
       const inside = curv > 0.0006 ? 1 : curv < -0.0006 ? -1 : 0;
       for (const side of SIDES) {
-        const edge = worldEdge(frame.edges, side, frame.origin);
+        const edge = shellEdge(frame.edges, side);
         const isInside = inside !== 0 && side === inside;
         if (isInside) {
           // Скальная стена: 2–3 блока наращиваются вверх и вглубь.
@@ -175,7 +175,7 @@ export function initMountain() {
           const k = mountainK(s);
           if (k < 0.04) continue;
           const frame = G.roadsideFrameAt(s);
-          const edge = worldEdge(frame.edges, side, frame.origin);
+          const edge = shellEdge(frame.edges, side);
           const depth = CFG.ROAD_MARGIN + 2 + (j + 0.5) * CFG.VEG_CELL + (rng() - 0.5) * 2.5;
           const lat = edge + side * depth;
           const roll = rng();
@@ -210,7 +210,7 @@ export function initMountain() {
       if (k < 0.05) continue;
       const frame = G.roadsideFrameAt(s);
       const side = /** @type {-1 | 1} */ (rng() < 0.5 ? -1 : 1);
-      const edge = worldEdge(frame.edges, side, frame.origin);
+      const edge = shellEdge(frame.edges, side);
       const lat = edge + side * (CFG.ROAD_MARGIN + 1.6 + rng() * 2.5);
       const sc = 0.75 * k;
       const yaw = (rng() - 0.5) * 0.6 + (side > 0 ? 0 : Math.PI);
