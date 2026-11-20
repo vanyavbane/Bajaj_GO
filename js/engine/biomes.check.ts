@@ -1,7 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
 import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, lanesOf, nearestLaneOffset, offsetDirection, outerLane } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_CHOICE, EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, arrivalHalf, branchEdges, branchPick, carriedOriginAt, courseLocal, exitCarryOrigin, exitClock, landOnCarriage, exitRibbonMid, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
+import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, arrivalHalf, branchEdges, branchPick, carriedOriginAt, courseLocal, exitCarryOrigin, exitClock, landOnCarriage, exitRibbonMid, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, originBeforeZones, roadCenter, roadLateral, sampleRoad, splitPick, storedOriginHolds } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -114,7 +114,7 @@ assert(Math.abs(carriedFrame.world.leftOuter - (carriedFrame.origin - EXIT_LANE_
 assert(laneMeters(0, 1, carriedFrame, false) === carriedFrame.origin, 'нулевая полоса стоит в центре увезённой дороги');
 const carriedOrigin = exitCarryOrigin(10, 0);
 const sealStart = sampleRoad({
-  forkDistance: EXIT_CHOICE + 0.01,
+  forkDistance: exitClock().choiceAt + 0.01,
   half: 10,
   chosen: 1,
   baseOrigin: 0,
@@ -160,7 +160,7 @@ const zone = 1500;
 const noseM = zone - FORK_LEAD;
 assert(forkSpreadAt(noseM - 20, zone) === 0, 'до съезда дорога одна');
 assert(forkSpreadAt(noseM + EXIT_DIVERGE + 30, zone) === FORK_SPREAD, 'на раздельном участке съезд держит полную ширину');
-assert(forkSpreadAt(noseM + EXIT_CHOICE + 10, zone) === FORK_SPREAD, 'после выбора съезд не вливается обратно');
+assert(forkSpreadAt(noseM + exitClock().choiceAt + 10, zone) === FORK_SPREAD, 'после выбора съезд не вливается обратно');
 assert(forkSpreadAt(noseM + FORK_LEAD - 1, zone) === FORK_SPREAD, 'до границы зоны ветка ещё считается открытой');
 assert(forkSpreadAt(noseM + FORK_LEAD, zone) === 0, 'за границей зоны съезда уже нет');
 const endedExit = roadAt(atSeal, -1);

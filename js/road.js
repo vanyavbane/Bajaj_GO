@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { frameFromSpline } from './engine/branch.js';
 import { readLanes } from './engine/lanes.js';
 import { G } from './state.js';
 
@@ -14,14 +13,7 @@ export function initRoad() {
    * ========================================================================= */
   readLanes(G);
 
-  // Профиль и кромка принадлежат биому. Повторный расчёт здесь затирал
-  // ROAD_EDGE формулой без масштаба полос.
-  const roadX = (s) => G.biomeRoadX(s);
-  G.roadX = roadX;
-  const roadDX = (s) => G.biomeRoadDX(s);
-  G.roadDX = roadDX;
-  const roadDDX = (s) => G.biomeRoadDDX(s);
-  G.roadDDX = roadDDX;
+  // Высота принадлежит биому. Кромку и курс считает он же.
   const roadY = (s) => G.biomeRoadY(s);
   G.roadY = roadY;
   const roadDY = (s) => G.biomeRoadDY(s);
@@ -35,11 +27,6 @@ export function initRoad() {
   const _qRoad = new THREE.Quaternion();
   const _qExtra = new THREE.Quaternion();
   const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
-  /** Смещение полосы: число либо функция от s. */
-  function latAt(lat, s) {
-    return typeof lat === 'function' ? lat(s) : lat;
-  }
-
   function orient(obj, fx, fy, fz, rx, rz, extraYaw, extraPitch, extraRoll) {
     _forward.set(fx, fy, fz);
     if (_forward.lengthSq() < 1e-8) _forward.set(0, 0, -1);
@@ -60,17 +47,10 @@ export function initRoad() {
   }
 
   function placeOnRoad(obj, s, lateralOffset = 0, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
-    const lat = latAt(lateralOffset, s);
-    const dy = roadDY(s);
-    if (G.embedRoad) {
-      const here = G.embedRoad(s, lat);
-      orient(obj, here.fx, dy, here.fz, here.rx, here.rz, extraYaw, extraPitch, extraRoll);
-      obj.position.set(here.x, here.y + heightOffset, here.z);
-      return;
-    }
-    const pose = frameFromSpline(roadX(s), roadDX(s), s);
-    orient(obj, pose.fx, dy, pose.fz, pose.rx, pose.rz, extraYaw, extraPitch, extraRoll);
-    obj.position.set(pose.x + pose.rx * lat, roadY(s) + heightOffset, pose.z + pose.rz * lat);
+    const lat = lateralOffset;
+    const here = G.embedRoad(s, lat);
+    orient(obj, here.fx, roadDY(s), here.fz, here.rx, here.rz, extraYaw, extraPitch, extraRoll);
+    obj.position.set(here.x, here.y + heightOffset, here.z);
   }
   G.placeOnRoad = placeOnRoad;
 }

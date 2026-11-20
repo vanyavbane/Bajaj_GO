@@ -187,7 +187,7 @@ export function initLoop() {
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,
-      curvature: G.roadCurvature ? G.roadCurvature(G.playerS) : G.roadDDX(G.playerS),
+      curvature: G.roadCurvature(G.playerS),
       isYura: effStats.isYura,
       wideTires: effStats.wideTires,
       upgradedBrakes: effStats.upgradedBrakes,

@@ -427,7 +427,7 @@ export function initCamera() {
       const mountainIndex = G.BIOMES.findIndex((b) => b.id === 'mountain');
       const mountainWeight = mountainIndex >= 0 ? wts[mountainIndex] : 0;
       const speedFactor = clamp(G.speed / 55, 0.3, 1.25);
-      targetRoll = clamp(-(G.roadCurvature ? G.roadCurvature(G.playerS) : G.roadDDX(G.playerS)) * 5.5, -0.055, 0.055)
+      targetRoll = clamp(-G.roadCurvature(G.playerS) * 5.5, -0.055, 0.055)
         * speedFactor * (1 + 0.9 * mountainWeight);
     }
     camBiomeRoll += (targetRoll - camBiomeRoll) * Math.min(1, dt * 6);

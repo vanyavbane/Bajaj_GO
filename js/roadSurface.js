@@ -30,7 +30,7 @@ export function initRoadSurface() {
   const _laneQuat = new THREE.Quaternion();
 
   function roadCenter(s) {
-    return G.roadOriginAt ? G.roadOriginAt(s) : 0;
+    return G.roadOriginAt(s);
   }
 
   let roadShells = [];
@@ -70,7 +70,7 @@ export function initRoadSurface() {
    * а не ось шоссе, поэтому штрих не встаёт поперёк ленты. */
   function placeAlongLane(obj, s, latA, latB, _halfLen, yOffset) {
     const pose = G.embedRoad(s, (latA + latB) * 0.5);
-    const dy = G.roadDY ? G.roadDY(s) : 0;
+    const dy = G.roadDY(s);
     _laneDir.set(pose.fx, dy, pose.fz);
     if (_laneDir.lengthSq() < 1e-8) _laneDir.set(0, 0, -1);
     else _laneDir.normalize();
@@ -288,7 +288,7 @@ export function initRoadSurface() {
 
   /** Бетон стоит на границе хода. На съезде границы нет, отбойника нет. */
   function barrierLat(s) {
-    const marks = G.solidMarksAtS ? G.solidMarksAtS(s) : null;
+    const marks = G.solidMarksAtS(s);
     if (!marks || marks.length < 2) return null;
     return (marks[0].lat + marks[1].lat) * 0.5;
   }
@@ -576,7 +576,7 @@ export function initRoadSurface() {
       const left = shoulderLats(farAsphalt(r, -1), cityOuter, sh);
       const right = shoulderLats(farAsphalt(r, 1), cityOuter, sh);
       // Набережная: справа плоская пешеходная зона и спуск к воде.
-      const embW = Math.max(0, Math.min(1, G.embankmentWeightAtS ? G.embankmentWeightAtS(s) : 0));
+      const embW = Math.max(0, Math.min(1, G.embankmentWeightAtS(s)));
       const eL = (a, b) => a + (b - a) * embW;
       const rLip = eL(right.lip, farAsphalt(r, 1));
       const rBerm = eL(right.berm, 17);

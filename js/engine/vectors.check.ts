@@ -1,6 +1,6 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
 import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
-import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
+import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -25,7 +25,10 @@ assert(later.fx > at.fx + 0.15, 'второй вектор поворачива�
 assert(later.x > at.x, 'цепочка векторов не возвращается на старый сплайн');
 assert(STRAIGHT.yaw === 0 && EXIT_RIGHT.id === 'exit', 'каталог различает прямую и съезд');
 assert(courseVector(RIGHT_FORK, 0).id === 'straight' && courseVector(RIGHT_FORK, 1).yaw === BRANCH_YAW, 'выбор 0 — прямая, выбор 1 — правый съезд');
-const three: ForkCourse = { id: 'three', vectors: [STRAIGHT, EXIT_RIGHT, EXIT_LEFT] };
+const three: ForkCourse = {
+  id: 'three',
+  vectors: [STRAIGHT, EXIT_RIGHT, { id: 'exit-left', yaw: -BRANCH_YAW, way: 'one-way' }],
+};
 assert(courseVector(three, 2).id === 'exit-left' && branchVectors(three).length === 2, 'третий слот курса — отдельный левый вектор');
 const clock = exitClock();
 const layout = courseLayoutOf(clock, 1500, 0);

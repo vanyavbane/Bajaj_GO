@@ -77,8 +77,6 @@ export const EXIT_DIVERGE = EXIT_PLAN.diverge;
 export const EXIT_RUN = EXIT_PLAN.run;
 /** Нос съезда стоит на столько метров раньше границы зоны. */
 export const FORK_LEAD = EXIT_PLAN.length;
-/** Конец общего подхода: дальше строится только выбранная цепочка. */
-export const EXIT_CHOICE = EXIT_PLAN.choiceAt;
 export const FORK_SPREAD = EXIT_PLAN.spread;
 
 /** Линейка съезда для курса. Курс не складывает длины блоков сам. */

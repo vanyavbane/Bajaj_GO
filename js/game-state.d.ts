@@ -324,11 +324,8 @@ export interface GameState {
   biomeScenery: ScenerySlot[];
   resetBiomeScenery: () => void;
   updateBiomeScenery: () => void;
-  roadX: (s: number) => number;
   roadY: (s: number) => number;
-  roadDX: (s: number) => number;
   roadDY: (s: number) => number;
-  roadDDX: (s: number) => number;
 
   biomeState: BiomeState | null;
   biomeDominant: number;

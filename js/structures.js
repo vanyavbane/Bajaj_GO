@@ -155,7 +155,7 @@ export function initStructures() {
     let s = candidateS;
     for (let attempt = 0; attempt < 6; attempt++) {
       let conflict = false;
-      if (G.splitAmountAtS && G.splitAmountAtS(s) > 0.05) {
+      if (G.splitAmountAtS(s) > 0.05) {
         conflict = true;
         s += 140;
       }
@@ -204,9 +204,7 @@ export function initStructures() {
       }
       // Смещение полосы не меняем, пока трамплин впереди: смена числа полос
       // не должна переносить его на другую полосу в кадре.
-      const lat = G.laneWorldOffsetAtS
-        ? G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset)
-        : ramp.lateralOffset;
+      const lat = G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset);
       G.placeOnRoad(ramp.mesh, ramp.s, lat, 0);
     }
   }

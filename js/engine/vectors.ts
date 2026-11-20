@@ -24,7 +24,6 @@ export interface CourseVector {
 
 export const STRAIGHT: CourseVector = { id: 'straight', yaw: 0, way: 'inherit' };
 export const EXIT_RIGHT: CourseVector = { id: 'exit', yaw: BRANCH_YAW, way: 'one-way' };
-export const EXIT_LEFT: CourseVector = { id: 'exit-left', yaw: -BRANCH_YAW, way: 'one-way' };
 
 /** Развилка: нулевой вектор — прямая, остальные — ответвления в порядке выбора. */
 export interface ForkCourse {
@@ -296,7 +295,6 @@ export function createVectorField() {
     separated: number;
     parent: PathFrame;
     right: PathFrame | null;
-    left: PathFrame | null;
     hold: LaneHold | null;
   }
 
@@ -333,7 +331,6 @@ export function createVectorField() {
       separated,
       parent,
       right: branchAt(branches.find((item) => item.yaw > 0) ?? null),
-      left: branchAt(branches.find((item) => item.yaw < 0) ?? null),
       hold: givenHold && Number.isFinite(givenHold.t) ? givenHold : null,
     };
   }
@@ -397,13 +394,9 @@ export function createVectorField() {
       rightOuter: head.rightInner + head.width,
     };
     const onRight = !head.ownedHere && head.right != null && followsExit(lat, ribbonEdge);
-    const onLeft = !head.ownedHere && head.left && lat <= head.leftOuter + 0.2;
-    const exitFrame = onRight ? head.right : onLeft ? head.left : null;
-    if (exitFrame) {
-      const outer = onLeft
-        ? 0
-        : Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
-      return ribbonPose(head, exitFrame, lat, outer);
+    if (onRight && head.right) {
+      const outer = Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
+      return ribbonPose(head, head.right, lat, outer);
     }
     const gap = head.rightInner - head.leftInner;
     const open = Math.max(0, Math.min(1, head.width / 4));

@@ -5,7 +5,7 @@ import { carriageAt, carriageLat, departedRoad, laneMarks, riderCarriage, roadsA
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_LANE_HALF, arrivalHalf, asphaltSpan, branchPick, carriedOriginAt, exitClock, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
+import { EXIT_LANE_HALF, arrivalHalf, asphaltSpan, branchPick, carriedOriginAt, exitClock, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
 import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -475,7 +475,7 @@ function embedRoad(s, lat) {
 }
 
 function roadCurvature(s) {
-  const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
+  const lat = riderLatAt(s);
   return embedRoad(s, lat).curvature;
 }
 
