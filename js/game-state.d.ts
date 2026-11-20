@@ -301,7 +301,7 @@ export interface GameState {
   biomeRoadDY: (s: number) => number;
   nominalRoadWidth: number;
   forkSpreadAtS: (s: number) => number;
-  /** Мировой центр дороги. После взятого съезда это его линия, не ось маршрута. */
+  /** Мировой центр дороги. Съезд его не переносит. */
   roadOriginAt: (s: number) => number;
   /** Точка дороги в мире. На съезде это его собственный вектор, не параллель сплайна. */
   embedRoad: (s: number, lat: number) => RoadEmbed;

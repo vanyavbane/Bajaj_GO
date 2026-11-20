@@ -35,7 +35,7 @@ assert(shellEdge(highway, 1) === highway.rightOuter, 'декор справа с
 assert(shellEdge(highway, -1) === -10, 'левая кромка прямой не двигается');
 
 const settled = branchEdges(10, 0);
-assert(shellEdge(settled, -1) === -10 && shellEdge(settled, 1) === 10, 'когда съезд стал дорогой, кромки у него');
+assert(shellEdge(settled, -1) === -10 && shellEdge(settled, 1) === 10, 'когда съезда нет, кромки у дороги');
 const carried: AsphaltEdges = { leftOuter: 22, leftInner: 42, rightInner: 42, rightOuter: 42 };
 const carriedFrame: RoadsideFrame = { edges: carried, origin: 32 };
 const carriedLeft = besidePose(carriedFrame, { side: -1, gap: 8, inset: 0 });
@@ -63,6 +63,6 @@ const openGore = goreSpan(branchEdges(10, 22));
 assert(openGore != null && openGore.left >= 10 && openGore.right > openGore.left, 'парк стоит в клине открытого съезда');
 const towed: AsphaltEdges = { leftOuter: -10, leftInner: 10, rightInner: 40, rightOuter: 49.5 };
 assert(goreSpan(towed) == null, 'увезённый съезд не тащит парк за собой');
-assert(goreSpan(carried) == null, 'когда съезд стал дорогой, клина для парка нет');
+assert(goreSpan(carried) == null, 'у одной ленты клина для парка нет');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('roadside contract ok');

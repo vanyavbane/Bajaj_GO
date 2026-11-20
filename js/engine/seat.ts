@@ -2,8 +2,8 @@
  * Сиденье байка на кадре дороги.
  * Дорога и съезд — два сиденья. Ось каждого читается из RoadFrame.
  * Полоса — смещение от этой оси. Второй оси в игре нет.
- * Вливание: лента съезда исчезла, а центр кадра уже на её середине.
- * Полоса пересчитывается от этого центра, мировая точка не меняется.
+ * Когда лента пришла в дорогу или сошла на нет, байк садится на дорогу.
+ * Взятый съезд сажает его на правую кромку. Отказ — на край, не в стороне.
  */
 
 import {
@@ -30,8 +30,8 @@ function spanOf(span: number): number {
 
 /**
  * Ось сиденья в мировых метрах.
- * На дороге это laneAnchor: при закрытии прямой она доезжает до центра ленты.
- * На съезде это середина ленты. Когда ленты уже нет, ось совпадает с центром кадра.
+ * На дороге это её центр. На съезде это середина ленты.
+ * Когда ленты уже нет, ось совпадает с центром дороги.
  */
 export function seatAxis(frame: RoadFrame, kind: SeatKind): number {
   if (kind === 'exit') {
@@ -62,8 +62,8 @@ export function rescaleSeat(seat: RiderSeat, from: number, to: number, axis: num
 }
 
 /**
- * Чужой кадр не тащит ось съезда, если ленты там нет и центр уже другой.
- * Пока центр тот же, сиденье остаётся съездом: вливание делает stepSeat.
+ * Чужой кадр не тащит ось съезда, если ленты там нет.
+ * Пока центр тот же, сиденье остаётся съездом: посадку делает stepSeat.
  */
 export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: number): RiderSeat {
   if (seat.kind !== 'exit') return seat;
@@ -74,30 +74,18 @@ export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: numbe
 }
 
 /**
- * Съезд вливается в дорогу.
- * `world` — точка до вливания. `origin` — центр кадра, уже стоящий на середине бывшей ленты.
+ * Один шаг сиденья. Мир не прыгает, кроме посадки, когда лента исчезла.
+ * Взятый съезд приходит справа: байк садится на правую кромку дороги.
+ * Отказанная лента сажает на край, а не оставляет байка в стороне.
  */
-export function mergeExitIntoRoad(world: number, origin: number, span: number): RiderSeat {
-  const scale = spanOf(span);
-  const axis = Number.isFinite(origin) ? origin : 0;
-  const at = Number.isFinite(world) ? world : axis;
-  return { kind: 'road', lane: (at - axis) / scale };
-}
-
-/**
- * Один шаг сиденья. Мир не прыгает, кроме посадки на край прямой,
- * когда отказанная лента исчезла из-под байка.
- * `merged` — съезд этой зоны уже выбран, или зона унаследовала его центр.
- * Тогда пропавшая лента вливается в ось кадра, а не сажает байка на обочину.
- */
-export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number, merged: boolean): RiderSeat {
+export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): RiderSeat {
   const scale = spanOf(span);
   const world = seatWorld(frame, seat, scale);
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) {
     if (seat.kind !== 'exit') return seat;
-    if (merged) return mergeExitIntoRoad(world, frame.origin, scale);
-    return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, world, scale) };
+    const at = frame.chosen === 1 ? frame.origin + frame.local.leftInner : world;
+    return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, at, scale) };
   }
   const logical = world - frame.origin;
   const onRibbon = onExitRibbon(logical, frame.local);

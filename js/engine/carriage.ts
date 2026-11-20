@@ -1,9 +1,8 @@
 /**
  * Проезжая часть в одной точке.
  * Фазу читает кадр дороги. Полосы, встречные и ось выходят из этой фазы.
- * Лента сбоку не подменяет полосы остальной дороги.
- * Закрытие прямой и блок carry — один съезд: две попутные полосы.
- * Съезд не расширяется обратно в исходную дорогу. У каждой дороги свои кромки.
+ * Лента сбоку не подменяет полосы дороги.
+ * Дорога остаётся дорогой. Съезд остаётся съездом, пока не придёт к ней справа.
  */
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
@@ -14,11 +13,9 @@ import type { SeatKind } from './seat.ts';
 
 /**
  * ribbon — лента ещё сбоку, полосы дороги остаются биомом.
- * seal — выбранный съезд закрывает прямую, полосы уже его.
- * carry — съезд стал дорогой и своей ширины не отдаёт.
- * road — обычная дорога биома.
+ * road — обычная дорога биома. Съезд, который уже пришёл, здесь не отдельная лента.
  */
-export type CarriagePhase = 'road' | 'ribbon' | 'seal' | 'carry';
+export type CarriagePhase = 'road' | 'ribbon';
 
 export interface LiveCarriage {
   phase: CarriagePhase;
@@ -42,9 +39,8 @@ function mainHalf(frame: RoadFrame): number {
   return Math.max(0, frame.local.leftInner - frame.local.leftOuter) * 0.5;
 }
 
-/** Полуширина асфальта, на котором сейчас стоят полосы этой фазы. */
-function carriageHalf(frame: RoadFrame, phase: CarriagePhase): number {
-  if (phase === 'seal') return Math.max(0, exitWidth(frame.local) * 0.5);
+/** Полуширина асфальта дороги. Лента съезда свою ширину считает отдельно. */
+function carriageHalf(frame: RoadFrame): number {
   return mainHalf(frame);
 }
 
@@ -59,26 +55,17 @@ export function laneFit(half: number, offsets: readonly number[]): number {
   return Math.min(1, span / maxAbs);
 }
 
-/** Фаза кадра. Съезд не переписывает кромки в кромки исходной дороги. */
+/** Фаза кадра. Пока у съезда есть лента, она сбоку. Дорогу она не заменяет. */
 export function carriagePhase(frame: RoadFrame): CarriagePhase {
-  const block = frame.block;
-  if (block && block.built && block.kind === 'carry') return 'carry';
-  if (block && block.built && block.kind === 'seal' && frame.chosen === 1) return 'seal';
   if (exitRibbonCenter(frame.local) != null) return 'ribbon';
   return 'road';
 }
 
 function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, half: number): LiveCarriage {
-  // Закрытие прямой: дорога уже лента съезда. Ось не едет с шоссе на ленту.
-  let axis = laneAnchor(frame);
-  if (phase === 'seal') {
-    const ribbon = exitRibbonCenter(frame.local);
-    if (ribbon != null) axis = frame.origin + ribbon;
-  }
   return {
     phase,
     lanes,
-    axis,
+    axis: laneAnchor(frame),
     scale: laneFit(half, lanes.offsets),
     half,
     way: lanes.way,
@@ -88,31 +75,7 @@ function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, h
 /** Полосы, встречные, ось и ширина одной точки. */
 export function carriageAt(query: CarriageQuery): LiveCarriage {
   const phase = carriagePhase(query.frame);
-  const half = carriageHalf(query.frame, phase);
-  if (phase === 'seal' || phase === 'carry') {
-    return finish(phase, exitCarriage(query.biome.id), query.frame, half);
-  }
-  return finish(phase, carriageLanes(query.biome, 'two-way'), query.frame, half);
-}
-
-/**
- * Прямая, пока выбранный съезд её закрывает.
- * У неё своя ширина и свои полосы. В кромки съезда она не вписывается.
- */
-export function departedRoad(frame: RoadFrame, biome: LaneLayout): LiveCarriage | null {
-  if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') return null;
-  const half = Math.max(0, (frame.local.leftInner - frame.local.leftOuter) * 0.5);
-  if (half < 0.4) return null;
-  const lanes = carriageLanes(biome, 'two-way');
-  const mid = (frame.local.leftOuter + frame.local.leftInner) * 0.5;
-  return {
-    phase: 'road',
-    lanes,
-    axis: frame.origin + mid,
-    scale: laneFit(half, lanes.offsets),
-    half,
-    way: 'two-way',
-  };
+  return finish(phase, carriageLanes(query.biome, 'two-way'), query.frame, carriageHalf(query.frame));
 }
 
 /** Штрих между полосами проезжей части. lat — мировая точка её оси. */
@@ -124,7 +87,7 @@ export interface LaneMark {
 /**
  * Боковая лента как своя проезжая часть.
  * Пока она склеена с шоссе, штрихов у неё нет: это ещё не отдельная дорога.
- * Когда съезд уже стал дорогой, его штрихи читает сама дорога.
+ * Когда съезд уже пришёл в дорогу, отдельной ленты нет.
  */
 export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage | null {
   if (road.phase !== 'ribbon' || !exitLaneOpen(frame.local)) return null;
@@ -133,7 +96,7 @@ export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage |
   return ribbon;
 }
 
-/** Дороги в точке. main есть всегда. exit — боковая лента, пока она ещё не стала main. */
+/** Дороги в точке. main есть всегда. exit — боковая лента, пока она ещё не пришла в дорогу. */
 export interface DriveRoads {
   main: LiveCarriage;
   exit: LiveCarriage | null;
@@ -211,7 +174,6 @@ export function solidMarks(road: LiveCarriage): LaneMark[] {
  */
 export function riderCarriage(road: LiveCarriage, frame: RoadFrame, seat: SeatKind): LiveCarriage {
   if (seat !== 'exit') return road;
-  if (road.phase === 'seal' || road.phase === 'carry') return road;
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) return road;
   const half = Math.max(0, exitWidth(frame.local) * 0.5);

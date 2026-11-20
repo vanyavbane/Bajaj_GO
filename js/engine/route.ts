@@ -2,10 +2,10 @@
  * Решение одной зоны: развилка ещё открыта, взята прямая или взят съезд.
  * Кадр дороги читает эту запись. Курс по-прежнему нумерует векторы:
  * прямая и открытая развилка остаются на нулевом, съезд — на первом.
- * Ось переносит только съезд.
+ * Съезд остаётся ответвлением и ось дороги не переносит.
  */
 
-import type { ChosenSide, ZoneRoad } from './fork.ts';
+import type { ChosenSide } from './fork.ts';
 import type { CoursePick } from './vectors.ts';
 
 /** Три состояния развилки. Ноль курса сюда не входит: он бывает и у прямой, и у открытой. */
@@ -22,7 +22,7 @@ export interface ZoneVote {
 
 export interface ZoneDecision {
   choice: RouteChoice;
-  /** Сторона для кромок: 0 открыто, -1 прямая закрыла съезд, 1 съезд стал дорогой. */
+  /** Сторона для кромок: 0 открыто, -1 прямая закрыла съезд, 1 съезд взят. */
   side: ChosenSide;
   /** Вектор курса. Съезд владеет ответвлением, остальные остаются на прямой. */
   pick: CoursePick;
@@ -45,12 +45,4 @@ export function decideZone(vote: ZoneVote): ZoneDecision {
 /** Курс съезда жив, пока зона его не отвергла. Прямая гасит вектор, даже если асфальт ещё сходится. */
 export function courseBranches<T>(choice: RouteChoice, branches: readonly T[]): readonly T[] {
   return choice === 'straight' ? [] : branches;
-}
-
-/** Дорога зоны для переноса оси. Прямая и открытая развилка центр не несут. */
-export function zoneRoadOf(decision: ZoneDecision, half: number, keptOrigin?: number | null): ZoneRoad {
-  const width = Number.isFinite(half) ? half : 0;
-  if (!decision.tookExit) return { tookExit: false, half: width };
-  if (keptOrigin == null || !Number.isFinite(keptOrigin)) return { tookExit: true, half: width };
-  return { tookExit: true, half: width, keptOrigin };
 }

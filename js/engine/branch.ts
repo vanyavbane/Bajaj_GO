@@ -20,8 +20,6 @@ export interface PathFrame {
 
 export interface RoadEmbed extends PathFrame {
   y: number;
-  /** Точка лежит на ветке, а не на исходном сплайне. */
-  branched: boolean;
 }
 
 /**

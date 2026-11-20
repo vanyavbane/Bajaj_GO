@@ -101,23 +101,7 @@ export function vectorSpawnOf(zone: number, vector: CourseVector, layout: Course
   };
 }
 
-/** Уже взятые векторы, которые к метке s владеют дорогой. */
-export function ownedCourse(
-  course: ForkCourse,
-  s: number,
-  layout: CourseLayout,
-  pickAt: (zone: number) => CoursePick,
-): VectorSpawn[] {
-  const zone = zoneAt(s, layout);
-  const list: VectorSpawn[] = [];
-  for (let z = 0; z <= zone; z++) {
-    const spawn = vectorSpawnOf(z, courseVector(course, pickAt(z)), layout);
-    if (spawn && s >= spawn.ownsFrom) list.push(spawn);
-  }
-  return list;
-}
-
-/** Открытые ответвления зоны, в которой лежит s. До носа список пуст. */
+/** Открытые ответвления зоны, в которой лежит s. До носа список пуст. Съезд дорогой не становится. */
 export function openCourse(course: ForkCourse, s: number, layout: CourseLayout): VectorSpawn[] {
   const zone = zoneAt(s, layout);
   const nose = zoneNose(zone, layout);
@@ -130,18 +114,13 @@ export function openCourse(course: ForkCourse, s: number, layout: CourseLayout):
   return list;
 }
 
-/** Взятый ненулевой вектор этой зоны уже стал дорогой. */
-export function courseOwns(course: ForkCourse, pick: CoursePick, s: number, nose: number, ownAfter: number): boolean {
-  return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter;
-}
-
-/** Один включённый вектор на маршруте. */
+/** Один включённый вектор на маршруте. В список дороги игра его не кладёт: съезд остаётся ответвлением. */
 export interface VectorSpawn {
   /** Ключ кэша. Один нос и один угол — один ключ. */
   key: string;
   nose: number;
   yaw: number;
-  /** С этой метки вектор уже является дорогой, а не только лентой. */
+  /** С этой метки вектор входит в переданный путь. Дорога сама его не подхватывает. */
   ownsFrom: number;
 }
 
@@ -161,13 +140,13 @@ export interface EmbedQuery {
   y: number;
   nose: number;
   edges: RibbonEdges;
-  /** Векторы, которые к этой метке уже стали дорогой. По nose по возрастанию. */
+  /** Векторы переданного пути. По nose по возрастанию. Съезд игры сюда не входит. */
   owned: readonly VectorSpawn[];
   /** Открытые ответвления этой зоны. Пусто, если нос ещё впереди. */
   branches: readonly VectorSpawn[];
   origin: number;
   turn: number;
-  /** Этот съезд уже стал дорогой. */
+  /** Путь уже ведёт эта точка, а не лента съезда. Игра держит это выключенным: съезд в дорогу не превращается. */
   ownedHere: boolean;
   /**
    * Полосы ещё едут к ленте. `t` — тот же 0…1, что сдвигает laneAnchor.
@@ -359,7 +338,6 @@ export function createVectorField() {
       fx: turned.fx,
       fz: turned.fz,
       curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * (legal ? w : 0),
-      branched: legal && w > 0.04,
     };
   }
 
@@ -419,7 +397,6 @@ export function createVectorField() {
         fx: nfx,
         fz: nfz,
         curvature: head.parent.curvature + (exitEdge.curvature - head.parent.curvature) * u * open,
-        branched: open > 0.2 && u > 0.04 && exitEdge.branched,
       };
     }
     const stay = onParent(head, lat);
@@ -433,7 +410,6 @@ export function createVectorField() {
       fx: path.fx,
       fz: path.fz,
       curvature: path.curvature,
-      branched: head.branched,
     };
   }
 

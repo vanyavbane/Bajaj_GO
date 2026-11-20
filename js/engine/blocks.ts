@@ -6,8 +6,8 @@
  */
 
 /** split — съезд отходит. fork — обе ленты, здесь выбор. seal — чужая лента сходится.
- *  road — дальше прямая. carry — съезд стал дорогой. */
-export type BlockKind = 'split' | 'fork' | 'seal' | 'road' | 'carry';
+ *  road — дальше та же дорога. Взятый съезд к ней возвращается, а не становится ею. */
+export type BlockKind = 'split' | 'fork' | 'seal' | 'road';
 
 /** -1 прямая, +1 съезд, 0 игрок ещё не выбрал. */
 export type BuildChoice = -1 | 0 | 1;
@@ -43,7 +43,7 @@ export const RIGHT_EXIT: ExitRecipe = {
     ],
     [
       { id: 'seal-main', kind: 'seal', length: 70 },
-      { id: 'carry', kind: 'carry', length: 100 },
+      { id: 'arrived', kind: 'road', length: 100 },
     ],
   ],
 };
@@ -133,7 +133,7 @@ export function compileExit(recipe: ExitRecipe): CompiledExit {
   for (const block of recipe.approach) {
     if (block !== split && block.kind === 'split') fail(recipe, 'отход съезда только один');
     if (block !== fork && block.kind === 'fork') fail(recipe, 'место выбора только одно');
-    if (block.kind === 'seal' || block.kind === 'carry' || block.kind === 'road') {
+    if (block.kind === 'seal' || block.kind === 'road') {
       fail(recipe, `блок «${block.id}» стоит до выбора`);
     }
   }
@@ -152,7 +152,7 @@ export function compileExit(recipe: ExitRecipe): CompiledExit {
     fail(recipe, 'сразу после выбора чужая лента закрывается');
   }
   if (!straightEnd || straightEnd.kind !== 'road') fail(recipe, 'прямая цепочка заканчивается обычной дорогой');
-  if (!exitEnd || exitEnd.kind !== 'carry') fail(recipe, 'цепочка съезда заканчивается тем, что съезд стал дорогой');
+  if (!exitEnd || exitEnd.kind !== 'road') fail(recipe, 'после возврата съезда остаётся та же дорога');
   const ids = new Set<string>();
   for (const block of [...recipe.approach, ...straightBlocks, ...exitBlocks]) {
     if (ids.has(block.id)) fail(recipe, `имя «${block.id}» повторяется`);

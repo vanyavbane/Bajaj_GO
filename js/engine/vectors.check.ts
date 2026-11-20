@@ -1,6 +1,6 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
-import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
+import { branchEdges, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
+import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -34,15 +34,12 @@ const clock = exitClock();
 const layout = courseLayoutOf(clock, 1500, 0);
 const nose = zoneNose(0, layout);
 assert(nose === layout.zoneLength - layout.lead, 'нос зоны считается от конца зоны, не от биома');
-const owned = ownedCourse(RIGHT_FORK, nose + clock.ownAfter, layout, (zone) => (zone === 0 ? 1 : 0));
-assert(owned.length === 1 && owned[0]?.key === '0:exit', 'взятый съезд попадает в путь только когда стал дорогой');
-assert(ownedCourse(RIGHT_FORK, nose + 10, layout, () => 1).length === 0, 'до конца поворота вектор ещё не владеет дорогой');
 assert(openCourse(RIGHT_FORK, nose + 20, layout).length === 1, 'после носа открыто ответвление курса');
 assert(openCourse(RIGHT_FORK, nose - 5, layout).length === 0, 'до носа ответвлений нет');
-assert(courseOwns(RIGHT_FORK, 1, nose + clock.ownAfter, nose, clock.ownAfter) && !courseOwns(RIGHT_FORK, 0, nose + clock.ownAfter, nose, clock.ownAfter), 'прямой выбор дорогу не перехватывает');
+assert(openCourse(RIGHT_FORK, nose + clock.ownAfter, layout).length === 1, 'пришедший съезд остаётся ответвлением, а не дорогой');
 assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд односторонний, прямая наследует дорогу биома');
 
-const carried = exitCarryOrigin(10, 0);
+const carried = exitRibbonMid(branchEdges(10, 22));
 const localRibbon = branchEdges(10, 22);
 const worldRibbon = {
   leftOuter: localRibbon.leftOuter + carried,

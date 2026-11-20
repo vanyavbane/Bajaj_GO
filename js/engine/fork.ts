@@ -1,11 +1,10 @@
 /**
  * Дорога и съезд вправо.
  * Форма съезда — рецепт блоков в blocks.ts. Здесь только кромки одного блока.
- * Кромки считаются относительно центра дороги. Взятый съезд переносит этот
- * центр на свою линию и больше не возвращает его на ось маршрута.
- * Прямой ход центр не двигает: съезд заканчивается сбоку.
+ * Кромки считаются относительно центра дороги. Дорога этот центр не отдаёт.
+ * Взятый съезд возвращается к ней справа. Прямой ход уводит съезд в сторону.
  *
- * ChosenSide: -1 съезд закрыт, +1 съезд стал дорогой, 0 выбор ещё открыт.
+ * ChosenSide: -1 съезд закрыт, +1 съезд взят и вернётся в дорогу, 0 выбор ещё открыт.
  */
 
 import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
@@ -85,50 +84,24 @@ export interface ExitClock {
   lead: number;
   /** Сколько метров курс поворачивает. Это блок отхода. */
   turn: number;
-  /** С этой метки после носа взятый съезд уже является дорогой. Начало блока carry. */
+  /** С этой метки после носа взятый съезд уже пришёл в дорогу. Конец закрытия. */
   ownAfter: number;
   /** Конец общего подхода: здесь фиксируется выбор. */
   choiceAt: number;
   spread: number;
 }
 
-/** Единственные метры, по которым курс понимает, когда сечение уже стало его дорогой. */
+/** Метры рецепта. Курс по ним знает, когда съезд уже вернулся в дорогу. */
 export function exitClock(): ExitClock {
-  const carry = EXIT_PLAN.exit.find((span) => span.kind === 'carry');
-  if (!carry) throw new Error('Съезд без блока carry: курс не знает, когда лента стала дорогой');
+  const seal = EXIT_PLAN.exit.find((span) => span.kind === 'seal');
+  if (!seal) throw new Error('Съезд без закрытия: курс не знает, когда лента возвращается в дорогу');
   return {
     lead: EXIT_PLAN.length,
     turn: EXIT_PLAN.diverge,
-    ownAfter: carry.start,
+    ownAfter: seal.start + seal.length,
     choiceAt: EXIT_PLAN.choiceAt,
     spread: EXIT_PLAN.spread,
   };
-}
-
-/** Выбор зоны для центра дороги. Прямая не несёт центр. Съезд может оставить уже сверенный. */
-export type ZoneRoad =
-  | { tookExit: false; half: number }
-  | { tookExit: true; half: number; keptOrigin?: number };
-
-/** Центр дороги перед переданными зонами. Прямой ход его не двигает. */
-export function originBeforeZones(previous: readonly ZoneRoad[]): number {
-  let origin = 0;
-  for (const zone of previous) {
-    if (!zone.tookExit) continue;
-    if (zone.keptOrigin != null) {
-      origin = zone.keptOrigin;
-      continue;
-    }
-    origin = exitCarryOrigin(zone.half, origin);
-  }
-  return origin;
-}
-
-/** Центр зоны. null, если съезд не взят: прямая остаётся на прежнем центре. */
-export function carriedOriginAt(previous: readonly ZoneRoad[], zone: ZoneRoad): number | null {
-  if (!zone.tookExit) return null;
-  if (zone.keptOrigin != null) return zone.keptOrigin;
-  return exitCarryOrigin(zone.half, originBeforeZones(previous));
 }
 
 /** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
@@ -151,9 +124,9 @@ export function forkOffset(meters: number, zoneLength: number, lead = FORK_LEAD)
 }
 
 /**
- * Насколько съезд уже отошёл, метры.
- * От носа растёт до пика, держится всю ветку и сходит только в запасе
- * перед границей зоны. Обратно к прямой дороге он не прилипает.
+ * Насколько рецепт держит съезд открытым, метры.
+ * От носа растёт до пика и держится до конца рецепта.
+ * Возврат взятого съезда читают кромки кадра, не эта кривая.
  */
 export function forkSpreadAt(
   meters: number,
@@ -202,11 +175,6 @@ function exitPhase(d: number): ExitPhase {
   return { kind: 'settle', t: smooth01(span.u), open: 1 };
 }
 
-/** Какой блок стоит в этой метке и выбран ли уже его хвост. */
-function exitBlockAt(d: number, chosen: ChosenSide): PlacedBlock | null {
-  return placedBlock(EXIT_PLAN, d, chosen);
-}
-
 /** Кромки поставленного блока. Непостроенный хвост остаётся развилкой, его ещё не закрывают. */
 function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, endWeight: number): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
@@ -215,53 +183,27 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   if (block.kind === 'split') return branchEdges(road, FORK_SPREAD * smooth01(block.u));
   if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'seal') {
-    const edge = branchEdges(road, FORK_SPREAD);
     const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
+    // Взятый съезд возвращается к правой кромке. Дорога остаётся на месте.
+    if (chosen === 1) return branchEdges(road, FORK_SPREAD * (1 - t));
+    const edge = branchEdges(road, FORK_SPREAD);
     // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
-    const away = t * FORK_SPREAD * 1.5;
     if (chosen === -1) {
+      const away = t * FORK_SPREAD * 1.5;
       const w = exitWidth(edge) * (1 - t);
       const mid = exitRibbonMid(edge) + away;
       edge.rightInner = mid - w * 0.5;
       edge.rightOuter = mid + w * 0.5;
-    } else if (chosen === 1) {
-      const w = Math.max(0, edge.leftInner - edge.leftOuter) * (1 - t);
-      const mid = (edge.leftOuter + edge.leftInner) * 0.5 - away;
-      edge.leftOuter = mid - w * 0.5;
-      edge.leftInner = mid + w * 0.5;
     }
     return edge;
   }
-  if (block.kind === 'carry') {
-    // Съезд стал дорогой: 2-полосная лента той же ширины до конца зоны.
-    const eh = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
-    return {
-      leftOuter: -eh,
-      leftInner: eh,
-      rightInner: eh,
-      rightOuter: eh,
-    };
-  }
-  // Обычная дорога и отказ: одна прямая. Съезд уже сошёл на нет в закрытии.
+  // Обычная дорога. Съезд к этому блоку уже пришёл в неё или сошёл на нет.
   return branchEdges(road, 0);
 }
 
 /** Середина правой ленты. Одна формула и для полос, и для курса. */
 export function exitRibbonMid(edges: AsphaltEdges): number {
   return (edges.rightInner + edges.rightOuter) * 0.5;
-}
-
-/** Старый сохранённый центр можно оставить, только если он уже равен формуле. */
-export function storedOriginHolds(stored: number, fresh: number | null): boolean {
-  if (fresh == null || typeof stored !== 'number' || !Number.isFinite(stored)) return false;
-  return Math.abs(stored - fresh) <= 0.05;
-}
-
-/** Центр дороги после взятого съезда. Это середина полной ленты, не отдельный сдвиг. */
-export function exitCarryOrigin(roadHalf: number, base = 0): number {
-  const half = Math.max(0, Number.isFinite(roadHalf) ? roadHalf : 0);
-  const from = Number.isFinite(base) ? base : 0;
-  return from + exitRibbonMid(branchEdges(half, FORK_SPREAD));
 }
 
 /** Один кадр дороги: локальные кромки, мировой центр и те же кромки в мире. */
@@ -279,8 +221,8 @@ export interface RoadQuery {
   forkDistance: number;
   half: number;
   chosen: ChosenSide;
+  /** Центр несущей дороги. Съезд его не переносит. */
   baseOrigin: number;
-  carriedOrigin: number | null;
   endWeight?: number;
 }
 
@@ -305,17 +247,12 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   const endWeight = typeof givenWeight === 'number' && Number.isFinite(givenWeight)
     ? Math.max(0, Math.min(1, givenWeight))
     : 1;
-  const block = exitBlockAt(query.forkDistance, chosen);
+  const block = placedBlock(EXIT_PLAN, query.forkDistance, chosen);
   const phase = exitPhase(query.forkDistance);
   const weighted: ExitPhase = phase.kind === 'end' && chosen !== 0
     ? { ...phase, t: phase.t * endWeight }
     : phase;
-  const stored = query.carriedOrigin;
-  const onCarry = block != null && block.built && block.kind === 'carry';
-  // До носа фазы тоже none: уже записанный выбор не должен переносить центр заранее.
-  const afterFork = query.forkDistance >= EXIT_PLAN.length;
-  const carried = chosen === 1 && stored != null && Number.isFinite(stored) && (onCarry || afterFork);
-  const origin = finiteOrigin(carried && stored != null ? stored : query.baseOrigin);
+  const origin = finiteOrigin(query.baseOrigin);
   const local = blockEdges(query.half, block, chosen, endWeight);
   return {
     origin,
@@ -349,20 +286,9 @@ export function courseLocal(lat: number, place: CoursePlace): number {
   return lat;
 }
 
-/**
- * Центр, от которого считаются полосы машин и разметки.
- * Пока съезд закрывает прямую, полосы переезжают к roadCenter ленты.
- * К блоку carry они приходят уже в него, без скачка.
- */
+/** Центр полос дороги. Съезд его не сдвигает: у ленты своя середина. */
 export function laneAnchor(frame: RoadFrame): number {
-  const center = roadCenter(frame);
-  if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') {
-    return center;
-  }
-  const local = exitRibbonCenter(frame.local);
-  if (local == null) return center;
-  const t = frame.phase.kind === 'end' ? Math.max(0, Math.min(1, frame.phase.t)) : 1;
-  return center + local * t;
+  return roadCenter(frame);
 }
 
 /** Полоса в мировых метрах. riding оставляет байка на боковой ленте старым сдвигом. */
@@ -648,6 +574,27 @@ export function onExitRibbon(logical: number, edges: AsphaltEdges): boolean {
   return logical <= edges.rightOuter + RIBBON_ENTER;
 }
 
+/** Насколько нужно уйти правее кромки прямой, чтобы это уже был ход на съезд. */
+const EXIT_INTENT = 1.6;
+
+/**
+ * Байк выбрал съезд корпусом: он на ленте или уже правее прямой.
+ * Касание кромки ещё не считается.
+ */
+export function reachedExit(lateral: number, edges: AsphaltEdges): boolean {
+  if (!(exitWidth(edges) > RIDEABLE) || !Number.isFinite(lateral)) return false;
+  return onExitRibbon(lateral, edges) || lateral > edges.leftInner + EXIT_INTENT;
+}
+
+/**
+ * Скорость к ленте, м/с. Только в клине, когда байк уже ушёл с прямой и ещё не на асфальте.
+ * На самой ленте и на прямой догонять нечего.
+ */
+export function exitEntryPull(lateral: number, edges: AsphaltEdges): number {
+  if (!reachedExit(lateral, edges) || onExitRibbon(lateral, edges)) return 0;
+  return 16;
+}
+
 /** Пока клин не открылся, уход влево отпускает съезд. */
 export function canReleaseExit(logical: number, edges: AsphaltEdges): boolean {
   return exitGap(edges) < ATTACHED_GAP && logical < edges.rightInner - RELEASE_INSET;
@@ -721,9 +668,10 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
 /**
  * Пределы руля в координатах полосы вокруг центра той дороги, по которой едут.
  * На съезде это его полуширина с тем же запасом, что у прямой дороги.
- * Пока ленты соединены и байк ещё на прямой, можно заехать на нос рампы.
+ * `enter` — съезд ещё можно взять. Тогда правая стена стоит за его внешней кромкой,
+ * даже если между лентами уже есть клин. После отказа стена остаётся на прямой.
  */
-export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = false): RoadLimits {
+export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = false, enter = false): RoadLimits {
   const span = Math.max(scale, 0.05);
   const exitHalf = exitWidth(edge) * 0.5;
   const onExit = riding && exitHalf > 0.5;
@@ -743,8 +691,8 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   } else {
     minEdge = (edge.leftOuter + RIBBON_MARGIN) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN) / span;
-    // Пока ленты действительно слиты, можно заехать на съезд.
-    if (exitWidth(edge) > RIDEABLE && exitGap(edge) <= 0.01) {
+    const reachable = (enter || exitGap(edge) <= 0.01) && exitWidth(edge) > RIDEABLE;
+    if (reachable) {
       maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN) / span);
     }
   }
@@ -758,20 +706,6 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
 
 /** Ширина съезда: две полосы в одну сторону. */
 export const EXIT_LANE_HALF = 4.75;
-
-/**
- * Полуширина дороги после взятого съезда.
- * На границе зоны она равна ширине съезда и за `fade` метров дорастает до биома.
- * К ширине шоссе, с которого съехали, не возвращается.
- */
-export function arrivalHalf(local: number, fade: number, exitHalf: number, biomeHalf: number): number {
-  const from = Number.isFinite(exitHalf) ? exitHalf : 0;
-  const to = Number.isFinite(biomeHalf) ? biomeHalf : from;
-  if (!(fade > 0) || !(local < fade)) return to;
-  const u = Math.max(0, local / fade);
-  const t = u * u * (3 - 2 * u);
-  return from + (to - from) * t;
-}
 
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs: number, cityOuter: number, shoulder: ShoulderProfile): ShoulderLats {

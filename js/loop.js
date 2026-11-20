@@ -1,4 +1,4 @@
-import { forkSide } from './engine/fork.js';
+import { exitEntryPull, forkSide } from './engine/fork.js';
 import { defaultRunOffset, lanesOf, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
@@ -163,11 +163,20 @@ export function initLoop() {
 
     G.accelPitchOffset = lerp(G.accelPitchOffset, clamp((stepped.speed - prevSpeed) / Math.max(dt, 0.001) * 0.0008, -0.04, 0.05), dt * 6);
 
-    // Lane-assist: после развилки мягко возвращает байк в попутную полосу,
-    // не отбирая управление — игрок всё равно может перестроиться.
-    if (G.laneAssistTarget != null && !G.jumpState.airborne) {
+    // Lane-assist: после развилки мягко возвращает байк в попутную полосу.
+    // Пока выбор открыт, он не тянет обратно на прямую.
+    const fork = G.splitState;
+    const forkOpen = fork && fork.active && !fork.chosen;
+    if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen) {
       const assist = G.laneAssistTarget - G.laneOffset;
       G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
+    }
+    const wantsRight = G.keys.right
+      || (G.controlMode === 'tilt' && !G.swipeActive && G.tiltSmoothed > 0.2)
+      || (G.controlMode === 'stick' && G.stickHeld && G.stickSteer > 0.2);
+    if (wantsRight && fork && fork.active && fork.chosenSide !== 0 && G.roadEdgesAt && G.riderLatAt) {
+      const pull = exitEntryPull(G.riderLatAt(G.playerS), G.roadEdgesAt(G.playerS));
+      if (pull > G.lateralVelocity) G.lateralVelocity = pull;
     }
 
     const steered = stepSteer({

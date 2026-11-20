@@ -20,8 +20,6 @@ export function initRoadSurface() {
   const sampleY = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
 
-  const toWorld = (s, lat) => G.laneWorldOffsetAtS(s, lat);
-
   const _laneDir = new THREE.Vector3();
   const _laneRight = new THREE.Vector3();
   const _laneUp = new THREE.Vector3();
@@ -68,7 +66,7 @@ export function initRoadSurface() {
   /* Кладёт плоский объект вдоль курса в точке s.
    * Направление берётся из заголовка этой полосы: на съезде это вектор ветки,
    * а не ось шоссе, поэтому штрих не встаёт поперёк ленты. */
-  function placeAlongLane(obj, s, latA, latB, _halfLen, yOffset) {
+  function placeAlongLane(obj, s, latA, latB, yOffset) {
     const pose = G.embedRoad(s, (latA + latB) * 0.5);
     const dy = G.roadDY(s);
     _laneDir.set(pose.fx, dy, pose.fz);
@@ -233,7 +231,6 @@ export function initRoadSurface() {
   /* ---------------- Разметка полос (инстансы) ---------------- */
   const MAX_DASHES = 768;
   const DASH_LEN = 4.2;
-  const DASH_HALF = DASH_LEN * 0.5;
   const dashGeo = new THREE.BoxGeometry(0.15, 0.035, DASH_LEN);
   const dashMesh = new THREE.InstancedMesh(dashGeo, G.M.lineWhite, MAX_DASHES);
   dashMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -264,7 +261,7 @@ export function initRoadSurface() {
     const paint = (s, back, ahead, w) => {
       if (used >= MAX_DASHES) return;
       dummy.scale.set(1, 1, w);
-      placeAlongLane(dummy, s, back, ahead, DASH_HALF, 0.03);
+      placeAlongLane(dummy, s, back, ahead, 0.03);
       dummy.updateMatrix();
       dashMesh.setMatrixAt(used++, dummy.matrix);
     };
@@ -662,10 +659,6 @@ export function initRoadSurface() {
   const arrowRightA = makeArrow(0xff7043);
   const arrowRightB = makeArrow(0xff7043);
 
-  function splitCenterS(playerS) {
-    return G.splitCenterS(playerS);
-  }
-
   /** Центр ленты в этой точке. Узкая лента центра не даёт. */
   function branchCenter(s, track) {
     const span = followAsphalt([null, null], G.roadEdgesAt(s))[track];
@@ -675,7 +668,7 @@ export function initRoadSurface() {
 
   /** Цветная линия на внутренней кромке своей ленты. На центр другой ленты она не съезжает. */
   function updateIslandStrip(mesh, side) {
-    const splitS = splitCenterS(G.playerS);
+    const splitS = G.splitCenterS(G.playerS);
     const from = splitS;
     const span = EXIT_DIVERGE + EXIT_RUN;
     const raw = [];
@@ -707,7 +700,7 @@ export function initRoadSurface() {
   }
 
   function updateIsland(playerS) {
-    const splitS = splitCenterS(playerS);
+    const splitS = G.splitCenterS(playerS);
     const amount = G.splitAmountAtS(splitS + EXIT_DIVERGE);
     const active = amount > 0.2;
 
@@ -752,7 +745,7 @@ export function initRoadSurface() {
         a.mesh.visible = false;
         continue;
       }
-      placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
+      placeAlongLane(a.mesh, a.s, lat, lat, 0.055);
     }
     const exiting = [
       { mesh: arrowRightA, s: markS[0] },
@@ -762,7 +755,7 @@ export function initRoadSurface() {
       const lat = active && !stayed ? branchCenter(a.s, 1) : null;
       a.mesh.visible = lat != null;
       if (lat == null) continue;
-      placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
+      placeAlongLane(a.mesh, a.s, lat, lat, 0.055);
     }
   }
 
