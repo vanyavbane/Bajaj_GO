@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { BiomeDef, BiomeId, BiomeTraffic, LaneLayout, RoadSample, TrafficModel } from './engine/biomes.js';
-import type { CarriagePhase, LiveCarriage } from './engine/carriage.js';
+import type { CarriagePhase, DriveRoads, LiveCarriage } from './engine/carriage.js';
 import type { RouteChoice } from './engine/route.js';
 import type { CarriageLayout, RoadWay } from './engine/lanes.js';
 import type { RoadEmbed } from './engine/branch.js';
@@ -365,6 +365,7 @@ export interface GameState {
   roadWayAt: (s: number) => RoadWay;
   roadPhaseAt: (s: number) => CarriagePhase;
   roadChoiceAt: (s: number) => RouteChoice;
+  roadsAt: (s: number) => DriveRoads;
   sideRibbonAt: (s: number) => LiveCarriage | null;
   trafficLatAt: (s: number, offset: number, onExit: boolean) => number;
   laneMarksAtS: (s: number) => { lat: number; w: number }[];

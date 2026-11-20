@@ -72,8 +72,10 @@ const early = carriageAt({ frame: earlySeal, biome: city, widen: null });
 const late = carriageAt({ frame: lateSeal, biome: city, widen: null });
 assert(early.phase === 'seal' && late.phase === 'seal', 'закрытие прямой — фаза съезда, не биом');
 assert(early.lanes.count === 2 && early.way === 'one-way', 'на закрытии прямой полосы уже две попутные');
-assert(late.axis > early.axis + 5, 'ось полос доезжает до середины ленты');
-assert(Math.abs(late.axis - carried) < 0.5, 'к концу закрытия ось уже на центре будущего carry');
+const earlyRibbon = earlySeal.origin + (exitRibbonCenter(earlySeal.local) ?? 0);
+const lateRibbon = lateSeal.origin + (exitRibbonCenter(lateSeal.local) ?? 0);
+assert(Math.abs(early.axis - earlyRibbon) < 1e-6 && Math.abs(late.axis - lateRibbon) < 1e-6, 'с первого метра закрытия дорога — лента съезда');
+assert(Math.abs(late.axis - carried) < 1.5, 'к carry ось уже на центре этой ленты');
 assert(covers(lateSeal, late.axis), 'ось закрытия внутри живого асфальта');
 
 const carry = frameAt(clock.ownAfter + 5, 1);
@@ -168,8 +170,7 @@ const midSeal = frameAt(clock.choiceAt + 35, 1);
 const fromRibbonEarly = markToRibbon(earlySeal, clock.choiceAt + 1);
 const fromRibbonMid = markToRibbon(midSeal, clock.choiceAt + 35);
 const fromRibbonLate = markToRibbon(lateSeal, clock.ownAfter - 0.5);
-assert(fromRibbonEarly > fromRibbonMid && fromRibbonMid > fromRibbonLate, 'штрих оси приближается к ленте тем же t, что и ось');
-assert(fromRibbonLate < 1.5, 'к концу закрытия штрих уже на курсе ленты');
+assert(fromRibbonEarly < 0.5 && fromRibbonMid < 0.5 && fromRibbonLate < 0.5, 'штрих стоит на дороге съезда');
 
 const ribbonLat = exitRibbonMid(earlySeal.world);
 const bikeHeld = pose(earlySeal, ribbonLat, clock.choiceAt + 1, true);
@@ -219,15 +220,13 @@ assert(sideMarks.length === 1 && Math.abs(sideMarks[0].lat - side.axis) < 1e-6, 
 assert(sideRibbon(early, earlySeal) == null, 'когда съезд уже дорога, второй набор штрихов не нужен');
 assert(sideRibbon(carriageAt({ frame: frameAt(-10, 0), biome: city, widen: null }), frameAt(-10, 0)) == null, 'до развилки боковой ленты нет');
 
-const join = { phase: 'ribbon' as const, choice: 'open' as const, open: true, following: false, changingLane: false, lane: 3, lastLane: 3, runLanes: 2 };
-assert(carFollowsRibbon(join), 'крайняя попутная уходит на ленту, пока та отдельная дорога');
-assert(carFollowsRibbon({ ...join, following: true }), 'машина на ленте остаётся, пока лента открыта');
-assert(!carFollowsRibbon({ ...join, choice: 'straight', following: true }), 'прямая отпускает машину с ленты');
-assert(!carFollowsRibbon({ ...join, following: true, open: false }), 'закрытая лента машину не держит');
-assert(carFollowsRibbon({ ...join, phase: 'seal', choice: 'exit', following: true }), 'на закрытии прямой машина остаётся на полосах ленты');
-assert(!carFollowsRibbon({ ...join, phase: 'seal', choice: 'exit', following: false }), 'на закрытии новая машина на ленту не прыгает');
-assert(!carFollowsRibbon({ ...join, phase: 'carry', choice: 'exit', following: true, open: false }), 'на carry машина едет полосами дороги');
-assert(!carFollowsRibbon({ ...join, changingLane: true }), 'перестраивающаяся машина на ленту не прыгает');
-assert(!carFollowsRibbon({ ...join, lane: 2 }), 'не крайняя полоса остаётся на шоссе');
+const join = { hasExit: true, mainPhase: 'ribbon' as const, following: false, changingLane: false, lane: 3, lastLane: 3, runLanes: 2 };
+assert(carFollowsRibbon(join), 'крайняя попутная переходит на дорогу съезда');
+assert(carFollowsRibbon({ ...join, following: true }), 'машина остаётся на съезде, пока эта дорога есть');
+assert(!carFollowsRibbon({ ...join, hasExit: false, following: true }), 'без дороги съезда машина едет по основной');
+assert(!carFollowsRibbon({ ...join, mainPhase: 'seal', following: false }), 'когда съезд уже основная дорога, на него не пересаживаются заново');
+assert(!carFollowsRibbon({ ...join, mainPhase: 'carry', hasExit: false, following: true }), 'на carry отдельной дороги съезда нет');
+assert(!carFollowsRibbon({ ...join, changingLane: true }), 'перестраивающаяся машина на съезд не прыгает');
+assert(!carFollowsRibbon({ ...join, lane: 2 }), 'не крайняя полоса остаётся на своей дороге');
 const exitLane = openRider.lanes.offsets[openRider.lanes.offsets.length - 1];
 assert(Math.abs(ribbonCarLat(openRider) - (openRider.axis + exitLane * openRider.scale)) < 1e-6, 'машина съезда стоит на крайней полосе ленты');

@@ -95,10 +95,16 @@ export function carriagePhase(frame: RoadFrame, widen: number | null): CarriageP
 }
 
 function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, half: number): LiveCarriage {
+  // Закрытие прямой: дорога уже лента съезда. Ось не едет с шоссе на ленту.
+  let axis = laneAnchor(frame);
+  if (phase === 'seal') {
+    const ribbon = exitRibbonCenter(frame.local);
+    if (ribbon != null) axis = frame.origin + ribbon;
+  }
   return {
     phase,
     lanes,
-    axis: laneAnchor(frame),
+    axis,
     scale: laneFit(half, lanes.offsets),
     half,
     way: lanes.way,
@@ -161,24 +167,37 @@ export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage |
   return ribbon;
 }
 
+/** Дороги в точке. main есть всегда. exit — боковая лента, пока она ещё не стала main. */
+export interface DriveRoads {
+  main: LiveCarriage;
+  exit: LiveCarriage | null;
+}
+
+/** Прямая убирает съезд из списка дорог. Пока выбор открыт или взят, лента — вторая дорога. */
+export function roadsAt(main: LiveCarriage, frame: RoadFrame, choice: RouteChoice): DriveRoads {
+  return {
+    main,
+    exit: choice === 'straight' ? null : sideRibbon(main, frame),
+  };
+}
+
 /**
- * Крайняя попутная едет полосами ленты, пока лента отдельная.
- * На закрытии прямой она остаётся на этих полосах: ось дороги ещё догоняет ленту.
- * Прямая отпускает. Carry — это уже сама дорога, отдельной ленты нет.
+ * Машина едет по одной дороге из списка.
+ * На съезд садится только крайняя попутная, и только пока съезд ещё боковая дорога.
+ * Кто уже на нём, остаётся, пока эта дорога есть в списке.
  */
 export function carFollowsRibbon(args: {
-  phase: CarriagePhase;
-  choice: RouteChoice;
-  open: boolean;
+  hasExit: boolean;
+  mainPhase: CarriagePhase;
   following: boolean;
   changingLane: boolean;
   lane: number;
   lastLane: number;
   runLanes: number;
 }): boolean {
-  if (args.following && args.phase === 'seal') return true;
-  if (args.choice === 'straight' || args.phase !== 'ribbon' || !args.open) return false;
+  if (!args.hasExit) return false;
   if (args.following) return true;
+  if (args.mainPhase !== 'ribbon') return false;
   if (args.changingLane || args.runLanes < 1 || args.lane !== args.lastLane) return false;
   return true;
 }

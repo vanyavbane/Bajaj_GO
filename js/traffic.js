@@ -1,5 +1,4 @@
-import { carFollowsRibbon } from './engine/carriage.js';
-import { exitLaneOpen } from './engine/fork.js';
+import { carFollowsRibbon, carriageLat } from './engine/carriage.js';
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
@@ -185,18 +184,18 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Крайняя попутная едет полосами ленты. Номер полосы ленты с номером шоссе не сравнивается. */
-  function followExit(car, edges, phase, choice, runLanes, lastLane, wasOnExit) {
-    const open = !!edges && exitLaneOpen(edges);
+  /** Крайняя попутная переходит на дорогу съезда. Номер её полосы с номером шоссе не сравнивается. */
+  function followExit(car, roads, wasOnExit) {
+    const main = roads.main;
+    const lastLane = main.lanes.count - 1;
     return carFollowsRibbon({
-      phase,
-      choice,
-      open,
+      hasExit: roads.exit != null,
+      mainPhase: main.phase,
       following: wasOnExit,
       changingLane: !!car.changingLane,
       lane: wasOnExit ? lastLane : car.laneIdx,
       lastLane,
-      runLanes,
+      runLanes: main.lanes.count - main.lanes.oncomingCount,
     });
   }
 
@@ -251,23 +250,12 @@ export function initTraffic() {
         car.retiring = true;
       }
 
-      // Машина едет полосами одной проезжей части: шоссе или ленты.
-      // Смещение хранится в полосах этой части, мир считается от её оси.
-      const highway = lanesAt(car.s);
-      const phase = G.roadPhaseAt ? G.roadPhaseAt(car.s) : 'road';
-      const choice = G.roadChoiceAt ? G.roadChoiceAt(car.s) : 'open';
-      const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
-      const ribbon = G.sideRibbonAt ? G.sideRibbonAt(car.s) : null;
+      // Машина едет по одной дороге из списка: основная или съезд.
+      const roads = G.roadsAt(car.s);
+      const highway = roads.main.lanes;
+      const ribbon = roads.exit;
       const wasOnExit = !!car.onExit;
-      car.onExit = followExit(
-        car,
-        edges,
-        phase,
-        choice,
-        highway.count - highway.oncomingCount,
-        highway.count - 1,
-        wasOnExit,
-      );
+      car.onExit = followExit(car, roads, wasOnExit);
       if (car.onExit && ribbon && !wasOnExit) {
         const idx = Math.max(0, ribbon.lanes.offsets.length - 1);
         car.laneIdx = idx;
@@ -275,9 +263,12 @@ export function initTraffic() {
         car.lateralOffset = ribbon.lanes.offsets[idx];
         car.changingLane = false;
       } else if (wasOnExit && !car.onExit) {
-        const world = G.trafficLatAt(car.s, car.lateralOffset, true);
-        const axis = G.laneWorldOffsetAtS(car.s, 0);
-        const scale = G.laneDisplayScaleAtS(car.s) || 1;
+        const from = G.sideRibbonAt(car.s);
+        const world = from
+          ? carriageLat(from.axis, from.scale, car.lateralOffset)
+          : G.trafficLatAt(car.s, car.lateralOffset, false);
+        const axis = roads.main.axis;
+        const scale = roads.main.scale || 1;
         const idx = nearestLaneIndex(highway.offsets, (world - axis) / scale);
         car.laneIdx = idx;
         car.targetLaneIdx = idx;
