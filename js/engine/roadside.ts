@@ -1,4 +1,4 @@
-import { exitWidth, mainRoadOpen, outwardFrom, shellEdge } from './fork.ts';
+import { outwardFrom, shellEdge } from './fork.ts';
 import type { AsphaltEdges } from './fork.ts';
 
 export type { AsphaltEdges };
@@ -10,8 +10,8 @@ export type { AsphaltEdges };
  * живого асфальта, поэтому декор остаётся снаружи съезда, даже если старый центр ещё в стороне.
  *
  * Кромки приходят снаружи (`roadEdgesAt`): две ленты, разъезд и схлопывание
- * чужой ветки уже внутри них. Этот модуль решает только, можно ли ставить
- * объект и на каком смещении. Three.js здесь нет.
+ * чужой ветки уже внутри них. Этот модуль считает смещение декора.
+ * Three.js здесь нет.
  */
 
 /** Сторона обочины. Островок между лентами сюда не входит. */
@@ -35,25 +35,11 @@ export interface BesideAsset {
   inset: number;
 }
 
-/** Смещение для `placeOnRoad`. `null` — в этой точке объект не ставить. */
+/** Смещение для `placeOnRoad`. */
 export interface RoadsidePose {
-  lateral: number | null;
-  absLat: number | null;
+  lateral: number;
+  absLat: number;
 }
-
-/**
- * Объект на островке.
- * `halfWidth` — половина габарита от точки постановки.
- * `gap` — зазор от этой грани до внутренней кромки асфальта.
- * `lateral` — желаемое смещение от оси; по умолчанию островок по центру.
- */
-export interface MedianAsset {
-  halfWidth: number;
-  gap: number;
-  lateral?: number;
-}
-
-const HIDDEN: RoadsidePose = { lateral: null, absLat: null };
 
 function finite(n: number): number {
   return Number.isFinite(n) ? n : 0;
@@ -73,40 +59,4 @@ export function besidePose(frame: RoadsideFrame, asset: BesideAsset): RoadsidePo
   const shellMid = (shellEdge(frame.edges, -1) + shellEdge(frame.edges, 1)) * 0.5;
   const lateral = outwardFrom(edge, shellMid, outward(asset.gap) + outward(asset.inset));
   return { lateral, absLat: Math.abs(lateral - frame.origin) };
-}
-
-/**
- * Сколько метров от оси до асфальта внутри разъезда.
- * На прямой внутренние кромки сходятся, и места под островок нет.
- */
-function exitGore(edges: AsphaltEdges, center = 0): boolean {
-  return mainRoadOpen(edges, center) && exitWidth(edges) > 1 && edges.rightInner > edges.leftInner;
-}
-
-export function medianRoom(edges: AsphaltEdges, center = 0): number {
-  const gap = edges.rightInner - edges.leftInner;
-  if (!(gap > 0)) return 0;
-  if (exitGore(edges, center)) return gap * 0.5;
-  const axis = Number.isFinite(center) ? center : 0;
-  if (edges.leftInner < axis && edges.rightInner > axis) {
-    return Math.min(axis - edges.leftInner, edges.rightInner - axis);
-  }
-  return 0;
-}
-
-/** Помещается ли объект между лентами, не задевая асфальт. */
-export function medianFits(edges: AsphaltEdges, asset: MedianAsset, center = 0): boolean {
-  return medianRoom(edges, center) >= outward(asset.halfWidth) + outward(asset.gap);
-}
-
-/** Смещение на островке. Вылезающий в сторону асфальта сдвиг обрезается. */
-export function medianPose(edges: AsphaltEdges, asset: MedianAsset, center = 0): RoadsidePose {
-  const room = medianRoom(edges, center);
-  const need = outward(asset.halfWidth) + outward(asset.gap);
-  if (room < need) return HIDDEN;
-  const limit = room - need;
-  const goreCenter = exitGore(edges, center) ? (edges.leftInner + edges.rightInner) * 0.5 : center;
-  const desired = asset.lateral == null ? goreCenter : finite(asset.lateral);
-  const lateral = goreCenter + Math.max(-limit, Math.min(limit, desired - goreCenter));
-  return { lateral, absLat: Math.abs(lateral - center) };
 }

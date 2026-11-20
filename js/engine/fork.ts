@@ -408,17 +408,6 @@ export function landOnCarriage(origin: number, edges: AsphaltEdges, world: numbe
   return (Math.min(at, edge) - axis) / scale;
 }
 
-/**
- * Прямая лента ещё накрывает центр дороги, а не сжата в точку.
- * Центр — ось этой ленты. После съезда это уже не ноль маршрута.
- */
-export function mainRoadOpen(edges: AsphaltEdges, center = 0): boolean {
-  const axis = Number.isFinite(center) ? center : 0;
-  return edges.leftOuter < axis - 0.5
-    && edges.leftInner > axis + 0.5
-    && edges.leftInner - edges.leftOuter > 1;
-}
-
 /** Точка снаружи кромки. Сторона берётся от центра дороги, не от нуля маршрута. */
 export function outwardFrom(edge: number, origin: number, gap: number): number {
   if (!Number.isFinite(edge)) return Number.isFinite(origin) ? origin : 0;

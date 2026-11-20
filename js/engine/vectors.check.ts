@@ -1,7 +1,7 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
 import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
-import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, carriageWay, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
-import type { CoursePick, ForkCourse, VectorSpawn } from './vectors.ts';
+import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
+import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -38,13 +38,6 @@ assert(openCourse(RIGHT_FORK, nose + 20, layout).length === 1, 'после но�
 assert(openCourse(RIGHT_FORK, nose - 5, layout).length === 0, 'до носа ответвлений нет');
 assert(courseOwns(RIGHT_FORK, 1, nose + clock.ownAfter, nose, clock.ownAfter) && !courseOwns(RIGHT_FORK, 0, nose + clock.ownAfter, nose, clock.ownAfter), 'прямой выбор дорогу не перехватывает');
 assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд односторонний, прямая наследует дорогу биома');
-const ramp: { course: ForkCourse; pick: CoursePick; s: number; nose: number; ownAfter: number; zoneEnd: number; onRamp: boolean } = {
-  course: RIGHT_FORK, pick: 0, s: nose + clock.turn, nose, ownAfter: clock.ownAfter, zoneEnd: nose + clock.lead, onRamp: true,
-};
-assert(carriageWay(ramp) === 'one-way', 'лента съезда односторонняя ещё до выбора');
-assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: nose + clock.ownAfter + 1 }) === 'one-way', 'после поворота съезд ещё односторонний');
-assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: nose + clock.lead }) === 'one-way', 'на границе зоны съезд не становится исходной дорогой');
-assert(carriageWay({ ...ramp, onRamp: false, pick: 0 }) === 'two-way', 'прямой ход остаётся двусторонним');
 
 const carried = exitCarryOrigin(10, 0);
 const localRibbon = branchEdges(10, 22);

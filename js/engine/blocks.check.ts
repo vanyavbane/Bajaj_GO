@@ -1,4 +1,4 @@
-import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
+import { RIGHT_EXIT, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
 import { exitCarryOrigin, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
@@ -36,8 +36,8 @@ assert(kept?.id === 'ahead' && kept.kind === 'road' && kept.built, 'прямой
 const carried = placedBlock(plan, 400, 1);
 assert(carried?.id === 'carry' && carried.kind === 'carry', 'съезд заканчивается блоком, где он сам стал дорогой');
 assert(placedBlock(plan, 0, 1) == null && placedBlock(plan, 430, 1) == null, 'вне рецепта блока нет');
-assert(builtChain(plan, 0).join() === 'split,fork', 'до выбора построено только подход');
-assert(builtChain(plan, 1).join() === 'split,fork,seal-main,carry', 'съезд достраивает свою цепочку');
+assert(plan.approach.map((span) => span.id).join() === 'split,fork', 'до выбора построено только подход');
+assert([...plan.approach, ...plan.exit].map((span) => span.id).join() === 'split,fork,seal-main,carry', 'съезд достраивает свою цепочку');
 
 const broken: ExitRecipe = {
   id: 'broken',

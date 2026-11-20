@@ -136,30 +136,6 @@ export function courseOwns(course: ForkCourse, pick: CoursePick, s: number, nose
   return courseVector(course, pick).yaw !== 0 && s >= nose + ownAfter;
 }
 
-/**
- * Какая проезжая часть у самого вектора курса.
- * Живые полосы считает carriageAt по кадру. Этот интервал остаётся свойством вектора:
- * лента односторонняя, после захвата она остаётся односторонней.
- * Граница зоны не превращает её в исходную двустороннюю дорогу.
- */
-export function carriageWay(args: {
-  course: ForkCourse;
-  pick: CoursePick;
-  s: number;
-  nose: number;
-  ownAfter: number;
-  zoneEnd: number;
-  onRamp: boolean;
-}): RoadWay {
-  if (args.onRamp) return 'one-way';
-  const vector = courseVector(args.course, args.pick);
-  // Граница зоны не делает съезд прежней двусторонней дорогой.
-  if (vector.way === 'one-way' && args.s >= args.nose + args.ownAfter) {
-    return 'one-way';
-  }
-  return 'two-way';
-}
-
 /** Один включённый вектор на маршруте. */
 export interface VectorSpawn {
   /** Ключ кэша. Один нос и один угол — один ключ. */
