@@ -654,7 +654,7 @@ function exitLane(s, side) {
         gap: 3.1,
         inset: 0
       });
-      const poiLat = poiPose.lateral == null ? 0 : poiPose.lateral;
+      const poiLat = poiPose.lateral;
       const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.laneWorldOffsetAtS(zoneS, markerLogical);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {

@@ -357,7 +357,7 @@ export function initRoadside() {
       const decorAt = (at, side, gap) => {
         const frame = G.roadsideFrameAt(at);
         const pose = G.besidePose(frame, { side, gap, inset: 0 });
-        return pose.lateral == null ? frame.origin : pose.lateral;
+        return pose.lateral;
       };
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);

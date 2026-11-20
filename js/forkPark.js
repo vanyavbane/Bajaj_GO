@@ -369,11 +369,4 @@ export function initForkPark() {
   }
 
   G.updateForkPark = updateForkPark;
-  G.forkParkInfo = () => ({
-    trees: kept.length,
-    bushes: bushSpots.length,
-    benches: benches.length,
-    walkers: walkers.length,
-    visible
-  });
 }

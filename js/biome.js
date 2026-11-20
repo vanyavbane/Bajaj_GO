@@ -1130,7 +1130,6 @@ function applyLaneConfig(dominant, playerS) {
   G.oncomingCount = cfg.oncomingCount;
   G.LANE_OFFSETS = cfg.offsets.slice();
   G.LANE_SPEEDS = cfg.speeds.slice();
-  G.ROAD_WIDTH = live.half * 2;
   G.START_LANE = cfg.startLane;
 
   if (biomeChanged || modeChanged) {
@@ -1320,7 +1319,6 @@ function updateBiome(dt) {
   if (G.started && !G.ended && riderSeat.kind === 'exit') G.laneAssistTarget = null;
 
   updateTerrainTint(weights);
-  G.biomeTraffic = BIOMES[dominant].traffic;
 
   const showSplit = !!G.splitState.active;
   updateSplitBanner(showSplit ? {
@@ -1473,7 +1471,6 @@ export function initBiome() {
   G.biomeState = null;
   G.biomeTransition = { active: false, from: 0, to: 0, t: 0 };
   G.splitState = null;
-  G.biomeTraffic = BIOMES[CITY].traffic;
 
   G.visitCounts = ZERO_VISITS();
   G.pendingBiome = null;
@@ -1517,9 +1514,7 @@ export function initBiome() {
   G.persistBiome = persistBiome;
   G.biomeMenuMarkup = biomeMenuMarkup;
   G.biomePauseValue = biomePauseValue;
-  G.biomeDisplayInfo = biomeDisplayInfo;
   G.hideBiomeBanner = hideBiomeBanner;
-  G.hideSplitBanner = hideSplitBanner;
   G.showBiomeBanner = (biomeIndexValue) => showBiomeBanner(BIOMES[biomeIndexValue] || BIOMES[0]);
   G.BIOMES = BIOMES;
 
@@ -1596,7 +1591,6 @@ export function initBiomeWorld() {
             { edges: frame.world, origin: frame.origin },
             { side: sideSign, gap, inset: 0 }
           );
-          if (pose.lateral == null) continue;
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;

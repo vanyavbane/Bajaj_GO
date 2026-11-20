@@ -317,13 +317,4 @@ export function initForest() {
     lastChunk = NaN;
     rebuild();
   };
-  G.forestInfo = () => {
-    const counts = {};
-    let total = 0;
-    for (const [key, pool] of Object.entries(pools)) {
-      counts[key] = pool.count;
-      total += pool.count;
-    }
-    return { total, chunks: chunkCache.size, counts };
-  };
 }

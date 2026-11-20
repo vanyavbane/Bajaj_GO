@@ -58,7 +58,7 @@ export function initPedestrians() {
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
       const frame = G.roadsideFrameAt(ped.s);
       const pose = G.besidePose(frame, { side: ped.side < 0 ? -1 : 1, gap: 1.15 + jitter * cw, inset: 0 });
-      const lat = pose.lateral == null ? frame.origin : pose.lateral;
+      const lat = pose.lateral;
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
       G.placeOnRoad(ped.group, ped.s, lat, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);

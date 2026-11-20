@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import type { BiomeDef, BiomeTraffic, TrafficModel } from './engine/biomes.js';
+import type { BiomeDef, TrafficModel } from './engine/biomes.js';
 import type { DriveRoads, LiveCarriage } from './engine/carriage.js';
 import type { CarriageLayout } from './engine/lanes.js';
 import type { RoadEmbed } from './engine/branch.js';
@@ -287,7 +287,6 @@ export interface GameState {
     extraPitch?: number,
     extraRoll?: number,
   ) => void;
-  ROAD_WIDTH: number;
   ROAD_EDGE: number;
   LANE_OFFSETS: number[];
   START_LANE: number;
@@ -320,7 +319,6 @@ export interface GameState {
   groundOffset: (lat: number, s: number) => number;
   /** 1, пока развилка в окне камеры. */
   forkView: 0 | 1;
-  biomeTraffic: BiomeTraffic;
   roadEdgeMin: number;
   roadEdgeMax: number;
   biomeScenery: ScenerySlot[];
@@ -371,7 +369,6 @@ export interface GameState {
   biomePauseValue: () => string;
   showBiomeBanner: (biomeIndex: number) => void;
   hideBiomeBanner: () => void;
-  hideSplitBanner: () => void;
 
   selectedBikeId: string;
   selectedBike: () => BikeStats;

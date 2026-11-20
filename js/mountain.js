@@ -257,13 +257,4 @@ export function initMountain() {
     lastChunk = NaN;
     rebuild();
   };
-  G.mountainInfo = () => {
-    const counts = {};
-    let total = 0;
-    for (const [key, pool] of Object.entries(pools)) {
-      counts[key] = pool.count;
-      total += pool.count;
-    }
-    return { total, counts };
-  };
 }
