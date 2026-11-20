@@ -1,7 +1,8 @@
 import { forkSide } from './engine/fork.js';
+import { defaultRunOffset, lanesOf, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
-import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, laneSplitEdge, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
+import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
 import { G } from './state.js';
 
 export function initLoop() {
@@ -81,10 +82,7 @@ export function initLoop() {
 
     // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
     if (!G.jumpState.airborne) {
-      const demoLanes = G.lanesAtS(G.playerS);
-      const demoTarget = demoLanes.oncomingCount > 0
-        ? demoLanes.offsets[demoLanes.oncomingCount]
-        : demoLanes.offsets[demoLanes.offsets.length - 1];
+      const demoTarget = defaultRunOffset(lanesOf(G.lanesAtS(G.playerS)));
       G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
@@ -282,9 +280,9 @@ export function initLoop() {
       G.comboTimer -= dt;
       if (G.comboTimer <= 0) G.comboCount = 0;
     }
-    const edge = laneSplitEdge(G.LANE_OFFSETS, G.oncomingCount);
-    const oncomingMult = oncomingMultiplier(G.laneOffset, edge);
-    G.score += distancePoints(G.speed, dt, G.laneOffset, G.comboCount, edge);
+    const rideDirection = offsetDirection(lanesOf(G.lanesAtS(G.playerS)), G.laneOffset);
+    const oncomingMult = oncomingMultiplier(rideDirection);
+    G.score += distancePoints(G.speed, dt, rideDirection, G.comboCount);
 
     const oncomingOn = oncomingMult !== 1;
     if (oncomingOn !== oncomingShown) {
@@ -331,7 +329,7 @@ export function initLoop() {
   }
 
   function updateHud(now) {
-    const activeMult = oncomingMultiplier(G.laneOffset, laneSplitEdge(G.LANE_OFFSETS, G.oncomingCount));
+    const activeMult = oncomingMultiplier(offsetDirection(lanesOf(G.lanesAtS(G.playerS)), G.laneOffset));
     G.updateCockpitDashboard(now, G.speed, G.distance, G.score, activeMult, G.highBeamTimer > 0);
     G.updateEcoHud(now);
   }

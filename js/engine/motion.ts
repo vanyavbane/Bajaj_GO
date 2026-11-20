@@ -1,5 +1,7 @@
 /** Шаг байка без Three.js и без DOM. Кадр только применяет результат и рисует. */
 
+import { besideWithLane, type Lane } from './lanes.ts';
+
 function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
@@ -199,18 +201,6 @@ export function overflyOverlap(dS: number, dLat: number, halfLength: number, hal
   return dS < halfLength + 1.1 && dLat < halfWidth + 0.95;
 }
 
-/**
- * Полоса встречная, если её номер меньше числа встречных полос биома.
- * Число приходит из конфига: у города и полей их две, у гор одна, у МКАД четыре.
- * Значение по умолчанию не подставляется — иначе горы и МКАД тихо становятся городом.
- */
-export function isOncomingLane(laneIdx: number, oncomingCount: number): boolean {
-  if (!Number.isInteger(oncomingCount) || oncomingCount < 0) {
-    throw new Error(`oncomingCount должен прийти из биома, получено ${oncomingCount}`);
-  }
-  return laneIdx < oncomingCount;
-}
-
 export function nearMissOverlap(dS: number, dLat: number, halfWidth: number): boolean {
   return dS < 2.2 && dLat < halfWidth + 1.15;
 }
@@ -273,16 +263,15 @@ export interface TrafficStep {
 }
 
 /** Шаг чужой машины: ход, перестроение, затухание реакции на свет.
- *  flow задаёт направление на односторонней: 1 вперёд, -1 навстречу.
- *  Без него направление берётся из текущей полосы, до перестроения. */
+ *  flow задаёт направление явно. Без него его берёт полоса, на которой машина стоит. */
 export function stepTrafficCar(
   car: TrafficMotion,
   dt: number,
-  laneOffsets: number[],
-  oncomingCount: number,
+  lanes: readonly Lane[],
   flow?: 1 | -1,
 ): TrafficStep {
-  const oncoming = flow == null ? isOncomingLane(car.laneIdx, oncomingCount) : flow < 0;
+  const here = lanes[car.laneIdx];
+  const oncoming = flow == null ? here?.direction === 'against' : flow < 0;
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
   let steerAngle = car.steerAngle;
@@ -291,7 +280,7 @@ export function stepTrafficCar(
   const flashReactTimer = car.flashReactTimer > 0 ? car.flashReactTimer - dt : car.flashReactTimer;
 
   if (changingLane) {
-    const target = laneOffsets[car.targetLaneIdx] ?? Number.NaN;
+    const target = lanes[car.targetLaneIdx]?.offset ?? Number.NaN;
     const diff = target - lateralOffset;
     lateralOffset += Math.sign(diff) * Math.min(Math.abs(diff), 4.2 * dt);
     steerAngle = clamp(diff * 0.25, -0.35, 0.35);
@@ -348,24 +337,17 @@ export function highbeamYieldLane(
   car: YieldCar,
   playerS: number,
   playerLane: number,
-  oncomingCount: number,
-  laneCount: number,
+  lanes: readonly Lane[],
   laneWidth: number,
 ): number | null {
-  if (!Number.isInteger(laneCount) || laneCount < 1) {
-    throw new Error(`laneCount должен прийти из биома, получено ${laneCount}`);
-  }
   if (!Number.isFinite(laneWidth) || laneWidth <= 0) {
     throw new Error(`laneWidth должен прийти из биома машины, получено ${laneWidth}`);
   }
-  if (isOncomingLane(car.laneIdx, oncomingCount) || car.changingLane) return null;
+  const here = lanes[car.laneIdx];
+  if (!here || here.direction !== 'with' || car.changingLane) return null;
   const distAhead = car.s - playerS;
   if (distAhead < 6 || distAhead > 60) return null;
   const limit = laneWidth * 0.5 + 0.15;
   if (Math.abs(car.lateralOffset - playerLane) >= limit) return null;
-  const first = oncomingCount;
-  const last = Math.max(first, laneCount - 1);
-  if (last <= first) return null;
-  const target = car.laneIdx >= last ? last - 1 : car.laneIdx + 1;
-  return Math.max(first, Math.min(last, target));
+  return besideWithLane(lanes, here.index)?.index ?? null;
 }

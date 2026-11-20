@@ -1,3 +1,4 @@
+import { button } from '@bajajgo/design';
 import { devToolsEnabled } from './dev-flag.js';
 import { G } from './state.js';
 
@@ -292,9 +293,21 @@ export function initDebug() {
     };
   }
 
+  const dock = document.createElement('div');
+  dock.id = 'debug-dock';
+  dock.innerHTML = `
+    <div class="debug-dock-title">ОТЛАДКА</div>
+    ${button({ id: 'debug-restore-stats', variant: 'compact', label: 'Восстановить статы' })}
+  `;
+  document.body.appendChild(dock);
+  document.getElementById('debug-restore-stats').addEventListener('click', () => {
+    if (G.debugRestoreStats) G.debugRestoreStats();
+  });
+
   window.__bajaj = {
     snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint,
     replayAfterMenu, teleport, probe, forceWeather, view, startAt,
+    restoreStats: () => (G.debugRestoreStats ? G.debugRestoreStats() : null),
     // Только в режиме `?debug`: живое состояние. В обычном собранном файле
     // объекта нет, поэтому на игру это не влияет.
     G

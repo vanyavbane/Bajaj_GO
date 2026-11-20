@@ -50,6 +50,22 @@ export function branchYaw(distance: number, turn: number, yaw = BRANCH_YAW): num
   return yaw * s;
 }
 
+/**
+ * Поворот от одного курса к другому на долю weight.
+ * Дальше прямого угла не идём: линейная смесь касательных там разворачивает байк задом.
+ */
+export function turnToward(ax: number, az: number, bx: number, bz: number, weight: number): { fx: number; fz: number } {
+  const angle = signedAngle(ax, az, bx, bz);
+  const capped = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, angle));
+  const turn = capped * Math.max(0, Math.min(1, Number.isFinite(weight) ? weight : 0));
+  const c = Math.cos(turn);
+  const sn = Math.sin(turn);
+  const fx = ax * c - az * sn;
+  const fz = ax * sn + az * c;
+  const len = Math.hypot(fx, fz) || 1;
+  return { fx: fx / len, fz: fz / len };
+}
+
 /** Поворот вправо: касательная смешивается с правым вектором. */
 export function yawRight(frame: PathFrame, yaw: number): PathFrame {
   const c = Math.cos(yaw);
@@ -97,7 +113,8 @@ export function stepBranch(
   let nextFrozen = frozen;
   if (frozen && distance >= turn) {
     const offset = signedAngle(frozen.bx, frozen.bz, frozen.fx, frozen.fz);
-    const turned = yawRight(base, offset);
+    const capped = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, offset));
+    const turned = yawRight(base, capped);
     fx = turned.fx;
     fz = turned.fz;
   } else {

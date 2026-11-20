@@ -264,8 +264,12 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
     };
   }
   if (block.kind === 'road') {
-    // Прямая продолжается обычной дорогой.
-    return branchEdges(road, 0);
+    // Отказ оставляет съезд в стороне. Его кромка не возвращается на прямую.
+    const edge = branchEdges(road, FORK_SPREAD);
+    const mid = exitRibbonMid(edge) + FORK_SPREAD * 1.5;
+    edge.rightInner = mid;
+    edge.rightOuter = mid;
+    return edge;
   }
   return branchEdges(road, 0);
 }
@@ -345,8 +349,6 @@ export interface RoadQuery {
   baseOrigin: number;
   carriedOrigin: number | null;
   endWeight?: number;
-  /** 0..1: переход от 2-полосной унаследованной дороги к полной. */
-  carryIn?: number;
 }
 
 function finiteOrigin(value: number): number {
@@ -381,22 +383,7 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   const afterFork = query.forkDistance >= EXIT_PLAN.length;
   const carried = chosen === 1 && stored != null && Number.isFinite(stored) && (onCarry || afterFork);
   const origin = finiteOrigin(carried && stored != null ? stored : query.baseOrigin);
-  let local = blockEdges(query.half, block, chosen, endWeight);
-  // Продолжение съезда из предыдущей зоны: дорога плавно расширяется до полной.
-  if (!block && !carried) {
-    const ci = typeof query.carryIn === 'number' ? Math.max(0, Math.min(1, query.carryIn)) : 1;
-    if (ci < 1) {
-      const road = Math.max(0, Number.isFinite(query.half) ? query.half : 0);
-      const eh = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
-      const t = smooth01(ci);
-      local = {
-        leftOuter: -eh + (-road + eh) * t,
-        leftInner: eh + (road - eh) * t,
-        rightInner: eh + (road - eh) * t,
-        rightOuter: eh + (road - eh) * t,
-      };
-    }
-  }
+  const local = blockEdges(query.half, block, chosen, endWeight);
   return {
     origin,
     local,

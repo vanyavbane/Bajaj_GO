@@ -1,4 +1,4 @@
-import { BRANCH_YAW } from './branch.ts';
+import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
 import { branchEdges, exitCarryOrigin, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
 import { EXIT_LEFT, EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, carriageWay, courseLayoutOf, courseOwns, courseVector, createVectorField, openCourse, ownedCourse, zoneNose } from './vectors.ts';
 import type { CoursePick, ForkCourse, VectorSpawn } from './vectors.ts';
@@ -43,7 +43,7 @@ const ramp: { course: ForkCourse; pick: CoursePick; s: number; nose: number; own
 };
 assert(carriageWay(ramp) === 'one-way', 'лента съезда односторонняя ещё до выбора');
 assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: nose + clock.ownAfter + 1 }) === 'one-way', 'после поворота съезд ещё односторонний');
-assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: nose + clock.lead }) === 'two-way', 'на границе зоны съезд вливается в двустороннюю дорогу');
+assert(carriageWay({ ...ramp, onRamp: false, pick: 1, s: nose + clock.lead }) === 'one-way', 'на границе зоны съезд не становится исходной дорогой');
 assert(carriageWay({ ...ramp, onRamp: false, pick: 0 }) === 'two-way', 'прямой ход остаётся двусторонним');
 
 const carried = exitCarryOrigin(10, 0);
@@ -73,6 +73,31 @@ const peeled = again.embed({
 const parent = again.frame([firstExit], 510, straight, 110);
 const expected = parent.x + parent.rx * (ribbon - carried);
 assert(Math.abs(peeled.x - expected) < 8, 'второй съезд отмеряется от центра дороги, не от нуля маршрута');
+
+const primed = createVectorField();
+const staleFirst: VectorSpawn = { key: '0:exit', nose: 0, yaw: EXIT_RIGHT.yaw, ownsFrom: 0 };
+const staleNext: VectorSpawn = { key: '1:exit', nose: 400, yaw: EXIT_RIGHT.yaw, ownsFrom: 900 };
+const secondEdges = branchEdges(10, 22);
+const secondLat = exitRibbonMid(secondEdges);
+const primeQuery = {
+  s: 520,
+  lat: secondLat,
+  y: 0,
+  nose: 400,
+  edges: secondEdges,
+  branches: [staleNext],
+  origin: 0,
+  turn: 110,
+  ownedHere: false,
+};
+primed.embed({ ...primeQuery, owned: [] }, straight);
+const roadNow = primed.frame([staleFirst], 520, straight, 110);
+const secondRide = primed.embed({ ...primeQuery, owned: [staleFirst] }, straight);
+const secondTurn = signedAngle(roadNow.fx, roadNow.fz, secondRide.fx, secondRide.fz);
+assert(Math.abs(secondTurn) <= Math.PI / 2, 'второй съезд не разворачивает больше чем на прямой угол');
+assert(secondRide.x > roadNow.x - 2, 'второй съезд не возвращается на исходную дорогу');
+const back = turnToward(0, -1, 0, 1, 1);
+assert(back.fz <= 0.001, 'курс не переворачивается, даже если ветка смотрит назад');
 
 const goreField = createVectorField();
 const goreExit: VectorSpawn = { key: 'gore', nose: 0, yaw: EXIT_RIGHT.yaw, ownsFrom: 10000 };

@@ -2,26 +2,21 @@
  * Проезжая часть в одной точке.
  * Фазу читает кадр дороги. Полосы, встречные и ось выходят из этой фазы.
  * Лента сбоку не подменяет полосы остальной дороги.
- * Закрытие прямой, блок carry и хвост следующей зоны — один съезд:
- * две попутные полосы. Хвост расширяет и кромки, и эти полосы одной шкалой.
- * Разметка переключается, когда шкала дошла до ширины биома.
+ * Закрытие прямой и блок carry — один съезд: две попутные полосы.
+ * Съезд не расширяется обратно в исходную дорогу. У каждой дороги свои кромки.
  */
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
 import type { RouteChoice } from './route.ts';
-import { carriageLanes, exitCarriage, laneDashOffsets, type CarriageLayout, type RoadWay } from './lanes.ts';
+import { carriageLanes, exitCarriage, laneGapOffsets, lanesOf, outerLane, type CarriageLayout, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
 
-/** Сколько метров унаследованный съезд расширяется до дороги биома. */
-export const CARRY_IN_M = 100;
-
 /**
  * ribbon — лента ещё сбоку, полосы дороги остаются биомом.
- * seal — выбранный съезд закрывает прямую, полосы уже его и едут к центру ленты.
- * carry — съезд стал дорогой.
- * widen — первые метры следующей зоны: те же две полосы растут до биома.
- * road — обычная дорога биома.
+ * seal — выбранный съезд закрывает прямую, полосы уже его.
+ * carry — съезд стал дорогой и своей ширины не отдаёт.
+ * road — обычная дорога биома. widen оставлен в типе, фаза больше не возникает.
  */
 export type CarriagePhase = 'road' | 'ribbon' | 'seal' | 'carry' | 'widen';
 
@@ -42,8 +37,7 @@ export interface CarriageQuery {
   /** Полосы биома в этой точке. На стыке это доминирующий биом. */
   biome: LaneLayout;
   /**
-   * 0…1 — прошлая зона взяла съезд, и эта точка ещё в хвосте.
-   * null — хвоста нет.
+   * Раньше 0…1 растягивали съезд до биома. Поле остаётся у вызова, на кромки не влияет.
    */
   widen: number | null;
 }
@@ -69,28 +63,12 @@ export function laneFit(half: number, offsets: readonly number[]): number {
   return Math.min(1, span / maxAbs);
 }
 
-function spreadExit(id: LaneLayout['id'], half: number): CarriageLayout {
-  const base = exitCarriage(id);
-  const nominal = base.width * 0.5;
-  const span = Math.max(0, half);
-  const fit = nominal > 0.05 ? span / nominal : 1;
-  if (fit <= 1.001) return { ...base, width: span * 2 };
-  const offsets = base.offsets.map((off) => off * fit);
-  return {
-    ...base,
-    offsets,
-    width: span * 2,
-    laneWidth: base.laneWidth * fit,
-  };
-}
-
-/** Фаза кадра. Хвост не перебивает живую ленту и уже построенный блок. */
-export function carriagePhase(frame: RoadFrame, widen: number | null): CarriagePhase {
+/** Фаза кадра. Съезд не переписывает кромки в кромки исходной дороги. */
+export function carriagePhase(frame: RoadFrame): CarriagePhase {
   const block = frame.block;
   if (block && block.built && block.kind === 'carry') return 'carry';
   if (block && block.built && block.kind === 'seal' && frame.chosen === 1) return 'seal';
   if (exitRibbonCenter(frame.local) != null) return 'ribbon';
-  if (widen != null && widen < 1) return 'widen';
   return 'road';
 }
 
@@ -112,8 +90,8 @@ function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, h
 }
 
 /**
- * 0…1 в начале зоны, если прошлая взяла съезд. null — хвоста нет.
- * Свой съезд этой зоны, уже доехавший до выбора, хвост не перекрывает.
+ * Хвоста нет. Раньше первые 100 м следующей зоны растягивали съезд до ширины
+ * исходной дороги. Съезд в неё не вливается.
  */
 export function inheritedWiden(args: {
   meters: number;
@@ -124,29 +102,38 @@ export function inheritedWiden(args: {
   previousTookExit: boolean;
   tookExit: boolean;
 }): number | null {
-  const length = args.zoneLength;
-  const meters = args.meters;
-  if (!(length > 0) || !Number.isFinite(meters) || meters < length) return null;
-  const zone = Math.floor(meters / length);
-  if (zone <= 0) return null;
-  const local = meters - zone * length;
-  if (!(local >= 0 && local < CARRY_IN_M)) return null;
-  if (!args.previousTookExit) return null;
-  if (args.tookExit && meters - args.nose >= args.choiceAt) return null;
-  return local / CARRY_IN_M;
+  void args;
+  return null;
 }
 
 /** Полосы, встречные, ось и ширина одной точки. */
 export function carriageAt(query: CarriageQuery): LiveCarriage {
-  const phase = carriagePhase(query.frame, query.widen);
+  const phase = carriagePhase(query.frame);
   const half = carriageHalf(query.frame, phase);
   if (phase === 'seal' || phase === 'carry') {
     return finish(phase, exitCarriage(query.biome.id), query.frame, half);
   }
-  if (phase === 'widen') {
-    return finish(phase, spreadExit(query.biome.id, half), query.frame, half);
-  }
   return finish(phase, carriageLanes(query.biome, 'two-way'), query.frame, half);
+}
+
+/**
+ * Прямая, пока выбранный съезд её закрывает.
+ * У неё своя ширина и свои полосы. В кромки съезда она не вписывается.
+ */
+export function departedRoad(frame: RoadFrame, biome: LaneLayout): LiveCarriage | null {
+  if (frame.chosen !== 1 || frame.block == null || !frame.block.built || frame.block.kind !== 'seal') return null;
+  const half = Math.max(0, (frame.local.leftInner - frame.local.leftOuter) * 0.5);
+  if (half < 0.4) return null;
+  const lanes = carriageLanes(biome, 'two-way');
+  const mid = (frame.local.leftOuter + frame.local.leftInner) * 0.5;
+  return {
+    phase: 'road',
+    lanes,
+    axis: frame.origin + mid,
+    scale: laneFit(half, lanes.offsets),
+    half,
+    way: 'two-way',
+  };
 }
 
 /** Штрих между полосами проезжей части. lat — мировая точка её оси. */
@@ -210,17 +197,16 @@ export function carriageLat(axis: number, scale: number, offset: number): number
   return origin + lane * span;
 }
 
-/** Мир крайней полосы ленты. */
+/** Мир крайней правой полосы, которая едет по ходу этой дороги. */
 export function ribbonCarLat(ribbon: LiveCarriage): number {
-  const offsets = ribbon.lanes.offsets;
-  const offset = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
-  return carriageLat(ribbon.axis, ribbon.scale, offset);
+  const lane = outerLane(lanesOf(ribbon.lanes), 'right', 'with');
+  return carriageLat(ribbon.axis, ribbon.scale, lane ? lane.offset : 0);
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */
 export function laneMarks(road: LiveCarriage): LaneMark[] {
   const scale = Number.isFinite(road.scale) && road.scale !== 0 ? road.scale : 1;
-  return laneDashOffsets(road.lanes.offsets, road.lanes.oncomingCount).map((offset) => ({
+  return laneGapOffsets(lanesOf(road.lanes)).map((offset) => ({
     lat: road.axis + offset * scale,
     w: 1,
   }));

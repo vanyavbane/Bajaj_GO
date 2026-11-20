@@ -236,6 +236,21 @@ button{font-family:var(--ds-font)}
 #order-hud.late{border-color:var(--bf-danger);background:rgba(30,14,16,.85)}
 #order-hud.late .t{color:var(--bf-danger)}
 
+/* Блок отладки: только npm run dev и страница с ?debug */
+#debug-dock{
+  position:fixed;top:16px;left:16px;z-index:16;
+  width:min(240px,calc(100vw - 32px));
+  padding:8px 10px 10px;
+  border:1px solid var(--bf-line);border-radius:2px;
+  background:rgba(10,14,20,.88);
+  pointer-events:auto;
+}
+.debug-dock-title{
+  font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--bf-text-mute);
+}
+#debug-dock .ds-button{margin-top:6px}
+
 /* Кнопка паузы */
 #btn-pause{
   position:absolute;top:16px;right:20px;

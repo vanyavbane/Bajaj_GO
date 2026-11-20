@@ -5,7 +5,7 @@
  * Биом только называет, какой вектор выбран. Считать путь он не должен.
  */
 
-import { BRANCH_YAW, frameFromSpline, stepBranch } from './branch.ts';
+import { BRANCH_YAW, frameFromSpline, signedAngle, stepBranch, turnToward } from './branch.ts';
 import { courseLocal, exitCourseStart, exitRibbonMid, followsExit } from './fork.ts';
 import type { AsphaltEdges, ExitClock } from './fork.ts';
 import type { FrozenYaw, PathFrame, RoadEmbed } from './branch.ts';
@@ -139,7 +139,8 @@ export function courseOwns(course: ForkCourse, pick: CoursePick, s: number, nose
 /**
  * Какая проезжая часть у самого вектора курса.
  * Живые полосы считает carriageAt по кадру. Этот интервал остаётся свойством вектора:
- * лента односторонняя, после захвата она односторонняя до конца зоны.
+ * лента односторонняя, после захвата она остаётся односторонней.
+ * Граница зоны не превращает её в исходную двустороннюю дорогу.
  */
 export function carriageWay(args: {
   course: ForkCourse;
@@ -152,7 +153,8 @@ export function carriageWay(args: {
 }): RoadWay {
   if (args.onRamp) return 'one-way';
   const vector = courseVector(args.course, args.pick);
-  if (vector.way === 'one-way' && args.s >= args.nose + args.ownAfter && args.s < args.zoneEnd) {
+  // Граница зоны не делает съезд прежней двусторонней дорогой.
+  if (vector.way === 'one-way' && args.s >= args.nose + args.ownAfter) {
     return 'one-way';
   }
   return 'two-way';
@@ -234,17 +236,28 @@ export function createVectorField() {
     rec.samples.push(stepped.frame);
   }
 
+  function parentKey(spawns: readonly VectorSpawn[], s: number, beforeNose: number): string {
+    for (let i = spawns.length - 1; i >= 0; i--) {
+      const item = spawns[i];
+      if (!item || !(item.nose < beforeNose)) continue;
+      if (item.nose <= s && item.ownsFrom <= s) return item.key;
+    }
+    return 'spline';
+  }
+
   function pathFrom(
     spawn: VectorSpawn,
     s: number,
     turn: number,
     baseAt: (s: number) => PathFrame,
+    from: string,
   ): PathFrame {
     if (!(s > spawn.nose)) return baseAt(s);
-    let rec = cache.get(spawn.key);
+    const id = `${spawn.key}@${from}`;
+    let rec = cache.get(id);
     if (!rec || rec.nose !== spawn.nose || rec.yaw !== spawn.yaw) {
       rec = { nose: spawn.nose, yaw: spawn.yaw, samples: [baseAt(spawn.nose)], frozen: null };
-      cache.set(spawn.key, rec);
+      cache.set(id, rec);
     }
     const need = Math.ceil((s - spawn.nose) / STEP);
     while (rec.samples.length - 1 < need) advance(rec, turn, baseAt);
@@ -290,7 +303,7 @@ export function createVectorField() {
     }
     if (!spawn) return splineFrame(spline(s), s);
     const nose = spawn.nose;
-    return pathFrom(spawn, s, turn, (u) => frame(spawns, u, spline, turn, nose));
+    return pathFrom(spawn, s, turn, (u) => frame(spawns, u, spline, turn, nose), parentKey(spawns, nose, nose));
   }
 
   interface Heading {
@@ -321,7 +334,13 @@ export function createVectorField() {
     const separated = Math.max(0, Math.min(1, gap / 4));
     const branchAt = (spawn: VectorSpawn | null): PathFrame | null => {
       if (!spawn || !(s > spawn.nose)) return null;
-      return pathFrom(spawn, s, turn, (u) => frame(owned, u, spline, turn, spawn.nose));
+      return pathFrom(
+        spawn,
+        s,
+        turn,
+        (u) => frame(owned, u, spline, turn, spawn.nose),
+        parentKey(owned, spawn.nose, spawn.nose),
+      );
     };
     const parent = frame(owned, s, spline, turn);
     return {
@@ -343,28 +362,31 @@ export function createVectorField() {
     };
   }
 
-  /** От курса прямой к курсу ленты. Вес 0 — прямая, 1 — лента. */
+  /**
+   * От курса прямой к курсу ленты. Вес 0 — прямая, 1 — лента.
+   * Съезд, чей курс смотрит назад к исходной дороге, байка туда не тащит.
+   */
   function blendRibbon(head: Heading, frame: PathFrame, lat: number, weight: number): RoadEmbed {
     const w = Math.max(0, Math.min(1, weight));
     const from = onParent(head, lat);
+    const angle = signedAngle(head.parent.fx, head.parent.fz, frame.fx, frame.fz);
+    const legal = Math.abs(angle) <= Math.PI / 2;
     const along = courseLocal(lat, { kind: 'ribbon', ribbon: head.ribbon });
-    const bx = frame.x + frame.rx * along;
-    const bz = frame.z + frame.rz * along;
-    const fx = head.parent.fx + (frame.fx - head.parent.fx) * w;
-    const fz = head.parent.fz + (frame.fz - head.parent.fz) * w;
-    const len = Math.hypot(fx, fz) || 1;
-    const nfx = fx / len;
-    const nfz = fz / len;
+    const bx = legal ? frame.x + frame.rx * along : from.x;
+    const bz = legal ? frame.z + frame.rz * along : from.z;
+    const aimX = legal ? frame.fx : head.parent.fx;
+    const aimZ = legal ? frame.fz : head.parent.fz;
+    const turned = turnToward(head.parent.fx, head.parent.fz, aimX, aimZ, w);
     return {
       x: from.x + (bx - from.x) * w,
       y: head.y,
       z: from.z + (bz - from.z) * w,
-      rx: -nfz,
-      rz: nfx,
-      fx: nfx,
-      fz: nfz,
-      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * w,
-      branched: w > 0.04,
+      rx: -turned.fz,
+      rz: turned.fx,
+      fx: turned.fx,
+      fz: turned.fz,
+      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * (legal ? w : 0),
+      branched: legal && w > 0.04,
     };
   }
 
@@ -416,11 +438,9 @@ export function createVectorField() {
       const stay = onParent(head, lat);
       const chordX = main.x + (exitEdge.x - main.x) * u;
       const chordZ = main.z + (exitEdge.z - main.z) * u;
-      const fx = head.parent.fx + (exitEdge.fx - head.parent.fx) * u * open;
-      const fz = head.parent.fz + (exitEdge.fz - head.parent.fz) * u * open;
-      const len = Math.hypot(fx, fz) || 1;
-      const nfx = fx / len;
-      const nfz = fz / len;
+      const turned = turnToward(head.parent.fx, head.parent.fz, exitEdge.fx, exitEdge.fz, u * open);
+      const nfx = turned.fx;
+      const nfz = turned.fz;
       return {
         x: stay.x + (chordX - stay.x) * open,
         y: head.y,

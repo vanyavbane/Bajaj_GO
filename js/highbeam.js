@@ -1,3 +1,4 @@
+import { lanesOf } from './engine/lanes.js';
 import { highbeamYieldLane } from './engine/motion.js';
 import { G } from './state.js';
 
@@ -16,7 +17,7 @@ export function initHighbeam() {
     for (const car of G.trafficPool) {
       const carLanes = G.lanesAtS(car.s);
       const lane = highbeamYieldLane(
-        car, G.playerS, G.laneOffset, carLanes.oncomingCount, carLanes.count, carLanes.laneWidth
+        car, G.playerS, G.laneOffset, lanesOf(carLanes), carLanes.laneWidth
       );
       if (lane == null || car.onExit) continue;
       car.changingLane = true;

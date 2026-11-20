@@ -1,4 +1,4 @@
-import { BRANCH_YAW, branchYaw, frameFromSpline, headingRate, signedAngle, stepBranch } from './branch.ts';
+import { BRANCH_YAW, branchYaw, frameFromSpline, headingRate, signedAngle, stepBranch, turnToward } from './branch.ts';
 import type { FrozenYaw } from './branch.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -59,5 +59,9 @@ assert(headingRate(0, 0.01) === 0.01, 'на прямой изгиб совпад
 assert(Math.abs(headingRate(1, 0.02) - 0.01) < 1e-12, 'наклон уменьшает скорость поворота относительно второй производной');
 const bent = frameFromSpline(4, 1, 10, 0.02);
 assert(Math.abs(bent.curvature - 0.01) < 1e-12, 'кадр сплайна хранит рад/м, не сырую вторую производную');
+const ahead = turnToward(0, -1, 0, -1, 1);
+assert(Math.abs(ahead.fx) < 1e-9 && ahead.fz < -0.99, 'нулевой угол оставляет курс');
+const flipped = turnToward(0, -1, 0, 1, 1);
+assert(Math.abs(flipped.fx) > 0.99 && flipped.fz <= 0.001, 'разворот больше прямого угла обрезается до него');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('branch ok');

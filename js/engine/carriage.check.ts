@@ -3,7 +3,7 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { carFollowsRibbon, carriageAt, carriagePhase, inheritedWiden, laneFit, laneMarks, ribbonCarLat, riderCarriage, sideRibbon } from './carriage.ts';
+import { carFollowsRibbon, carriageAt, carriagePhase, departedRoad, inheritedWiden, laneFit, laneMarks, ribbonCarLat, riderCarriage, sideRibbon } from './carriage.ts';
 import { EXIT_LANE_HALF, exitCarryOrigin, exitClock, exitRibbonCenter, exitRibbonMid, laneAnchor, sampleRoad } from './fork.ts';
 import { EXIT_LANE_WIDTH, laneDashOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
@@ -25,7 +25,6 @@ assert(EXIT_LANE_HALF === EXIT_LANE_WIDTH, 'полуширина съезда и
 function frameAt(
   distance: number,
   chosen: -1 | 0 | 1,
-  carryIn: number | null = null,
   origin: number | null = null,
 ) {
   return sampleRoad({
@@ -35,7 +34,6 @@ function frameAt(
     baseOrigin: origin ?? 0,
     carriedOrigin: chosen === 1 ? carried : null,
     endWeight: 1,
-    carryIn: carryIn == null ? 1 : carryIn,
   });
 }
 
@@ -98,32 +96,10 @@ assert(
   'после вливания мир байка совпадает с осью разметки',
 );
 
-function widened(t: number) {
-  const frame = frameAt(-10, 0, t, carried);
-  return { frame, live: carriageAt({ frame, biome: city, widen: t < 1 ? t : null }) };
-}
-
-const at0 = widened(0);
-const atHalf = widened(0.5);
-const atOldCut = widened(0.85);
-const atEnd = widened(1);
-assert(at0.live.phase === 'widen' && atHalf.live.phase === 'widen', 'хвост прошлой зоны — одна фаза расширения');
-assert(at0.live.way === 'one-way' && atHalf.live.way === 'one-way' && atOldCut.live.way === 'one-way', 'полосы не становятся двусторонними раньше полотна');
-assert(at0.live.lanes.count === 2 && atHalf.live.lanes.count === 2 && atOldCut.live.lanes.count === 2, 'число полос съезда держится до конца шкалы');
-assert(atHalf.live.half > at0.live.half + 1 && atHalf.live.half < half - 0.5, 'кромки растут той же шкалой');
-assert(
-  Math.abs((atHalf.live.lanes.offsets[1] ?? 0)) > Math.abs(at0.live.lanes.offsets[1] ?? 0) + 0.5,
-  'две полосы съезда разъезжаются вместе с кромками',
-);
-assert(atEnd.live.phase === 'road' && atEnd.live.way === 'two-way' && atEnd.live.lanes.count === city.count, 'в конце шкалы дорога становится биомом');
-assert(Math.abs(atEnd.live.half - half) < 1e-6, 'в конце шкалы кромки равны ширине биома');
-assert(carriagePhase(atEnd.frame, null) === 'road', 'закончившийся хвост больше не фаза расширения');
-
-const held = atOldCut.live.axis + 1.2 * atOldCut.live.scale;
-const laneAfter = (held - atEnd.live.axis) / atEnd.live.scale;
-const heldAfter = atEnd.live.axis + laneAfter * atEnd.live.scale;
-assert(Math.abs(heldAfter - held) < 1e-6, 'смена полос в конце шкалы сохраняет мир байка');
-assert(covers(atHalf.frame, atHalf.live.axis), 'ось хвоста внутри растущих кромок');
+const nextZone = carriageAt({ frame: frameAt(-10, 0, carried), biome: city, widen: 0.5 });
+assert(nextZone.phase === 'road' && nextZone.way === 'two-way' && nextZone.lanes.count === city.count, 'следующая зона — своя дорога, не растянутый съезд');
+assert(Math.abs(nextZone.half - half) < 1e-6, 'ширина следующей зоны — ширина биома, не ширина съезда');
+assert(carriagePhase(frameAt(-10, 0, carried)) === 'road', 'хвоста, который вливает съезд в дорогу, нет');
 
 const plain = carriageAt({ frame: frameAt(-10, 0), biome: city, widen: null });
 assert(plain.phase === 'road' && plain.scale === 1, 'обычная дорога не сжимает полосы');
@@ -189,20 +165,17 @@ const carryPath = field.frame(
 assert(apart(carryPose, carryPath) < 0.5, 'после захвата ось лежит на курсе съезда');
 
 assert(inheritedWiden({
-  meters: 40, zoneLength: 1500, nose: 1070, choiceAt: 260, previousTookExit: false, tookExit: false,
-}) == null, 'в первой зоне хвоста нет');
-assert(inheritedWiden({
   meters: 1550, zoneLength: 1500, nose: 2570, choiceAt: 260, previousTookExit: true, tookExit: false,
-}) === 0.5, 'середина хвоста — половина шкалы');
-assert(inheritedWiden({
-  meters: 1600, zoneLength: 1500, nose: 2570, choiceAt: 260, previousTookExit: true, tookExit: false,
-}) == null, 'после 100 м хвост закончился');
-assert(inheritedWiden({
-  meters: 1550, zoneLength: 1500, nose: 2570, choiceAt: 260, previousTookExit: false, tookExit: false,
-}) == null, 'без взятого съезда прошлой зоны хвоста нет');
-assert(inheritedWiden({
-  meters: 410, zoneLength: 400, nose: 360, choiceAt: 20, previousTookExit: true, tookExit: true,
-}) == null, 'свой съезд после выбора хвост не перекрывает');
+}) == null, 'съезд не вливается в исходную дорогу');
+const leftBehind = departedRoad(earlySeal, city);
+if (!leftBehind) throw new Error('пока прямая ещё широкая, у неё своя проезжая часть');
+const leftMarks = laneMarks(leftBehind);
+assert(leftMarks.length > 0, 'у закрываемой прямой свои штрихи');
+leftMarks.forEach((mark) => {
+  assert(mark.lat > earlySeal.world.leftOuter - 0.05 && mark.lat < earlySeal.world.leftInner + 0.05, 'штрих прямой стоит на её ширине');
+  assert(Math.abs(mark.lat - early.axis) > 2, 'штрих прямой не переезжает на ось съезда');
+});
+assert(departedRoad(lateSeal, city) == null, 'когда прямая сошла на нет, её штрихов нет');
 
 const roadGaps = laneDashOffsets(openRoad.lanes.offsets, openRoad.lanes.oncomingCount);
 const roadMarks = laneMarks(openRoad);

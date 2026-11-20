@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, inheritedWiden, laneMarks, riderCarriage, roadsAt, sideRibbon } from './engine/carriage.js';
+import { carriageAt, carriageLat, departedRoad, inheritedWiden, laneMarks, riderCarriage, roadsAt, sideRibbon } from './engine/carriage.js';
+import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
 import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
@@ -414,7 +415,7 @@ function widenAt(s) {
   return ci >= 0 ? ci : null;
 }
 
-/** Полуширина каталога. Кадр сам расширяет унаследованный съезд, второй раз ширину не смешиваем. */
+/** Полуширина каталога. Съезд её не наследует: ширина следующей зоны — ширина её биома. */
 function catalogHalfAt(s) {
   return baseRoadWidthAtMeters(blendMetersAt(s)) * 0.5;
 }
@@ -534,10 +535,15 @@ function laneMarksAtS(s) {
   return laneMarks(roadCarriageAt(s));
 }
 
-/** Штрихи боковой ленты. Пока она отдельная дорога, у неё свои полосы. */
+/** Штрихи второй дороги. Открытый съезд или ещё не закрытая прямая. */
 function ribbonMarksAtS(s) {
-  const ribbon = sideRibbon(roadCarriageAt(s), frameAt(s));
-  return ribbon ? laneMarks(ribbon) : [];
+  const frame = frameAt(s);
+  const road = roadCarriageAt(s);
+  const ribbon = sideRibbon(road, frame);
+  if (ribbon) return laneMarks(ribbon);
+  const dom = biomeIndex(roadBiomeAtS(s));
+  const left = departedRoad(frame, LANE_CONFIG[dom] || LANE_CONFIG[0]);
+  return left ? laneMarks(left) : [];
 }
 
 /** Сторона кромок: -1 прямая, +1 съезд, 0 пока развилка этой зоны не выбрана. */
@@ -627,7 +633,6 @@ function frameAt(s) {
   if (s === frameKey && frameHit) return frameHit;
   const route = routeAt(s);
   const pack = originsAt(route.zone);
-  const widen = widenAt(s);
   frameKey = s;
   frameHit = sampleRoad({
     forkDistance: forkOffset(route.meters, ZONE_M, EXIT_CLOCK.lead),
@@ -636,7 +641,6 @@ function frameAt(s) {
     baseOrigin: pack.base,
     carriedOrigin: pack.carried,
     endWeight: splitDecisionWeight(route.zone, route.meters),
-    carryIn: widen == null ? 1 : widen,
   });
   return frameHit;
 }
@@ -764,16 +768,8 @@ function dominantBiomeAtS(s) {
 
 /** Ближайшая попутная полоса к логическому смещению. */
 function nearestRunLane(lateralOffset, cfg = null) {
-  let config = cfg;
-  if (!config) config = playerLive(G.playerS).lanes;
-  let best = config.offsets[config.oncomingCount] ?? config.offsets[0] ?? 0;
-  let bestDist = Infinity;
-  for (let i = config.oncomingCount; i < config.count; i++) {
-    const off = config.offsets[i];
-    const dist = Math.abs(off - lateralOffset);
-    if (dist < bestDist) { bestDist = dist; best = off; }
-  }
-  return best;
+  const config = cfg || playerLive(G.playerS).lanes;
+  return nearestLaneOffset(lanesOf(config), lateralOffset, 'with');
 }
 
 function weightOf(live, index) {
@@ -1235,9 +1231,7 @@ function lanesAtS(s) {
 
 /** Случайная попутная полоса биома в точке s. */
 function randomRunLane(s) {
-  const cfg = lanesAtS(s);
-  const same = Math.max(1, cfg.count - cfg.oncomingCount);
-  return cfg.oncomingCount + Math.floor(Math.random() * same);
+  return laneIndexByRoll(lanesOf(lanesAtS(s)), 'with', Math.random());
 }
 
 function commitSplit(zone, side, commitMeters) {

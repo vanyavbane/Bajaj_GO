@@ -1,14 +1,6 @@
 /** Правила заезда без Three.js и без DOM. Новые механики берут числа отсюда. */
 
-/** Середина между последней встречной и первой попутной. null — встречных нет. */
-export function laneSplitEdge(offsets: number[] | null | undefined, oncomingCount: number): number | null {
-  const n = oncomingCount | 0;
-  if (n <= 0 || !offsets || n >= offsets.length) return null;
-  const left = offsets[n - 1];
-  const right = offsets[n];
-  if (left == null || right == null) return null;
-  return (left + right) * 0.5;
-}
+import type { LaneDirection } from './lanes.ts';
 
 /** Светящаяся коробка на полосе. Меню открывается внутри неё только медленнее этого порога. */
 export const EXIT_ENTER_SPEED = 50;
@@ -31,8 +23,9 @@ export function crossedExitBox(fromS: number, toS: number, lane: number, exitS: 
   return along && across;
 }
 
-export function oncomingMultiplier(lane: number, edge: number | null): number {
-  return edge != null && lane < edge ? 2 : 1;
+/** Двойные очки, пока байк на встречном направлении этой дороги. */
+export function oncomingMultiplier(direction: LaneDirection): number {
+  return direction === 'against' ? 2 : 1;
 }
 
 export function comboDistanceMultiplier(comboCount: number): number {
@@ -61,14 +54,14 @@ export function jumpBonus(count: number, jumpDist: number, softLanding: boolean)
   return total;
 }
 
-export function distancePoints(speed: number, dt: number, lane: number, comboCount: number, edge: number | null): number {
-  return (speed * dt / 6) * oncomingMultiplier(lane, edge) * comboDistanceMultiplier(comboCount);
+export function distancePoints(speed: number, dt: number, direction: LaneDirection, comboCount: number): number {
+  return (speed * dt / 6) * oncomingMultiplier(direction) * comboDistanceMultiplier(comboCount);
 }
 
 export const COMBO_WINDOW = 4;
 
-export function nearMissPoints(comboCount: number, lane: number, edge: number | null): number {
-  return 25 * comboCount * oncomingMultiplier(lane, edge);
+export function nearMissPoints(comboCount: number, direction: LaneDirection): number {
+  return 25 * comboCount * oncomingMultiplier(direction);
 }
 
 export function scrapeSpeed(speed: number, dt: number): number {

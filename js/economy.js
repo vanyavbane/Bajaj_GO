@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { nearestLaneIndex } from './engine/lanes.js';
+import { lanesOf, nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
@@ -614,10 +614,14 @@ function exitSideAt(_s) {
   return 1;
 }
 
-/** Попутная полоса у обочины. Справа это крайняя попутная полоса, слева — ближайшая своя, не встречная. */
+/** Попутная полоса у обочины. Справа крайняя правая, слева крайняя левая попутная, если она есть. */
 function exitLane(s, side) {
-  const cfg = G.lanesAtS(s);
-  return side >= 0 ? cfg.offsets[cfg.count - 1] : cfg.offsets[cfg.oncomingCount];
+  const lanes = lanesOf(G.lanesAtS(s));
+  if (side >= 0) return outerLane(lanes, 'right', 'with')?.offset ?? 0;
+  const left = outerLane(lanes, 'left', 'with');
+  if (left) return left.offset;
+  const forward = lanes.find((lane) => lane.direction === 'with');
+  return forward ? forward.offset : 0;
 }
 
   function syncExitTrack() {
@@ -1390,6 +1394,26 @@ function exitLane(s, side) {
     }
   }
   G.updateEcoHud = updateEcoHud;
+
+  /** Полный бак и новые детали. Для проверок из блока отладки. */
+  function restoreStats() {
+    G.fuelM = FUEL_RANGE_M;
+    for (const part of Object.keys(WEAR_LIMITS)) wearM[part] = 0;
+    G.limpMode = false;
+    saveEco();
+    lastEcoHudDraw = 0;
+    updateEcoHud(performance.now());
+    if (G.uiModal && G.modalKind === 'critical') closeOverlayToGame();
+    showEcoToast('Бак полный, колодки, масло и свечи как новые');
+    return {
+      fuel: Math.round(fuelPercent()),
+      pads: Math.round(getWearLeftPct('pads')),
+      oil: Math.round(getWearLeftPct('oil')),
+      plugs: Math.round(getWearLeftPct('plugs')),
+      limp: G.limpMode
+    };
+  }
+  G.debugRestoreStats = restoreStats;
 
   $('btn-pause').addEventListener('click', e => {
     e.preventDefault();
