@@ -14,11 +14,25 @@ function vec(v) {
   return { x: round(v.x), y: round(v.y), z: round(v.z) };
 }
 
+function mountRestoreDock() {
+  const dock = document.createElement('div');
+  dock.id = 'debug-dock';
+  dock.innerHTML = `
+    <div class="debug-dock-title">ОТЛАДКА</div>
+    ${button({ id: 'debug-restore-stats', variant: 'compact', label: 'Восстановить статы' })}
+  `;
+  document.body.appendChild(dock);
+  document.getElementById('debug-restore-stats').addEventListener('click', () => {
+    if (G.debugRestoreStats) G.debugRestoreStats();
+  });
+}
+
 /**
- * Прячет снимок сцены на window.__bajaj. На экран ничего не рисует.
- * В собранном файле молчит, пока в адресе нет `?debug`.
+ * Кнопка восстановления статов есть всегда.
+ * Снимок сцены на window.__bajaj — только в разработке и по `?debug`.
  */
 export function initDebug() {
+  mountRestoreDock();
   if (!devToolsEnabled()) return;
 
   const errors = [];
@@ -292,17 +306,6 @@ export function initDebug() {
       parent: G.camera && G.camera.parent ? (G.camera.parent === G.scene ? 'scene' : 'rider') : null
     };
   }
-
-  const dock = document.createElement('div');
-  dock.id = 'debug-dock';
-  dock.innerHTML = `
-    <div class="debug-dock-title">ОТЛАДКА</div>
-    ${button({ id: 'debug-restore-stats', variant: 'compact', label: 'Восстановить статы' })}
-  `;
-  document.body.appendChild(dock);
-  document.getElementById('debug-restore-stats').addEventListener('click', () => {
-    if (G.debugRestoreStats) G.debugRestoreStats();
-  });
 
   window.__bajaj = {
     snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint,

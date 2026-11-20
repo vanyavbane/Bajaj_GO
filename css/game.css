@@ -236,7 +236,7 @@ button{font-family:var(--ds-font)}
 #order-hud.late{border-color:var(--bf-danger);background:rgba(30,14,16,.85)}
 #order-hud.late .t{color:var(--bf-danger)}
 
-/* Блок отладки: только npm run dev и страница с ?debug */
+/* Блок отладки: кнопка восстановления статов, видна всегда */
 #debug-dock{
   position:fixed;top:16px;left:16px;z-index:16;
   width:min(240px,calc(100vw - 32px));
