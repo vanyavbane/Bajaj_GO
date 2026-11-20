@@ -8,7 +8,7 @@
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
 import type { RouteChoice } from './route.ts';
-import { carriageLanes, exitCarriage, laneGapOffsets, lanesOf, outerLane, type CarriageLayout, type RoadWay } from './lanes.ts';
+import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, lanesOf, outerLane, type CarriageLayout, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
 
@@ -210,6 +210,25 @@ export function laneMarks(road: LiveCarriage): LaneMark[] {
     lat: road.axis + offset * scale,
     w: 1,
   }));
+}
+
+/** Зазор между двумя жёлтыми линиями, метры. Они стоят по бокам границы хода. */
+const SOLID_GAP = 0.22;
+
+/**
+ * Двойная сплошная этой дороги.
+ * Она есть только там, где ход меняется. На съезде и на любой односторонней её нет.
+ * Линии не едут за клином развилки: середина — граница хода на оси этой дороги.
+ */
+export function solidMarks(road: LiveCarriage): LaneMark[] {
+  const edge = directionEdge(lanesOf(road.lanes));
+  if (edge == null) return [];
+  const scale = Number.isFinite(road.scale) && road.scale !== 0 ? road.scale : 1;
+  const mid = road.axis + edge * scale;
+  return [
+    { lat: mid - SOLID_GAP, w: 1 },
+    { lat: mid + SOLID_GAP, w: 1 },
+  ];
 }
 
 /**

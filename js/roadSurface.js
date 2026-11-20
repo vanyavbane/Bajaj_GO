@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, exitLaneOpen, exitRibbonMid, outwardFrom, shoulderLats, worldEdge } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, asphaltShell, followAsphalt, innerTrackEdge, outwardFrom, pinchAsphalt, pinchShell, shoulderLats } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -33,25 +33,34 @@ export function initRoadSurface() {
     return G.roadOriginAt ? G.roadOriginAt(s) : 0;
   }
 
-  function edgeLat(s, side) {
-    return worldEdge(G.roadEdgesAt(s), side < 0 ? -1 : 1, roadCenter(s));
+  let roadShells = [];
+
+  function shellAt(row) {
+    return roadShells[row] ?? null;
   }
 
-/** Наружу от центра дороги. Знак кромки сам по себе сторону не задаёт. */
-  function outwardSign(s, edge) {
-    return edge < roadCenter(s) ? -1 : 1;
+  function shellWide(shell) {
+    return !!shell && shell.right - shell.left >= 0.5;
   }
 
-  /** Белая линия чуть внутрь кромки, даже если вся дорога уже справа от оси. */
-  function insetEdge(s, side, inset) {
-    const edge = edgeLat(s, side);
-    return edge - outwardSign(s, edge) * inset;
+  /** Внешняя кромка живого асфальта. Схлопнутая оболочка кромки не даёт. */
+  function shellEdge(row, side) {
+    const shell = shellAt(row);
+    if (!shellWide(shell)) return null;
+    return side < 0 ? shell.left : shell.right;
   }
 
-  /** Точка откоса: fromCenter — удаление от центра, как у shoulderLats. */
-  function slopeLat(s, side, fromCenter) {
-    const edge = edgeLat(s, side);
-    const origin = roadCenter(s);
+  function shellMid(row) {
+    const shell = shellAt(row);
+    if (!shell) return roadCenter(sampleS[row]);
+    return (shell.left + shell.right) * 0.5;
+  }
+
+  /** Точка откоса снаружи оболочки, не снаружи старого центра слота. */
+  function slopeLat(row, side, fromCenter) {
+    const edge = shellEdge(row, side);
+    const origin = shellMid(row);
+    if (edge == null) return origin;
     const edgeDist = Math.abs(edge - origin);
     return outwardFrom(edge, origin, Math.max(0, fromCenter - edgeDist));
   }
@@ -146,6 +155,8 @@ export function initRoadSurface() {
   const centerDoubleLine2 = makeRibbon(0.13, G.M.lineYellow);
   const edgeLineLeft = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineRight = makeRibbon(0.16, G.M.lineWhite);
+  const edgeLineLeftB = makeRibbon(0.16, G.M.lineWhite);
+  const edgeLineRightB = makeRibbon(0.16, G.M.lineWhite);
 
   const accentLineMatL = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.9 });
   const accentLineMatR = new THREE.MeshBasicMaterial({ color: 0xff7043, transparent: true, opacity: 0.9 });
@@ -163,7 +174,7 @@ export function initRoadSurface() {
   const accentLineR = makeIslandRibbon(accentLineMatR);
 
   for (const mesh of [sidewalkLeftMesh, sidewalkRightMesh, curbLeftMesh, curbRightMesh,
-    centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight]) {
+    centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight, edgeLineLeftB, edgeLineRightB]) {
     mesh.receiveShadow = false;
   }
 
@@ -182,9 +193,11 @@ export function initRoadSurface() {
   slopeRightMesh.frustumCulled = false;
   G.scene.add(slopeRightMesh);
 
-/** Удаление живой кромки от центра дороги. Откос начинается отсюда, не от нуля. */
-  function farAsphalt(s, side) {
-    return Math.abs(edgeLat(s, side) - roadCenter(s));
+/** Удаление живой кромки от середины оболочки. Откос начинается отсюда. */
+  function farAsphalt(row, side) {
+    const edge = shellEdge(row, side);
+    if (edge == null) return 0;
+    return Math.abs(edge - shellMid(row));
   }
 
   /** Нормаль откоса берётся из уже поставленных вершин, по курсу съезда, а не по сплайну. */
@@ -273,13 +286,19 @@ export function initRoadSurface() {
     return local >= BARRIER_PERIOD - BARRIER_GAP;
   }
 
+  /** Бетон стоит на границе хода. На съезде границы нет, отбойника нет. */
+  function barrierLat(s) {
+    const marks = G.solidMarksAtS ? G.solidMarksAtS(s) : null;
+    if (!marks || marks.length < 2) return null;
+    return (marks[0].lat + marks[1].lat) * 0.5;
+  }
+
   G.medianBlocksBike = (s, worldLat, halfPlayer) => {
     const weight = G.mkadWeightAtS(s);
-    const split = G.splitAmountAtS(s);
-    if (weight < 0.55 || split > 0.05 || barrierGapAt(s)) return 0;
-    if (G.roadWayAt && G.roadWayAt(s) === 'one-way') return 0;
+    const lat = barrierLat(s);
+    if (weight < 0.55 || lat == null || barrierGapAt(s)) return 0;
     const reach = BARRIER_HALF_W + halfPlayer;
-    return Math.abs(worldLat - roadCenter(s)) < reach ? reach : 0;
+    return Math.abs(worldLat - lat) < reach ? reach : 0;
   };
 
   function updateBarrier(playerS, dense) {
@@ -291,12 +310,11 @@ export function initRoadSurface() {
       const s = startS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       const weight = G.mkadWeightAtS(s);
-      const split = G.splitAmountAtS(s);
-      const oneWay = G.roadWayAt && G.roadWayAt(s) === 'one-way';
-      const vis = weight > 0.08 && split < 0.05 && !barrierGapAt(s) && !oneWay ? weight : 0;
-      if (vis <= 0.02) continue;
+      const lat = barrierLat(s);
+      const vis = weight > 0.08 && lat != null && !barrierGapAt(s) ? weight : 0;
+      if (vis <= 0.02 || lat == null) continue;
       dummy.scale.set(1, vis, 1);
-      G.placeOnRoad(dummy, s, roadCenter(s), 0.46 * vis);
+      G.placeOnRoad(dummy, s, lat, 0.46 * vis);
       dummy.updateMatrix();
       blockMesh.setMatrixAt(used++, dummy.matrix);
     }
@@ -351,9 +369,9 @@ export function initRoadSurface() {
       const s = sampleS[r];
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight > maxWeight) maxWeight = weight;
-      const vis = weight > 0.02 ? weight : 0;
-      const edge = edgeLat(s, side);
-      const lat = edge + outwardSign(s, edge) * GUARD_OFFSET;
+      const vis = weight > 0.02 && shellWide(shellAt(r)) ? weight : 0;
+      const edge = shellEdge(r, side);
+      const lat = edge == null ? shellMid(r) : edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
       const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
@@ -394,10 +412,13 @@ export function initRoadSurface() {
     for (let s = start; s <= end && used + 2 <= MAX_GUARD_POSTS; s += GUARD_POST_STEP) {
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight <= 0.02) continue;
+      const row = rowNear(s);
+      if (!shellWide(shellAt(row))) continue;
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
-        const edge = edgeLat(s, side);
-        const lat = edge + outwardSign(s, edge) * GUARD_OFFSET;
+        const edge = shellEdge(row, side);
+        if (edge == null) continue;
+        const lat = edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
         dummy.scale.set(weight, weight, weight);
         G.placeOnRoad(dummy, s, lat, 0.31 * weight);
         dummy.updateMatrix();
@@ -410,36 +431,70 @@ export function initRoadSurface() {
     guardPostMesh.visible = used > 0;
   }
 
-  /* ---------------- Ленты с переменной шириной ---------------- */
+  /* ---------------- Ленты с переменной шириной ----------------
+     Лента держится за свой асфальт. Когда carry кладёт съезд в левый слот,
+     правая лента продолжается, а прямая схлопывается на месте. */
+  let roadTracks = [[], []];
+
+  function paintSpan(pos, row, s, y, span) {
+    const a = G.embedRoad(s, span.left);
+    const b = G.embedRoad(s, span.right);
+    const idx = row * 2;
+    pos.setXYZ(idx, a.x, y, a.z);
+    pos.setXYZ(idx + 1, b.x, y, b.z);
+  }
+
+  function gapBetween(a, b) {
+    const aw = a.right - a.left;
+    const bw = b.right - b.left;
+    if (aw < 0.05 || bw < 0.05) return null;
+    const aMid = (a.left + a.right) * 0.5;
+    const bMid = (b.left + b.right) * 0.5;
+    const lo = aMid <= bMid ? a : b;
+    const hi = aMid <= bMid ? b : a;
+    if (hi.left - lo.right < 0.35) return null;
+    return { left: lo.right, right: hi.left };
+  }
+
   function updateRoadRibbon() {
     roadRightMat.envMapIntensity = G.M.road.envMapIntensity;
     gapMat.color.copy(G.M.grass.color);
+    const raw = [];
+    let prev = [null, null];
+    for (let r = 0; r < ROW; r++) {
+      prev = followAsphalt(prev, G.roadEdgesAt(sampleS[r]));
+      raw.push(prev);
+    }
+    roadTracks = pinchAsphalt(raw);
+    roadShells = pinchShell(roadTracks[0].map((span, row) => asphaltShell([span, roadTracks[1][row]])));
     const posL = roadMesh.geometry.attributes.position;
     const posR = roadRightMesh.geometry.attributes.position;
     const posG = forkGapMesh.geometry.attributes.position;
     let opened = 0;
     for (let r = 0; r < ROW; r++) {
-      const edge = G.roadEdgesAt(sampleS[r]);
-      const gap = edge.rightInner - edge.leftInner;
-      if (gap > opened) opened = gap;
       const s = sampleS[r];
       const y = sampleY[r];
-      const idx = r * 2;
-      const l0 = G.embedRoad(s, edge.leftOuter);
-      const l1 = G.embedRoad(s, edge.leftInner);
-      const r0 = G.embedRoad(s, edge.rightInner);
-      const r1 = G.embedRoad(s, edge.rightOuter);
-      posL.setXYZ(idx, l0.x, y, l0.z);
-      posL.setXYZ(idx + 1, l1.x, y, l1.z);
-      posR.setXYZ(idx, r0.x, y, r0.z);
-      posR.setXYZ(idx + 1, r1.x, y, r1.z);
-      posG.setXYZ(idx, l1.x, y, l1.z);
-      posG.setXYZ(idx + 1, r0.x, y, r0.z);
+      paintSpan(posL, r, s, y, roadTracks[0][r]);
+      paintSpan(posR, r, s, y, roadTracks[1][r]);
+      const gap = gapBetween(roadTracks[0][r], roadTracks[1][r]);
+      if (gap) opened = Math.max(opened, gap.right - gap.left);
+      const fill = gap ?? { left: roadTracks[0][r].left, right: roadTracks[0][r].left };
+      paintSpan(posG, r, s, y, fill);
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
     posG.needsUpdate = true;
     forkGapMesh.visible = opened > 0.35;
+  }
+
+  /** Белая кромка своей ленты. У схлопнутой ленты линии нет. */
+  function trackEdge(track, row, side) {
+    const span = roadTracks[track][row];
+    if (!span) return null;
+    const width = span.right - span.left;
+    if (width < 0.7) return null;
+    const inset = Math.min(0.32, width * 0.25);
+    return side < 0 ? span.left + inset : span.right - inset;
   }
 
   /** Лента, у которой центр и ширина в мировых метрах зависят от точки s. */
@@ -474,7 +529,20 @@ export function initRoadSurface() {
     pos.needsUpdate = true;
   }
 
-  /** Тротуар/бордюр города: сжимается к кромке вместе с весом города. */
+  function rowNear(s) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let r = 0; r < ROW; r++) {
+      const distance = Math.abs(sampleS[r] - s);
+      if (distance < bestD) {
+        bestD = distance;
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  /** Тротуар/бордюр города: снаружи оболочки асфальта, не снаружи слота. */
   function updateCityStrip(mesh, side, baseWidth, width, yOffset) {
     const pos = mesh.geometry.attributes.position;
     let maxWeight = 0;
@@ -482,9 +550,10 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const s = sampleS[r];
-      const edge = edgeLat(s, side);
-      const halfW = width * 0.5 * cw;
-      const center = edge + outwardSign(s, edge) * (baseWidth * cw + halfW);
+      const edge = shellEdge(r, side);
+      const outward = side < 0 ? -1 : 1;
+      const halfW = edge == null ? 0 : width * 0.5 * cw;
+      const center = (edge == null ? shellMid(r) : edge) + outward * (baseWidth * cw + halfW);
       const y = sampleY[r] + yOffset;
       const a = G.embedRoad(s, center - halfW);
       const b = G.embedRoad(s, center + halfW);
@@ -504,19 +573,19 @@ export function initRoadSurface() {
       const cy = sampleY[r];
       const cityOuter = G.shoulder.cityEdge * sampleCity[r];
       const sh = G.shoulder;
-      const left = shoulderLats(farAsphalt(s, -1), cityOuter, sh);
-      const right = shoulderLats(farAsphalt(s, 1), cityOuter, sh);
+      const left = shoulderLats(farAsphalt(r, -1), cityOuter, sh);
+      const right = shoulderLats(farAsphalt(r, 1), cityOuter, sh);
       // Набережная: справа плоская пешеходная зона и спуск к воде.
       const embW = Math.max(0, Math.min(1, G.embankmentWeightAtS ? G.embankmentWeightAtS(s) : 0));
       const eL = (a, b) => a + (b - a) * embW;
-      const rLip = eL(right.lip, farAsphalt(s, 1));
+      const rLip = eL(right.lip, farAsphalt(r, 1));
       const rBerm = eL(right.berm, 17);
       const rFar = eL(right.far, 30);
       const rLipY = eL(sh.lipY, 0.08);
       const rBermY = eL(sh.bermY, 0.08);
       const rFarY = eL(sh.farY, -6);
       const at = (side, fromCenter, height) => {
-        const p = G.embedRoad(s, slopeLat(s, side, fromCenter));
+        const p = G.embedRoad(s, shellWide(shellAt(r)) ? slopeLat(r, side, fromCenter) : shellMid(r));
         return [p.x, cy + height, p.z];
       };
       const idx = r * 3;
@@ -597,43 +666,39 @@ export function initRoadSurface() {
     return G.splitCenterS(playerS);
   }
 
-  function innerLineLat(s, side, inset) {
-    const edge = G.roadEdgesAt(s);
-    const room = side < 0
-      ? Math.max(0, edge.leftInner - edge.leftOuter)
-      : Math.max(0, edge.rightOuter - edge.rightInner);
-    const pad = Math.min(inset, room * 0.5);
-    return side < 0 ? edge.leftInner - pad : edge.rightInner + pad;
+  /** Центр ленты в этой точке. Узкая лента центра не даёт. */
+  function branchCenter(s, track) {
+    const span = followAsphalt([null, null], G.roadEdgesAt(s))[track];
+    if (!span || span.right - span.left < 2) return null;
+    return (span.left + span.right) * 0.5;
   }
 
-  /** Линия развилки. На широких лентах — у кромки клина, по мере схода — у центра живой дороги. */
-  function forkMarkLat(s, side, inset) {
-    const edge = G.roadEdgesAt(s);
-    const sign = side < 0 ? -1 : 1;
-    const leftW = Math.max(0, edge.leftInner - edge.leftOuter);
-    const rightW = Math.max(0, edge.rightOuter - edge.rightInner);
-    const open = exitLaneOpen(edge);
-    const surviving = rightW >= leftW ? exitRibbonMid(edge) : roadCenter(s);
-    const home = (open ? surviving : roadCenter(s)) + sign * 0.22;
-    if (!open) return { lat: home, open: false };
-    const keep = Math.max(0, Math.min(1, Math.min(leftW, rightW) / Math.max(leftW, rightW, 1)));
-    return { lat: home + (innerLineLat(s, side, inset) - home) * keep, open: true };
-  }
-
-  /** Цветная линия вдоль внутренней кромки ветки. inset 0.38 на прямой даёт ±0.22. */
+  /** Цветная линия на внутренней кромке своей ленты. На центр другой ленты она не съезжает. */
   function updateIslandStrip(mesh, side) {
     const splitS = splitCenterS(G.playerS);
     const from = splitS;
     const span = EXIT_DIVERGE + EXIT_RUN;
+    const raw = [];
+    let prev = [null, null];
+    const samples = [];
+    for (let r = 0; r < ISLAND_ROWS; r++) {
+      const s = from + span * (r / (ISLAND_ROWS - 1));
+      samples.push(s);
+      prev = followAsphalt(prev, G.roadEdgesAt(s));
+      raw.push(prev);
+    }
+    const tracks = pinchAsphalt(raw);
+    const track = side < 0 ? 0 : 1;
     const halfW = 0.13;
     const pos = mesh.geometry.attributes.position;
     for (let r = 0; r < ISLAND_ROWS; r++) {
-      const s = from + span * (r / (ISLAND_ROWS - 1));
-      const mark = forkMarkLat(s, side, 0.2);
-      const lat = mark.lat;
-      const half = mark.open ? halfW : 0;
-      const a = G.embedRoad(s, lat - half);
-      const b = G.embedRoad(s, lat + half);
+      const here = tracks[track][r];
+      const lat = innerTrackEdge(here, side < 0 ? -1 : 1, 0.2);
+      const half = lat == null ? 0 : halfW;
+      const at = lat == null ? (here ? (here.left + here.right) * 0.5 : 0) : lat;
+      const s = samples[r];
+      const a = G.embedRoad(s, at - half);
+      const b = G.embedRoad(s, at + half);
       const idx = r * 2;
       pos.setXYZ(idx, a.x, a.y + 0.09, a.z);
       pos.setXYZ(idx + 1, b.x, b.y + 0.09, b.z);
@@ -666,11 +731,6 @@ export function initRoadSurface() {
 
     // Стрелки стоят на участке выбора, где обе ленты уже полной ширины.
     // Прямые — по центру дороги, съезд — по центру его ленты.
-    const exitCenterAt = (s) => {
-      const edge = G.roadEdgesAt(s);
-      if (!exitLaneOpen(edge)) return null;
-      return exitRibbonMid(edge);
-    };
     const decided = !!(G.splitState && G.splitState.chosen);
     const tookExit = decided && G.splitState.chosenSide === 1;
     const stayed = decided && G.splitState.chosenSide === 0;
@@ -687,7 +747,11 @@ export function initRoadSurface() {
     for (const a of forward) {
       a.mesh.visible = active && !tookExit;
       if (!a.mesh.visible) continue;
-      const lat = roadCenter(a.s);
+      const lat = branchCenter(a.s, 0);
+      if (lat == null) {
+        a.mesh.visible = false;
+        continue;
+      }
       placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
     }
     const exiting = [
@@ -695,7 +759,7 @@ export function initRoadSurface() {
       { mesh: arrowRightB, s: markS[1] }
     ];
     for (const a of exiting) {
-      const lat = active && !stayed ? exitCenterAt(a.s) : null;
+      const lat = active && !stayed ? branchCenter(a.s, 1) : null;
       a.mesh.visible = lat != null;
       if (lat == null) continue;
       placeAlongLane(a.mesh, a.s, lat, lat, 2.4, 0.055);
@@ -718,17 +782,17 @@ export function initRoadSurface() {
     updateCityStrip(sidewalkLeftMesh, -1, 0.35, 3.2, 0.11);
     updateCityStrip(sidewalkRightMesh, 1, 0.35, 3.2, 0.11);
 
-    // Жёлтая ось есть только у двусторонней дороги. На одностороннем съезде
-    // её нет: все полосы попутные. Пока ленты разделены, линия стоит на клине.
-    const yellowAt = (s, side) => {
-      const mark = forkMarkLat(s, side, 0.38);
-      if (!mark.open && G.roadWayAt && G.roadWayAt(s) === 'one-way') return null;
-      return mark.lat;
+    // Двойная сплошная — граница хода этой дороги, не клин развилки.
+    const solidAt = (s, index) => {
+      const marks = G.solidMarksAtS(s);
+      return marks[index] ? marks[index].lat : null;
     };
-    updateLateralStrip(centerDoubleLine1, (r) => yellowAt(sampleS[r], -1), 0.13, 0.08);
-    updateLateralStrip(centerDoubleLine2, (r) => yellowAt(sampleS[r], 1), 0.13, 0.08);
-    updateLateralStrip(edgeLineLeft, (r) => insetEdge(sampleS[r], -1, 0.32), 0.16, 0.025);
-    updateLateralStrip(edgeLineRight, (r) => insetEdge(sampleS[r], 1, 0.32), 0.16, 0.025);
+    updateLateralStrip(centerDoubleLine1, (r) => solidAt(sampleS[r], 0), 0.13, 0.08);
+    updateLateralStrip(centerDoubleLine2, (r) => solidAt(sampleS[r], 1), 0.13, 0.08);
+    updateLateralStrip(edgeLineLeft, (r) => trackEdge(0, r, -1), 0.16, 0.025);
+    updateLateralStrip(edgeLineRight, (r) => trackEdge(0, r, 1), 0.16, 0.025);
+    updateLateralStrip(edgeLineLeftB, (r) => trackEdge(1, r, -1), 0.16, 0.025);
+    updateLateralStrip(edgeLineRightB, (r) => trackEdge(1, r, 1), 0.16, 0.025);
 
     shareRoadNormals();
     updateSlopeRibbons();

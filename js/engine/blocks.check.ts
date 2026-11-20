@@ -1,7 +1,7 @@
 import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitCarryOrigin, exitChain, exitClock, sampleRoad } from './fork.ts';
-import type { AsphaltEdges, ChosenSide } from './fork.ts';
+import { exitCarryOrigin, exitChain, exitClock, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
+import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -89,5 +89,41 @@ assert(
   close(exitBefore.rightInner, exitAfter.leftOuter) && close(exitBefore.rightOuter, exitAfter.leftInner),
   'блок carry продолжает ленту съезда, без скачка',
 );
+
+let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
+const followed = [];
+for (const distance of [250, 329.9, 330.1]) {
+  tracks = followAsphalt(tracks, frameAt(distance, 1).world);
+  followed.push(tracks);
+}
+const openTracks = followed[0];
+const exitTrack = openTracks[1] && openTracks[0]
+  && (openTracks[1].left + openTracks[1].right) > (openTracks[0].left + openTracks[0].right) ? 1 : 0;
+const sealSpan = followed[1][exitTrack];
+const carrySpan = followed[2][exitTrack];
+if (!sealSpan || !carrySpan) throw new Error('съезд остаётся на одной ленте через carry');
+assert(
+  Math.abs((sealSpan.left + sealSpan.right) - (carrySpan.left + carrySpan.right)) < 1,
+  'лента съезда не перескакивает в другой слот',
+);
+assert(followed[2][1 - exitTrack] == null, 'прямая к carry уже не сидит на ленте съезда');
+const pinched = pinchAsphalt([
+  [{ left: -10, right: 10 }, { left: 20, right: 30 }],
+  [null, { left: 20.2, right: 30.2 }],
+]);
+assert(pinched[0][1].left === pinched[0][1].right, 'оборванная прямая не тянется на съезд');
+assert(Math.abs(pinched[1][0].left - 20) < 1e-6 && Math.abs(pinched[1][1].left - 20.2) < 1e-6, 'съезд продолжается своей лентой');
+const shell = pinchShell([
+  { left: -10, right: 10 },
+  { left: -10, right: 10 },
+  { left: 20, right: 30 },
+  { left: 20, right: 30 },
+]);
+assert(shell[1]?.left === shell[1]?.right && Math.abs(shell[1]?.left ?? 1) < 1e-6, 'оболочка прямой схлопывается перед прыжком');
+assert(shell[2]?.left === shell[2]?.right && Math.abs((shell[2]?.left ?? 0) - 25) < 1e-6, 'оболочка съезда начинается с точки, не с моста');
+assert(Math.abs((shell[0]?.left ?? 0) + 10) < 1e-6 && Math.abs((shell[3]?.left ?? 0) - 20) < 1e-6, 'до и после разрыва кромки остаются своими');
+assert(innerTrackEdge({ left: -10, right: 10 }, -1, 0.2) === 9.8, 'цветная линия прямой стоит у клина');
+assert(innerTrackEdge({ left: 22, right: 32 }, 1, 0.2) === 22.2, 'цветная линия съезда стоит у его внутренней кромки');
+assert(innerTrackEdge({ left: 5, right: 5.2 }, 1, 0.2) == null, 'узкая лента цветной линии не рисует');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('exit blocks ok');

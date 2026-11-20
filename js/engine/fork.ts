@@ -526,6 +526,174 @@ export function asphaltSpan(edges: AsphaltEdges, center = 0): { left: number; ri
   return { left: lo, right: hi, mid: (lo + hi) * 0.5, width: Math.max(0, hi - lo) };
 }
 
+/** Кусок асфальта одной ленты. Левый и правый слот кадра сюда не входят. */
+export interface AsphaltSpan {
+  left: number;
+  right: number;
+}
+
+/** Скачок дальше этого — уже другая лента, а не продолжение той же. */
+const TRACK_JUMP = 6;
+
+function spanCenter(span: AsphaltSpan): number {
+  return (span.left + span.right) * 0.5;
+}
+
+/** Живые куски кадра: прямая и съезд, если у них есть ширина. */
+export function asphaltSpans(edges: AsphaltEdges): AsphaltSpan[] {
+  const spans: AsphaltSpan[] = [];
+  if (edges.leftInner - edges.leftOuter > 0.05) spans.push({ left: edges.leftOuter, right: edges.leftInner });
+  if (edges.rightOuter - edges.rightInner > 0.05) spans.push({ left: edges.rightInner, right: edges.rightOuter });
+  return spans;
+}
+
+/**
+ * Две ленты асфальта.
+ * Лента держится за свой кусок, даже если carry переложил его в другой слот.
+ * Кусок, который прыгнул дальше порога, начинает другую ленту.
+ */
+export function followAsphalt(
+  previous: readonly (AsphaltSpan | null)[],
+  edges: AsphaltEdges,
+): [AsphaltSpan | null, AsphaltSpan | null] {
+  const spans = asphaltSpans(edges);
+  const next: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
+  const used = spans.map(() => false);
+  for (let track = 0; track < 2; track++) {
+    const prev = previous[track] ?? null;
+    if (!prev) continue;
+    let best = -1;
+    let bestD = TRACK_JUMP;
+    const at = spanCenter(prev);
+    for (let i = 0; i < spans.length; i++) {
+      if (used[i]) continue;
+      const span = spans[i];
+      if (!span) continue;
+      const distance = Math.abs(spanCenter(span) - at);
+      if (distance < bestD) {
+        bestD = distance;
+        best = i;
+      }
+    }
+    if (best >= 0) {
+      next[track] = spans[best] ?? null;
+      used[best] = true;
+    }
+  }
+  for (let i = 0; i < spans.length; i++) {
+    if (used[i]) continue;
+    const span = spans[i];
+    if (!span) continue;
+    if (!next[0]) next[0] = span;
+    else if (!next[1]) next[1] = span;
+  }
+  return next;
+}
+
+function collapsedSpan(span: AsphaltSpan): AsphaltSpan {
+  const mid = spanCenter(span);
+  return { left: mid, right: mid };
+}
+
+/**
+ * Пустые ряды ленты схлопываются в точку на её конце.
+ * Следующий кусок не тянет полотно через разрыв.
+ */
+export function pinchAsphalt(rows: readonly (readonly (AsphaltSpan | null)[])[]): [AsphaltSpan[], AsphaltSpan[]] {
+  const count = rows.length;
+  const drawn: [AsphaltSpan[], AsphaltSpan[]] = [[], []];
+  for (let track = 0; track < 2; track++) {
+    const samples = rows.map((row) => row[track] ?? null);
+    const out: AsphaltSpan[] = new Array(count);
+    const runs: { start: number; end: number }[] = [];
+    let index = 0;
+    while (index < count) {
+      if (!samples[index]) {
+        index += 1;
+        continue;
+      }
+      let end = index + 1;
+      while (end < count && samples[end]) end += 1;
+      runs.push({ start: index, end });
+      index = end;
+    }
+    if (runs.length === 0) {
+      const point = { left: 0, right: 0 };
+      for (let row = 0; row < count; row++) out[row] = point;
+      drawn[track] = out;
+      continue;
+    }
+    for (let runIndex = 0; runIndex < runs.length; runIndex++) {
+      const run = runs[runIndex];
+      if (!run) continue;
+      const first = samples[run.start];
+      const last = samples[run.end - 1];
+      if (!first || !last) continue;
+      const lead = collapsedSpan(first);
+      const tail = collapsedSpan(last);
+      const from = runIndex === 0 ? 0 : runs[runIndex - 1]?.end ?? 0;
+      const previous = runIndex === 0 ? null : samples[(runs[runIndex - 1]?.end ?? 1) - 1];
+      for (let row = from; row < run.start; row++) {
+        const bridge = previous && row < run.start - 1 ? collapsedSpan(previous) : lead;
+        out[row] = bridge;
+      }
+      for (let row = run.start; row < run.end; row++) {
+        const span = samples[row];
+        if (span) out[row] = span;
+      }
+      if (runIndex === runs.length - 1) {
+        for (let row = run.end; row < count; row++) out[row] = tail;
+      }
+    }
+    for (let row = 0; row < count; row++) {
+      if (!out[row]) out[row] = { left: 0, right: 0 };
+    }
+    drawn[track] = out;
+  }
+  return drawn;
+}
+
+/**
+ * Внутренняя кромка ленты для цветной линии развилки.
+ * У левой ленты это правый край, у правой — левый. Узкая лента линию не держит.
+ */
+export function innerTrackEdge(span: AsphaltSpan | null, side: -1 | 1, inset = 0.2): number | null {
+  if (!span || span.right - span.left < 0.7) return null;
+  const pad = Math.min(Math.max(0, inset), (span.right - span.left) * 0.25);
+  return side < 0 ? span.right - pad : span.left + pad;
+}
+
+/** Внешние кромки живого асфальта. Схлопнутая лента в оболочку не входит. */
+export function asphaltShell(spans: readonly (AsphaltSpan | null)[]): AsphaltSpan | null {
+  let left = Infinity;
+  let right = -Infinity;
+  for (const span of spans) {
+    if (!span || span.right - span.left < 0.5) continue;
+    if (span.left < left) left = span.left;
+    if (span.right > right) right = span.right;
+  }
+  if (!(left < right)) return null;
+  return { left, right };
+}
+
+/**
+ * Оболочка по рядам.
+ * Кромка, перескочившая на другую ленту, схлопывается в точку с обеих сторон разрыва.
+ * Откос не тянет полотно через этот разрыв.
+ */
+export function pinchShell(shells: readonly (AsphaltSpan | null)[]): AsphaltSpan[] {
+  const pinched = pinchAsphalt(shells.map((shell) => [shell, null]))[0];
+  for (let i = 1; i < pinched.length; i++) {
+    const prev = pinched[i - 1];
+    const here = pinched[i];
+    if (!prev || !here) continue;
+    if (Math.abs(spanCenter(here) - spanCenter(prev)) <= TRACK_JUMP) continue;
+    pinched[i - 1] = collapsedSpan(prev);
+    pinched[i] = collapsedSpan(here);
+  }
+  return pinched;
+}
+
 /** Дальний асфальт для откоса. Узкая умирающая лента не отодвигает землю. */
 export function worldEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
   const leftGone = edges.leftInner - edges.leftOuter < 1;

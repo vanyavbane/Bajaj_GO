@@ -3,7 +3,7 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { carFollowsRibbon, carriageAt, carriagePhase, departedRoad, inheritedWiden, laneFit, laneMarks, ribbonCarLat, riderCarriage, sideRibbon } from './carriage.ts';
+import { carFollowsRibbon, carriageAt, carriagePhase, departedRoad, inheritedWiden, laneFit, laneMarks, ribbonCarLat, riderCarriage, sideRibbon, solidMarks } from './carriage.ts';
 import { EXIT_LANE_HALF, exitCarryOrigin, exitClock, exitRibbonCenter, exitRibbonMid, laneAnchor, sampleRoad } from './fork.ts';
 import { EXIT_LANE_WIDTH, laneDashOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
@@ -190,6 +190,17 @@ if (!side) throw new Error('отделённая лента — отдельна
 assert(Math.abs(side.axis - openRider.axis) < 1e-6, 'ось ленты совпадает с её проезжей частью');
 const sideMarks = laneMarks(side);
 assert(sideMarks.length === 1 && Math.abs(sideMarks[0].lat - side.axis) < 1e-6, 'штрих ленты стоит на её оси, не на оси шоссе');
+const roadSolids = solidMarks(openRoad);
+assert(roadSolids.length === 2, 'у двусторонней две жёлтые линии');
+assert(Math.abs((roadSolids[0].lat + roadSolids[1].lat) * 0.5 - openRoad.axis) < 1e-6, 'жёлтая ось стоит на границе хода шоссе');
+assert(solidMarks(early).length === 0, 'у съезда двойной сплошной нет');
+assert(solidMarks(side).length === 0, 'у боковой ленты двойной сплошной нет');
+const leftSolids = solidMarks(leftBehind);
+assert(leftSolids.length === 2, 'у закрываемой прямой своя жёлтая ось');
+leftSolids.forEach((mark) => {
+  assert(mark.lat > earlySeal.world.leftOuter - 0.05 && mark.lat < earlySeal.world.leftInner + 0.05, 'жёлтая линия прямой стоит на её ширине');
+  assert(Math.abs(mark.lat - early.axis) > 2, 'жёлтая линия прямой не переезжает на съезд');
+});
 assert(sideRibbon(early, earlySeal) == null, 'когда съезд уже дорога, второй набор штрихов не нужен');
 assert(sideRibbon(carriageAt({ frame: frameAt(-10, 0), biome: city, widen: null }), frameAt(-10, 0)) == null, 'до развилки боковой ленты нет');
 

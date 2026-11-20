@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, departedRoad, inheritedWiden, laneMarks, riderCarriage, roadsAt, sideRibbon } from './engine/carriage.js';
+import { carriageAt, carriageLat, departedRoad, inheritedWiden, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
@@ -544,6 +544,17 @@ function ribbonMarksAtS(s) {
   const dom = biomeIndex(roadBiomeAtS(s));
   const left = departedRoad(frame, LANE_CONFIG[dom] || LANE_CONFIG[0]);
   return left ? laneMarks(left) : [];
+}
+
+/** Двойная сплошная живой двусторонней дороги. Съезд её не получает. */
+function solidMarksAtS(s) {
+  const road = roadCarriageAt(s);
+  const own = solidMarks(road);
+  if (own.length > 0) return own;
+  const frame = frameAt(s);
+  const dom = biomeIndex(roadBiomeAtS(s));
+  const left = departedRoad(frame, LANE_CONFIG[dom] || LANE_CONFIG[0]);
+  return left ? solidMarks(left) : [];
 }
 
 /** Сторона кромок: -1 прямая, +1 съезд, 0 пока развилка этой зоны не выбрана. */
@@ -1544,6 +1555,7 @@ export function initBiome() {
   G.roadWayAt = roadWayAt;
   G.laneMarksAtS = laneMarksAtS;
   G.ribbonMarksAtS = ribbonMarksAtS;
+  G.solidMarksAtS = solidMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
   G.dominantBiomeAtS = dominantBiomeAtS;
   G.nearestRunLane = nearestRunLane;

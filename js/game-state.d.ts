@@ -370,6 +370,7 @@ export interface GameState {
   trafficLatAt: (s: number, offset: number, onExit: boolean) => number;
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
   ribbonMarksAtS: (s: number) => { lat: number; w: number }[];
+  solidMarksAtS: (s: number) => { lat: number; w: number }[];
   dominantBiomeAtS: (s: number) => number;
   nearestRunLane: (lateralOffset: number, cfg?: LaneLayout | null) => number;
   biomeProfile: (biomeId: BiomeId | number, s: number) => RoadSample;
