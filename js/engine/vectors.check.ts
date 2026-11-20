@@ -121,6 +121,10 @@ assert(onExitRibbon(goreEdges.rightInner - 0.3, goreEdges) && followsExit(goreEd
 assert(!onExitRibbon(goreEdges.rightInner - 0.5, goreEdges) && !followsExit(goreEdges.rightInner - 0.5, goreEdges), 'в клине ни сиденье, ни курс ещё не на ленте');
 assert(followsExit(goreEdges.rightOuter + 2, goreEdges) && !onExitRibbon(goreEdges.rightOuter + 2, goreEdges), 'обочина едет курсом ленты, сиденье на ней не сидит');
 assert(Math.abs(justOn.x - lip.x) < Math.abs(justOff.x - lip.x), 'на асфальте ленты курс ленты, в клине ещё клин');
+const arriving = { leftOuter: -14, leftInner: -12, rightInner: 0.5, rightOuter: 10 };
+const onArrival = goreAt(5, arriving);
+const stillOut = goreAt(exitRibbonMid(goreEdges));
+assert(Math.abs(onArrival.x - 5) < Math.abs(stillOut.x - exitRibbonMid(goreEdges)), 'у новой дороги курс уже её курс, не угол съезда');
 const shut = { leftOuter: -10, leftInner: 10, rightInner: 32, rightOuter: 32.2 };
 const stayed = goreAt(20, shut);
 assert(Math.abs(stayed.x - 20) < 1, 'схлопнутая лента не утаскивает клин на ветку');

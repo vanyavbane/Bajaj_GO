@@ -1,5 +1,5 @@
 /**
- * Сиденье байка: захват ленты, отпуск и посадка, когда съезд пришёл в дорогу.
+ * Сиденье байка: захват ленты, отпуск и посадка, когда въезд стал новой дорогой.
  * Мировая точка до и после шага одна, пока лента не исчезла из-под отказа.
  */
 import { exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
@@ -47,13 +47,16 @@ assert(held.kind === 'exit', 'сиденье съезда остаётся, по
 sameWorld(heldWorld, open, held);
 
 const mergeFrame = frameAt(clock.ownAfter + 5, 1);
-assert(mergeFrame.origin === 0, 'пришедший съезд не переносит центр дороги');
-assert(exitRibbonCenter(mergeFrame.local) == null, 'после прихода лента уже не отдельная');
+assert(mergeFrame.origin === 0, 'въезд не переносит центр новой дороги');
+assert(exitRibbonCenter(mergeFrame.local) == null, 'после въезда лента уже не отдельная');
 const exiting: RiderSeat = { kind: 'exit', lane: 0.4 };
 const merged = stepSeat(mergeFrame, exiting, span);
-assert(merged.kind === 'road', 'пришедший съезд сажает байка на дорогу');
+assert(merged.kind === 'road', 'въезд сажает байка на новую дорогу');
 const landedAt = seatWorld(mergeFrame, merged, span);
-assert(landedAt > mergeFrame.local.leftInner - 1 && landedAt <= mergeFrame.local.leftInner, 'байк садится на правую кромку дороги');
+assert(
+  landedAt > mergeFrame.local.leftOuter && landedAt < mergeFrame.local.leftInner - 1,
+  'байк остаётся на новой дороге, а не на кромке старой',
+);
 
 const declined = frameAt(clock.ownAfter + 5, -1);
 assert(exitRibbonCenter(declined.local) == null, 'отказанная лента к концу зоны исчезла');

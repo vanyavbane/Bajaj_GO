@@ -81,8 +81,11 @@ const arrivedFrame = sampleRoad({
   chosen: 1,
   baseOrigin: 0,
 });
-assert(arrivedFrame.origin === 0, 'после прихода съезда центр дороги остаётся на месте');
-assert(arrivedFrame.local.leftOuter === -10 && arrivedFrame.local.leftInner === 10, 'после прихода дорога держит свою ширину');
+assert(arrivedFrame.origin === 0, 'въезд не переносит центр новой дороги');
+assert(
+  Math.abs(arrivedFrame.local.leftOuter + EXIT_LANE_HALF) < 0.05 && Math.abs(arrivedFrame.local.leftInner - EXIT_LANE_HALF) < 0.05,
+  'после въезда ширина — ширина новой дороги, не старой',
+);
 const earlyChoice = sampleRoad({
   forkDistance: -30,
   half: 10,
@@ -114,11 +117,12 @@ const returning = sampleRoad({
   baseOrigin: 0,
   endWeight: 1,
 });
-assert(returning.origin === 0, 'возврат съезда центр дороги не двигает');
-assert(returning.local.leftOuter === -10 && returning.local.leftInner === 10, 'на возврате дорога остаётся своей ширины');
+assert(returning.origin === 0, 'въезд не двигает центр новой дороги');
+const oldSpan = returning.local.leftInner - returning.local.leftOuter;
+assert(oldSpan < 20 && oldSpan > 1, 'старая дорога сужается, пока въезд ещё идёт');
 const fullRibbon = exitRibbonMid(branchEdges(10, FORK_SPREAD));
 const backRibbon = exitRibbonMid(returning.local);
-assert(backRibbon < fullRibbon && backRibbon > 10, 'съезд идёт к дороге справа и ещё не пришёл');
+assert(backRibbon < fullRibbon && backRibbon > 0, 'въезд идёт к новой дороге и ещё не пришёл');
 const sealStart = sampleRoad({
   forkDistance: clock.choiceAt + 0.01,
   half: 10,
@@ -145,9 +149,10 @@ assert(
   Math.abs(laneMeters(0, 1, sealEnd, false) - laneMeters(0, 1, arrived, false)) < 0.25,
   'приход съезда не прыгает полосами дороги',
 );
-assert(sealStart.local.leftOuter === -10 && arrived.local.leftOuter === -10, 'дорога не сужается, пока съезд возвращается');
-assert(exitRibbonMid(sealStart.local) > backRibbon, 'в начале закрытия съезд ещё правее, чем на возврате');
-assert(Math.abs(sealEnd.local.rightOuter - sealEnd.local.rightInner) < 0.5, 'к концу закрытия съезд уже пришёл в дорогу');
+assert(sealStart.local.leftOuter === -10 && sealStart.local.leftInner === 10, 'в начале закрытия старая дорога ещё цела');
+assert(Math.abs(arrived.local.leftOuter + EXIT_LANE_HALF) < 0.05, 'к концу закрытия старая ширина уже не держится');
+assert(exitRibbonMid(sealStart.local) > backRibbon, 'в начале закрытия въезд ещё правее, чем на подходе к новой дороге');
+assert(Math.abs(sealEnd.local.rightOuter - sealEnd.local.rightInner) < 0.5, 'к концу закрытия отдельного въезда уже нет');
 const straightEnd = sampleRoad({
   forkDistance: clock.ownAfter - 1,
   half: 10,
@@ -172,14 +177,20 @@ const endedMid = exitRibbonMid(endedExit);
 assert(Math.abs(endedExit.rightOuter - endedExit.rightInner) < 1e-6, 'отказанная ветка сходит на нет');
 assert(endedMid > 12, 'отказанная ветка заканчивается в стороне, не на прямой дороге');
 const taken = roadAt(atSeal, 1);
-assert(taken.leftOuter === -10 && taken.leftInner === 10, 'взятый съезд не заканчивает прямую');
-assert(Math.abs(taken.rightOuter - taken.rightInner) < 0.5, 'к концу закрытия съезд пришёл в дорогу');
+assert(
+  Math.abs(taken.leftOuter + EXIT_LANE_HALF) < 0.2 && Math.abs(taken.leftInner - EXIT_LANE_HALF) < 0.2,
+  'к концу закрытия въезд уже новая дорога',
+);
+assert(Math.abs(taken.rightOuter - taken.rightInner) < 0.5, 'старая дорога к концу закрытия сошла');
 
 const stillOpen = roadAt(afterSeal, 0);
 assert(stillOpen.rightOuter - stillOpen.rightInner > 9, 'до выбора съезд впереди не обрывается');
 const settled = roadAt(afterSeal, 1);
-assert(settled.leftOuter === -10 && settled.leftInner === 10, 'после прихода дорога остаётся своей ширины');
-assert(settled.rightOuter === settled.rightInner, 'после прихода отдельного съезда нет');
+assert(
+  Math.abs(settled.leftOuter + EXIT_LANE_HALF) < 0.05 && Math.abs(settled.leftInner - EXIT_LANE_HALF) < 0.05,
+  'после въезда дорога держит ширину новой, не старой',
+);
+assert(settled.rightOuter === settled.rightInner, 'после въезда отдельной старой ленты нет');
 const declinedSettle = roadAt(afterSeal, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.leftInner === 10, 'после отказа прямая остаётся своей ширины');
 assert(declinedSettle.rightOuter === declinedSettle.rightInner && declinedSettle.rightInner === declinedSettle.leftInner, 'после отказа съезда уже нет, осталась одна прямая');
@@ -188,12 +199,13 @@ assert(roadLateral(9, openRibbon, false) === 9, 'вне съезда полос�
 const ride = roadLateral(9, openRibbon, true);
 assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк на ленте съезда, не в клине');
 const carriedRide = roadLateral(2, returning.local, true);
-assert(carriedRide > returning.local.rightInner && carriedRide < returning.local.rightOuter, 'на возврате байк остаётся на ленте съезда');
-const narrow = sampleRoad({ forkDistance: clock.ownAfter, half: 8, chosen: 1, baseOrigin: 0, endWeight: 1 });
-const wide = sampleRoad({ forkDistance: clock.ownAfter + 20, half: 14, chosen: 1, baseOrigin: 0, endWeight: 1 });
-assert(roadCenter(narrow) === 0 && roadCenter(wide) === 0, 'смена ширины не двигает центр дороги');
-assert(laneMeters(0, 1, wide, false) === roadCenter(wide), 'нулевая полоса остаётся на центре дороги');
-assert(wide.local.leftOuter === -14 && wide.local.leftInner === 14, 'после прихода ширина — ширина дороги, не ширина съезда');
+assert(carriedRide > returning.local.rightInner && carriedRide < returning.local.rightOuter, 'на въезде байк остаётся на ленте');
+const narrow = sampleRoad({ forkDistance: clock.ownAfter, half: 10, chosen: 1, baseOrigin: 0, endWeight: 1, arriveHalf: 8 });
+const wide = sampleRoad({ forkDistance: clock.ownAfter + 20, half: 10, chosen: 1, baseOrigin: 0, endWeight: 1, arriveHalf: 14 });
+assert(roadCenter(narrow) === 0 && roadCenter(wide) === 0, 'ширина новой дороги не двигает её центр');
+assert(laneMeters(0, 1, wide, false) === roadCenter(wide), 'нулевая полоса остаётся на центре новой дороги');
+assert(narrow.local.leftOuter === -8 && wide.local.leftOuter === -14, 'после въезда ширина — ширина новой дороги');
+assert(narrow.local.leftInner - narrow.local.leftOuter < 18, 'старая ширина после въезда не возвращается');
 assert(onExitRibbon(32, openRibbon) && !onExitRibbon(0, openRibbon), 'байк на асфальте съезда узнаётся и при открытом клине');
 const joined = branchEdges(10, 4);
 const joinedLimits = logicalRoadLimits(joined, 1, false);

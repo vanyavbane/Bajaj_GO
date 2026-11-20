@@ -6,7 +6,7 @@
  */
 
 import { BRANCH_YAW, frameFromSpline, signedAngle, stepBranch, turnToward } from './branch.ts';
-import { courseLocal, exitCourseStart, exitRibbonMid, followsExit } from './fork.ts';
+import { FORK_SPREAD, courseLocal, exitCourseStart, exitRibbonMid, followsExit } from './fork.ts';
 import type { AsphaltEdges, ExitClock } from './fork.ts';
 import type { FrozenYaw, PathFrame, RoadEmbed } from './branch.ts';
 import type { RoadWay } from './lanes.ts';
@@ -284,7 +284,10 @@ export function createVectorField() {
     const gap = edges.rightInner - edges.leftInner;
     const peelT = Math.max(0, Math.min(1, (s - nose) / Math.max(turn, 0.001)));
     const peel = peelT * peelT * (3 - 2 * peelT);
-    const separated = Math.max(0, Math.min(1, gap / 4));
+    // Щель со старой дорогой курс не держит: старая уходит в сторону.
+    // Въезд отпускает свой угол по мере того, как его лента доходит до новой дороги.
+    const arrived = width > 1 ? Math.abs(exitRibbonMid(edges)) / Math.max(FORK_SPREAD, 1) : 0;
+    const separated = Math.max(0, Math.min(1, Math.min(gap / 4, arrived)));
     const branchAt = (spawn: VectorSpawn | null): PathFrame | null => {
       if (!spawn || !(s > spawn.nose)) return null;
       return pathFrom(

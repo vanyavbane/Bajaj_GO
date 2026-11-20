@@ -1,10 +1,10 @@
 /**
  * Дорога и съезд вправо.
  * Форма съезда — рецепт блоков в blocks.ts. Здесь только кромки одного блока.
- * Кромки считаются относительно центра дороги. Дорога этот центр не отдаёт.
- * Взятый съезд возвращается к ней справа. Прямой ход уводит съезд в сторону.
+ * Кромки считаются относительно центра новой дороги. Этот центр съезд не переносит.
+ * Взятый въезд идёт в новую дорогу, старая сужается и сходит. Прямой ход уводит съезд в сторону.
  *
- * ChosenSide: -1 съезд закрыт, +1 съезд взят и вернётся в дорогу, 0 выбор ещё открыт.
+ * ChosenSide: -1 съезд закрыт, +1 въезд идёт в новую дорогу, 0 выбор ещё открыт.
  */
 
 import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
@@ -84,17 +84,17 @@ export interface ExitClock {
   lead: number;
   /** Сколько метров курс поворачивает. Это блок отхода. */
   turn: number;
-  /** С этой метки после носа взятый съезд уже пришёл в дорогу. Конец закрытия. */
+  /** С этой метки после носа въезд уже стал новой дорогой. Конец закрытия. */
   ownAfter: number;
   /** Конец общего подхода: здесь фиксируется выбор. */
   choiceAt: number;
   spread: number;
 }
 
-/** Метры рецепта. Курс по ним знает, когда съезд уже вернулся в дорогу. */
+/** Метры рецепта. Курс по ним знает, когда въезд уже пришёл в новую дорогу. */
 export function exitClock(): ExitClock {
   const seal = EXIT_PLAN.exit.find((span) => span.kind === 'seal');
-  if (!seal) throw new Error('Съезд без закрытия: курс не знает, когда лента возвращается в дорогу');
+  if (!seal) throw new Error('Съезд без закрытия: курс не знает, когда въезд приходит в новую дорогу');
   return {
     lead: EXIT_PLAN.length,
     turn: EXIT_PLAN.diverge,
@@ -126,7 +126,7 @@ export function forkOffset(meters: number, zoneLength: number, lead = FORK_LEAD)
 /**
  * Насколько рецепт держит съезд открытым, метры.
  * От носа растёт до пика и держится до конца рецепта.
- * Возврат взятого съезда читают кромки кадра, не эта кривая.
+ * Сужение старой дороги и ход въезда читают кромки кадра, не эта кривая.
  */
 export function forkSpreadAt(
   meters: number,
@@ -175,17 +175,41 @@ function exitPhase(d: number): ExitPhase {
   return { kind: 'settle', t: smooth01(span.u), open: 1 };
 }
 
+/**
+ * Взятый въезд за закрытие.
+ * Старая дорога сужается и уходит влево. Въезд идёт к центру и становится новой дорогой.
+ * К концу отдельной ленты нет: левый слот — это уже новая дорога.
+ */
+function takenEntrance(road: number, arrive: number, t: number): AsphaltEdges {
+  const open = branchEdges(road, FORK_SPREAD);
+  const fromMid = exitRibbonMid(open);
+  const fromHalf = exitWidth(open) * 0.5;
+  const dest = Math.max(0, Number.isFinite(arrive) ? arrive : fromHalf);
+  const u = Math.max(0, Math.min(1, t));
+  const oldHalf = road * (1 - u);
+  if (oldHalf <= 0.05) return branchEdges(dest, 0);
+  const oldCenter = -(dest + road) * u;
+  const entranceMid = fromMid * (1 - u);
+  const entranceHalf = fromHalf + (dest - fromHalf) * u;
+  return {
+    leftOuter: oldCenter - oldHalf,
+    leftInner: oldCenter + oldHalf,
+    rightInner: entranceMid - entranceHalf,
+    rightOuter: entranceMid + entranceHalf,
+  };
+}
+
 /** Кромки поставленного блока. Непостроенный хвост остаётся развилкой, его ещё не закрывают. */
-function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, endWeight: number): AsphaltEdges {
+function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, endWeight: number, arrive: number): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
+  const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
   if (!block.built) return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'split') return branchEdges(road, FORK_SPREAD * smooth01(block.u));
   if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'seal') {
     const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
-    // Взятый съезд возвращается к правой кромке. Дорога остаётся на месте.
-    if (chosen === 1) return branchEdges(road, FORK_SPREAD * (1 - t));
+    if (chosen === 1) return takenEntrance(road, dest, t);
     const edge = branchEdges(road, FORK_SPREAD);
     // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
     if (chosen === -1) {
@@ -197,7 +221,8 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
     }
     return edge;
   }
-  // Обычная дорога. Съезд к этому блоку уже пришёл в неё или сошёл на нет.
+  // Въезд уже стал новой дорогой. Прямой ход оставляет старую.
+  if (chosen === 1) return branchEdges(dest, 0);
   return branchEdges(road, 0);
 }
 
@@ -221,9 +246,11 @@ export interface RoadQuery {
   forkDistance: number;
   half: number;
   chosen: ChosenSide;
-  /** Центр несущей дороги. Съезд его не переносит. */
+  /** Центр новой дороги. Съезд его не переносит. */
   baseOrigin: number;
   endWeight?: number;
+  /** Полуширина дороги, в которую приходит въезд. Без числа это ширина самого съезда. */
+  arriveHalf?: number;
 }
 
 function finiteOrigin(value: number): number {
@@ -253,7 +280,8 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
     ? { ...phase, t: phase.t * endWeight }
     : phase;
   const origin = finiteOrigin(query.baseOrigin);
-  const local = blockEdges(query.half, block, chosen, endWeight);
+  const arrive = typeof query.arriveHalf === 'number' ? query.arriveHalf : EXIT_LANE_HALF;
+  const local = blockEdges(query.half, block, chosen, endWeight, arrive);
   return {
     origin,
     local,
@@ -286,9 +314,10 @@ export function courseLocal(lat: number, place: CoursePlace): number {
   return lat;
 }
 
-/** Центр полос дороги. Съезд его не сдвигает: у ленты своя середина. */
+/** Центр полос той дороги, которая в левом слоте. У ленты съезда своя середина. */
 export function laneAnchor(frame: RoadFrame): number {
-  return roadCenter(frame);
+  const mid = (frame.local.leftOuter + frame.local.leftInner) * 0.5;
+  return frame.origin + mid;
 }
 
 /** Полоса в мировых метрах. riding оставляет байка на боковой ленте старым сдвигом. */

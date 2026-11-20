@@ -6,7 +6,7 @@
  */
 
 /** split — съезд отходит. fork — обе ленты, здесь выбор. seal — чужая лента сходится.
- *  road — дальше та же дорога. Взятый съезд к ней возвращается, а не становится ею. */
+ *  road — дальше одна дорога. Взятый въезд приходит в новую, старая к этому месту уже сошла. */
 export type BlockKind = 'split' | 'fork' | 'seal' | 'road';
 
 /** -1 прямая, +1 съезд, 0 игрок ещё не выбрал. */
@@ -152,7 +152,7 @@ export function compileExit(recipe: ExitRecipe): CompiledExit {
     fail(recipe, 'сразу после выбора чужая лента закрывается');
   }
   if (!straightEnd || straightEnd.kind !== 'road') fail(recipe, 'прямая цепочка заканчивается обычной дорогой');
-  if (!exitEnd || exitEnd.kind !== 'road') fail(recipe, 'после возврата съезда остаётся та же дорога');
+  if (!exitEnd || exitEnd.kind !== 'road') fail(recipe, 'после въезда остаётся новая дорога');
   const ids = new Set<string>();
   for (const block of [...recipe.approach, ...straightBlocks, ...exitBlocks]) {
     if (ids.has(block.id)) fail(recipe, `имя «${block.id}» повторяется`);

@@ -19,7 +19,7 @@ import { G } from './state.js';
  * небо) и закреплённый профиль дороги читают одну точку маршрута, но разные
  * индексы. Замок зоны ставится в момент выбора ветки, не раньше: до выбора
  * профиль едет за стороной байка. Полосы на асфальте читают тот же индекс.
- * Развилка — прямой ход и необязательный съезд вправо. Взятый съезд переносит ось на свою середину.
+ * Развилка — прямой ход и необязательный съезд вправо. Взятый въезд сужает старую дорогу и приходит в новую.
  * ========================================================================= */
 
 const ZONE_M = 1500;              // длина одной локации
@@ -377,9 +377,22 @@ function forkSpreadAtS(s) {
   return liveForkAtS(s, courseLayout().spread);
 }
 
-/** Полуширина несущей дороги. Съезд её ширину не подменяет. */
+/** Полуширина дороги в этой точке. Въезд в зону не смешивает её со старой шириной. */
 function catalogHalfAt(s) {
-  return baseRoadWidthAtMeters(blendMetersAt(s)) * 0.5;
+  const meters = blendMetersAt(s);
+  const sample = zoneSample(meters);
+  if (sample.zone > 0 && chosenExit[sample.zone - 1] === 1) {
+    const layout = LANE_CONFIG[biomeIndex(zoneBiomes[sample.zone])];
+    if (layout) return layout.width * 0.5;
+  }
+  return baseRoadWidthAtMeters(meters) * 0.5;
+}
+
+/** Полуширина биома, в который ведёт съезд этой зоны. */
+function arriveHalfAt(zone) {
+  ensureZonePlan(zone + 1);
+  const layout = LANE_CONFIG[biomeIndex(zoneBiomes[zone + 1])];
+  return layout ? layout.width * 0.5 : 0;
 }
 
 function splitAmountAtS(s) {
@@ -508,13 +521,15 @@ function splitDecisionWeight(zone, meters) {
 function frameAt(s) {
   if (s === frameKey && frameHit) return frameHit;
   const route = routeAt(s);
+  const side = decisionAt(route.zone).side;
   frameKey = s;
   frameHit = sampleRoad({
     forkDistance: forkOffset(route.meters, ZONE_M, EXIT_CLOCK.lead),
     half: catalogHalfAt(s),
-    chosen: decisionAt(route.zone).side,
+    chosen: side,
     baseOrigin: 0,
     endWeight: splitDecisionWeight(route.zone, route.meters),
+    arriveHalf: side === 1 ? arriveHalfAt(route.zone) : undefined,
   });
   return frameHit;
 }
@@ -543,9 +558,16 @@ function laneSpanAt(s) {
 
 /** Проезжая часть дороги в точке. Сиденье байка её не меняет. */
 function roadCarriageAt(s) {
-  const dom = biomeIndex(roadBiomeAtS(s));
+  const frame = frameAt(s);
+  const entered = frame.chosen === 1 && frame.block != null && frame.block.kind === 'road';
+  let dom = biomeIndex(roadBiomeAtS(s));
+  if (entered) {
+    const zone = routeAt(s).zone;
+    ensureZonePlan(zone + 1);
+    dom = biomeIndex(zoneBiomes[zone + 1]);
+  }
   return carriageAt({
-    frame: frameAt(s),
+    frame,
     biome: LANE_CONFIG[dom] || LANE_CONFIG[0],
   });
 }
@@ -566,7 +588,7 @@ function roadMetersAt(s, laneOffset, riding) {
   return laneMeters(laneOffset, laneSpanAt(s), frameAt(s), riding);
 }
 
-/** Байк на дороге или на ленте съезда. Пришедшая лента сажает его на правую кромку. */
+/** Байк на дороге или на ленте съезда. Пришедший въезд сажает его на новую дорогу. */
 function updateExitHold() {
   const frame = frameAt(G.playerS);
   const ridden = riderCarriage(roadCarriageAt(G.playerS), frame, riderSeat.kind);

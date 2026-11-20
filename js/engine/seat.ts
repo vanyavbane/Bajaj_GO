@@ -2,8 +2,8 @@
  * Сиденье байка на кадре дороги.
  * Дорога и съезд — два сиденья. Ось каждого читается из RoadFrame.
  * Полоса — смещение от этой оси. Второй оси в игре нет.
- * Когда лента пришла в дорогу или сошла на нет, байк садится на дорогу.
- * Взятый съезд сажает его на правую кромку. Отказ — на край, не в стороне.
+ * Когда въезд стал дорогой или лента сошла на нет, байк садится на ту дорогу, что осталась.
+ * Отказ сажает на край прямой, не оставляет байка в стороне.
  */
 
 import {
@@ -75,8 +75,8 @@ export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: numbe
 
 /**
  * Один шаг сиденья. Мир не прыгает, кроме посадки, когда лента исчезла.
- * Взятый съезд приходит справа: байк садится на правую кромку дороги.
- * Отказанная лента сажает на край, а не оставляет байка в стороне.
+ * Въезд сажает байка туда, где он уже ехал по новой дороге.
+ * Отказанная лента сажает на край прямой, а не оставляет байка в стороне.
  */
 export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): RiderSeat {
   const scale = spanOf(span);
@@ -84,8 +84,7 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) {
     if (seat.kind !== 'exit') return seat;
-    const at = frame.chosen === 1 ? frame.origin + frame.local.leftInner : world;
-    return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, at, scale) };
+    return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, world, scale) };
   }
   const logical = world - frame.origin;
   const onRibbon = onExitRibbon(logical, frame.local);

@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
+import { EXIT_LANE_HALF, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -34,7 +34,7 @@ assert(taken?.id === 'seal-main' && taken.built, 'выбор съезда ста
 const kept = placedBlock(plan, 400, -1);
 assert(kept?.id === 'ahead' && kept.kind === 'road' && kept.built, 'прямой выбор оставляет обычную дорогу');
 const carried = placedBlock(plan, 400, 1);
-assert(carried?.id === 'arrived' && carried.kind === 'road', 'после возврата съезда остаётся та же дорога');
+assert(carried?.id === 'arrived' && carried.kind === 'road', 'после въезда цепочка заканчивается новой дорогой');
 assert(placedBlock(plan, 0, 1) == null && placedBlock(plan, 430, 1) == null, 'вне рецепта блока нет');
 assert(plan.approach.map((span) => span.id).join() === 'split,fork', 'до выбора построено только подход');
 assert([...plan.approach, ...plan.exit].map((span) => span.id).join() === 'split,fork,seal-main,arrived', 'съезд достраивает свою цепочку');
@@ -84,15 +84,21 @@ for (const joint of [110, 260, 330]) {
 for (const joint of [110, 260, 330]) {
   const before = frameAt(joint - 0.02, 1).world;
   const after = frameAt(joint + 0.02, 1).world;
-  assert(mainHolds(before, after), `несущая дорога непрерывна, пока съезд возвращается, стык ${joint}`);
+  assert(mainHolds(before, after), `асфальт непрерывен на стыке въезда ${joint}`);
 }
 const openFork = frameAt(250, 1).world;
-const midReturn = frameAt(300, 1).world;
+const midSeal = frameAt(300, 1).world;
 const arrived = frameAt(340, 1).world;
-assert(openFork.leftOuter === -10 && midReturn.leftOuter === -10 && arrived.leftOuter === -10, 'дорога не двигается, пока съезд возвращается');
-assert(exitRibbonMid(midReturn) < exitRibbonMid(openFork), 'съезд идёт к дороге справа');
-assert(midReturn.rightOuter > midReturn.leftInner, 'на возврате съезд ещё лента');
-assert(arrived.rightInner === arrived.leftInner && arrived.rightOuter === arrived.rightInner, 'после возврата съезда нет, осталась дорога');
+assert(openFork.leftOuter === -10 && openFork.leftInner === 10, 'до закрытия старая дорога ещё своей ширины');
+const oldWidth = midSeal.leftInner - midSeal.leftOuter;
+assert(oldWidth < 16 && oldWidth > 1, 'на закрытии старая дорога сужается');
+assert(exitRibbonMid(midSeal) < exitRibbonMid(openFork), 'въезд идёт к новой дороге');
+assert(midSeal.rightOuter > midSeal.rightInner + 1, 'на закрытии въезд ещё отдельная лента');
+assert(
+  Math.abs(arrived.leftOuter + EXIT_LANE_HALF) < 0.05 && Math.abs(arrived.leftInner - EXIT_LANE_HALF) < 0.05,
+  'после въезда остаётся новая дорога',
+);
+assert(arrived.rightInner === arrived.leftInner && arrived.rightOuter === arrived.rightInner, 'после въезда старой ленты нет');
 const declinedBefore = frameAt(330 - 0.02, -1).local;
 const declinedAfter = frameAt(330 + 0.02, -1).local;
 assert(exitRibbonMid(declinedBefore) > 12, 'закрытие отказа уводит съезд в сторону');
@@ -102,17 +108,19 @@ assert(
 );
 
 let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
-const followed = [];
-for (const distance of [250, 300, 340]) {
+let entrance = 40;
+for (let distance = 250; distance <= 340; distance += 2) {
   tracks = followAsphalt(tracks, frameAt(distance, 1).world);
-  followed.push(tracks);
+  const spans = tracks.filter((span): span is AsphaltSpan => span != null);
+  const right = spans.reduce((best, span) => (span.left + span.right > best.left + best.right ? span : best));
+  const mid = (right.left + right.right) * 0.5;
+  assert(mid <= entrance + 0.05, 'въезд не прыгает обратно на старую дорогу');
+  entrance = mid;
 }
-const openTracks = followed[0];
-const roadTrack = openTracks[1] && openTracks[0]
-  && (openTracks[1].left + openTracks[1].right) > (openTracks[0].left + openTracks[0].right) ? 0 : 1;
-const roadSpan = followed[2][roadTrack];
-if (!roadSpan) throw new Error('дорога остаётся своей лентой, пока съезд возвращается');
-assert(Math.abs(roadSpan.left + 10) < 1 && Math.abs(roadSpan.right - 10) < 1, 'лента дороги не переезжает на съезд');
+const left = tracks.find((span) => span != null);
+if (!left) throw new Error('после въезда новая дорога остаётся');
+assert(Math.abs(left.left + EXIT_LANE_HALF) < 0.2 && Math.abs(left.right - EXIT_LANE_HALF) < 0.2, 'лента въезда приходит в новую дорогу');
+assert(tracks.filter((span) => span != null).length === 1, 'старая дорога к концу въезда уже сошла');
 const pinched = pinchAsphalt([
   [{ left: -10, right: 10 }, { left: 20, right: 30 }],
   [null, { left: 20.2, right: 30.2 }],
