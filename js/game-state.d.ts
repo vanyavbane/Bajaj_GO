@@ -366,6 +366,7 @@ export interface GameState {
   roadPhaseAt: (s: number) => CarriagePhase;
   roadChoiceAt: (s: number) => RouteChoice;
   sideRibbonAt: (s: number) => LiveCarriage | null;
+  trafficLatAt: (s: number, offset: number, onExit: boolean) => number;
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
   ribbonMarksAtS: (s: number) => { lat: number; w: number }[];
   dominantBiomeAtS: (s: number) => number;

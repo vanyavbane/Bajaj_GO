@@ -162,8 +162,9 @@ export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage |
 }
 
 /**
- * Крайняя попутная принадлежит боковой ленте, пока та отдельная дорога.
- * Прямая её отпускает. Когда съезд сам стал дорогой, полосы машины уже его.
+ * Крайняя попутная едет полосами ленты, пока лента отдельная.
+ * На закрытии прямой она остаётся на этих полосах: ось дороги ещё догоняет ленту.
+ * Прямая отпускает. Carry — это уже сама дорога, отдельной ленты нет.
  */
 export function carFollowsRibbon(args: {
   phase: CarriagePhase;
@@ -175,18 +176,26 @@ export function carFollowsRibbon(args: {
   lastLane: number;
   runLanes: number;
 }): boolean {
+  if (args.following && args.phase === 'seal') return true;
   if (args.choice === 'straight' || args.phase !== 'ribbon' || !args.open) return false;
   if (args.following) return true;
   if (args.changingLane || args.runLanes < 1 || args.lane !== args.lastLane) return false;
   return true;
 }
 
-/** Мир крайней полосы ленты. Машина съезда стоит на ней, не на шоссе. */
+/** Мир полосы на оси проезжей части. offset — смещение из её списка полос. */
+export function carriageLat(axis: number, scale: number, offset: number): number {
+  const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
+  const lane = Number.isFinite(offset) ? offset : 0;
+  const origin = Number.isFinite(axis) ? axis : 0;
+  return origin + lane * span;
+}
+
+/** Мир крайней полосы ленты. */
 export function ribbonCarLat(ribbon: LiveCarriage): number {
   const offsets = ribbon.lanes.offsets;
   const offset = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
-  const scale = Number.isFinite(ribbon.scale) && ribbon.scale !== 0 ? ribbon.scale : 1;
-  return ribbon.axis + offset * scale;
+  return carriageLat(ribbon.axis, ribbon.scale, offset);
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */

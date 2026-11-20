@@ -1,6 +1,6 @@
-import { carFollowsRibbon, ribbonCarLat } from './engine/carriage.js';
+import { carFollowsRibbon } from './engine/carriage.js';
 import { exitLaneOpen } from './engine/fork.js';
-import { carriageLanes, clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
+import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, laneSplitEdge, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -185,20 +185,19 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Крайняя попутная едет по боковой ленте, пока та отдельная дорога. */
-  function followExit(car, edges, phase, choice, runLanes, lastLane) {
+  /** Крайняя попутная едет полосами ленты. Номер полосы ленты с номером шоссе не сравнивается. */
+  function followExit(car, edges, phase, choice, runLanes, lastLane, wasOnExit) {
     const open = !!edges && exitLaneOpen(edges);
-    car.onExit = carFollowsRibbon({
+    return carFollowsRibbon({
       phase,
       choice,
       open,
-      following: !!car.onExit,
+      following: wasOnExit,
       changingLane: !!car.changingLane,
-      lane: car.laneIdx,
+      lane: wasOnExit ? lastLane : car.laneIdx,
       lastLane,
       runLanes,
     });
-    return car.onExit;
   }
 
   function holdForRepair(car, oncoming) {
@@ -252,14 +251,43 @@ export function initTraffic() {
         car.retiring = true;
       }
 
-      // Скорость и направление — полоса биома в точке машины.
-      // settle мог перенести её вперёд, поэтому конфиг читаем ещё раз.
-      let road = lanesAt(car.s);
-      if (car.onExit) road = carriageLanes(road, 'one-way');
+      // Машина едет полосами одной проезжей части: шоссе или ленты.
+      // Смещение хранится в полосах этой части, мир считается от её оси.
+      const highway = lanesAt(car.s);
+      const phase = G.roadPhaseAt ? G.roadPhaseAt(car.s) : 'road';
+      const choice = G.roadChoiceAt ? G.roadChoiceAt(car.s) : 'open';
+      const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
+      const ribbon = G.sideRibbonAt ? G.sideRibbonAt(car.s) : null;
+      const wasOnExit = !!car.onExit;
+      car.onExit = followExit(
+        car,
+        edges,
+        phase,
+        choice,
+        highway.count - highway.oncomingCount,
+        highway.count - 1,
+        wasOnExit,
+      );
+      if (car.onExit && ribbon && !wasOnExit) {
+        const idx = Math.max(0, ribbon.lanes.offsets.length - 1);
+        car.laneIdx = idx;
+        car.targetLaneIdx = idx;
+        car.lateralOffset = ribbon.lanes.offsets[idx];
+        car.changingLane = false;
+      } else if (wasOnExit && !car.onExit) {
+        const world = G.trafficLatAt(car.s, car.lateralOffset, true);
+        const axis = G.laneWorldOffsetAtS(car.s, 0);
+        const scale = G.laneDisplayScaleAtS(car.s) || 1;
+        const idx = nearestLaneIndex(highway.offsets, (world - axis) / scale);
+        car.laneIdx = idx;
+        car.targetLaneIdx = idx;
+        car.lateralOffset = highway.offsets[idx];
+        car.changingLane = false;
+      }
+      let road = car.onExit && ribbon ? ribbon.lanes : highway;
       joinCarriage(car, road);
       settleCarLane(car, road);
-      road = lanesAt(car.s);
-      if (car.onExit) road = carriageLanes(road, 'one-way');
+      road = car.onExit && ribbon ? ribbon.lanes : lanesAt(car.s);
       joinCarriage(car, road);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
@@ -297,17 +325,7 @@ export function initTraffic() {
       const oncoming = isOncomingLane(car.laneIdx, road.oncomingCount);
       holdForRepair(car, oncoming);
 
-      // Полосы уже переведены в мировые метры: масштаб ширины и сдвиг ветки.
-      const toWorld = G.laneWorldOffsetAtS;
-      let carWorldLat = toWorld(car.s, car.lateralOffset);
-      const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
-      const runLanes = road.count - road.oncomingCount;
-      const phase = G.roadPhaseAt ? G.roadPhaseAt(car.s) : 'road';
-      const choice = G.roadChoiceAt ? G.roadChoiceAt(car.s) : 'open';
-      if (followExit(car, edges, phase, choice, runLanes, road.count - 1)) {
-        const ribbon = G.sideRibbonAt ? G.sideRibbonAt(car.s) : null;
-        if (ribbon) carWorldLat = ribbonCarLat(ribbon);
-      }
+      const carWorldLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
       const playerWorldLat = G.riderLatAt(G.playerS);
 
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);

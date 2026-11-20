@@ -224,7 +224,8 @@ assert(carFollowsRibbon(join), 'крайняя попутная уходит н�
 assert(carFollowsRibbon({ ...join, following: true }), 'машина на ленте остаётся, пока лента открыта');
 assert(!carFollowsRibbon({ ...join, choice: 'straight', following: true }), 'прямая отпускает машину с ленты');
 assert(!carFollowsRibbon({ ...join, following: true, open: false }), 'закрытая лента машину не держит');
-assert(!carFollowsRibbon({ ...join, phase: 'seal', choice: 'exit', following: true }), 'когда съезд стал дорогой, машину второй раз к ленте не сдвигает');
+assert(carFollowsRibbon({ ...join, phase: 'seal', choice: 'exit', following: true }), 'на закрытии прямой машина остаётся на полосах ленты');
+assert(!carFollowsRibbon({ ...join, phase: 'seal', choice: 'exit', following: false }), 'на закрытии новая машина на ленту не прыгает');
 assert(!carFollowsRibbon({ ...join, phase: 'carry', choice: 'exit', following: true, open: false }), 'на carry машина едет полосами дороги');
 assert(!carFollowsRibbon({ ...join, changingLane: true }), 'перестраивающаяся машина на ленту не прыгает');
 assert(!carFollowsRibbon({ ...join, lane: 2 }), 'не крайняя полоса остаётся на шоссе');

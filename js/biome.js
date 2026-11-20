@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, inheritedWiden, laneMarks, riderCarriage, sideRibbon } from './engine/carriage.js';
+import { carriageAt, carriageLat, inheritedWiden, laneMarks, riderCarriage, sideRibbon } from './engine/carriage.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
+import { asphaltSpan, branchPick, carriageEdge, carriedOriginAt, exitChain, exitClock, exitReserved, exitRibbonMid, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds, worldEdge } from './engine/fork.js';
 import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -730,6 +730,21 @@ function riderFrameSeat(s, lane) {
 /** Полоса машины или разметки: масштаб ширины, без съезда. */
 function laneWorldOffsetAtS(s, lateralOffset) {
   return roadMetersAt(s, lateralOffset, false);
+}
+
+/**
+ * Мир машины. Полоса — смещение той проезжей части, по которой она едет.
+ * На ленте и на закрытии прямой это ось ленты, иначе ось дороги.
+ */
+function trafficLatAt(s, offset, onExit) {
+  const lane = Number.isFinite(offset) ? offset : 0;
+  if (onExit) {
+    const frame = frameAt(s);
+    const ribbon = sideRibbon(roadCarriageAt(s), frame);
+    if (ribbon) return carriageLat(ribbon.axis, ribbon.scale, lane);
+    if (roadCarriageAt(s).phase === 'seal') return carriageLat(exitRibbonMid(frame.world), laneSpanAt(s), lane);
+  }
+  return laneWorldOffsetAtS(s, lane);
 }
 
 /** Полоса байка или камеры. Ось берётся из кадра: дорога или середина ленты съезда. */
@@ -1505,6 +1520,7 @@ export function initBiome() {
   G.roadPhaseAt = roadPhaseAt;
   G.roadChoiceAt = (s) => decisionAt(routeAt(s).zone).choice;
   G.sideRibbonAt = (s) => sideRibbon(roadCarriageAt(s), frameAt(s));
+  G.trafficLatAt = trafficLatAt;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;

@@ -1186,7 +1186,7 @@ function exitLane(s, side) {
       }
       const playerLat = G.riderLatAt(G.playerS);
       for (const c of G.trafficPool) {
-        const carLat = G.laneWorldOffsetAtS(c.s, c.lateralOffset);
+        const carLat = G.trafficLatAt(c.s, c.lateralOffset, c.onExit);
         if (Math.abs(c.s - G.playerS) < 32 && Math.abs(carLat - playerLat) < 6) {
           c.s = G.playerS + 130 + Math.random() * 40;
         }
