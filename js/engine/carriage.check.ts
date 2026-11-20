@@ -3,7 +3,7 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { carriageAt, carriagePhase, inheritedWiden, laneFit, laneMarks, riderCarriage, sideRibbon } from './carriage.ts';
+import { carFollowsRibbon, carriageAt, carriagePhase, inheritedWiden, laneFit, laneMarks, riderCarriage, sideRibbon } from './carriage.ts';
 import { EXIT_LANE_HALF, exitCarryOrigin, exitClock, exitRibbonCenter, exitRibbonMid, laneAnchor, sampleRoad } from './fork.ts';
 import { EXIT_LANE_WIDTH, laneDashOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
@@ -218,3 +218,13 @@ const sideMarks = laneMarks(side);
 assert(sideMarks.length === 1 && Math.abs(sideMarks[0].lat - side.axis) < 1e-6, 'штрих ленты стоит на её оси, не на оси шоссе');
 assert(sideRibbon(early, earlySeal) == null, 'когда съезд уже дорога, второй набор штрихов не нужен');
 assert(sideRibbon(carriageAt({ frame: frameAt(-10, 0), biome: city, widen: null }), frameAt(-10, 0)) == null, 'до развилки боковой ленты нет');
+
+const join = { phase: 'ribbon' as const, open: true, following: false, changingLane: false, lane: 3, lastLane: 3, runLanes: 2, gap: 4 };
+assert(carFollowsRibbon(join), 'крайняя попутная уходит на ленту, пока клин узкий');
+assert(!carFollowsRibbon({ ...join, gap: 9 }), 'широкий клин новую машину на ленту уже не берёт');
+assert(carFollowsRibbon({ ...join, gap: 9, following: true }), 'машина, уже ушедшая на ленту, на ней остаётся');
+assert(!carFollowsRibbon({ ...join, following: true, open: false }), 'закрытая лента машину не держит');
+assert(!carFollowsRibbon({ ...join, phase: 'seal', following: true }), 'когда съезд стал дорогой, машину второй раз к ленте не сдвигает');
+assert(!carFollowsRibbon({ ...join, phase: 'carry', following: true, open: false }), 'на carry машина едет полосами дороги');
+assert(!carFollowsRibbon({ ...join, changingLane: true }), 'перестраивающаяся машина на ленту не прыгает');
+assert(!carFollowsRibbon({ ...join, lane: 2 }), 'не крайняя полоса остаётся на шоссе');

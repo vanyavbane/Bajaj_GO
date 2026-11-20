@@ -160,6 +160,31 @@ export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage |
   return ribbon;
 }
 
+/** Пока клин уже этого, крайняя попутная ещё успевает уйти на ленту. Дальше на неё не садятся. */
+export const RIBBON_JOIN_GAP = 8;
+
+/**
+ * Машина на боковой ленте.
+ * Лента держит её, только пока сама ещё сбоку. Когда съезд стал дорогой,
+ * полосы машины уже его: второй сдвиг к ленте сдвинул бы их ещё раз.
+ * Закрытая лента машину не держит.
+ */
+export function carFollowsRibbon(args: {
+  phase: CarriagePhase;
+  open: boolean;
+  following: boolean;
+  changingLane: boolean;
+  lane: number;
+  lastLane: number;
+  runLanes: number;
+  gap: number;
+}): boolean {
+  if (args.phase !== 'ribbon' || !args.open) return false;
+  if (args.following) return true;
+  if (args.changingLane || args.runLanes < 1 || args.lane !== args.lastLane) return false;
+  return args.gap < RIBBON_JOIN_GAP;
+}
+
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */
 export function laneMarks(road: LiveCarriage): LaneMark[] {
   const scale = Number.isFinite(road.scale) && road.scale !== 0 ? road.scale : 1;

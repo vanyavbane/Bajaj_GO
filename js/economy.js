@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { balance, button, callout, card, heading, inline, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { balance, button, callout, card, heading, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { nearestLaneIndex } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
@@ -1211,7 +1211,7 @@ function exitLane(s, side) {
   G.handleAccident = handleAccident;
 
   /* ---------- Пауза ---------- */
-  function renderPauseMenu(showSettings = false) {
+  function renderPauseMenu() {
     if (G.started && !G.ended) G.currentScreen = 'playing';
     const overlay = $('overlay');
     overlay.style.display = 'flex';
@@ -1220,8 +1220,6 @@ function exitLane(s, side) {
     const orderValue = activeOrder
       ? `${activeOrder.restaurant} · ${formatClock(activeOrder.timeLeft)}`
       : 'нет';
-    const visual = G.visual;
-    const onOff = (on) => (on ? 'Вкл' : 'Выкл');
 
     overlay.innerHTML = panel(`
         ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
@@ -1233,43 +1231,14 @@ function exitLane(s, side) {
           { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
           { label: 'Заказ', value: orderValue }
         ])}
-        ${showSettings ? `
-          ${inline('Качество освещения', button({ id: 'pause-settings-open', variant: 'compact', label: G.graphicsLabel }))}
-          ${inline('💨 Motion Blur', button({ id: 'pause-mb', variant: 'compact', label: onOff(visual.motionBlur) }))}
-          ${inline('☀️ Лучи от солнца', button({ id: 'pause-gr', variant: 'compact', label: onOff(visual.godRays) }))}
-          ${inline('Камера', button({ id: 'pause-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
-          ${inline('Кокпит: FOV / высота', button({ id: 'pause-cam-settings', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
-          ${inline('Управление', button({ id: 'pause-controls', variant: 'compact', label: G.controlMode === 'tilt' ? 'Акселерометр' : (G.controlMode === 'stick' ? 'Джойстик' : 'Кнопки') }))}
-          ${button({ id: 'pause-settings-back', label: '← НАЗАД' })}
-        ` : button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
+        ${button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
         ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
         ${button({ id: 'pause-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}
     `, { size: 'narrow' });
 
     $('pause-resume').addEventListener('click', resumeGame);
     $('pause-menu').addEventListener('click', exitToMenuFromPause);
-    if (showSettings) {
-      $('pause-settings-back').addEventListener('click', () => renderPauseMenu(false));
-      $('pause-settings-open').addEventListener('click', () => G.renderSettings('lighting', 'pause'));
-      $('pause-mb').addEventListener('click', () => {
-        G.renderMotionBlurSettings(() => renderPauseMenu(true), true);
-      });
-      $('pause-gr').addEventListener('click', () => {
-        G.renderGodRaysSettings(() => renderPauseMenu(true), true);
-      });
-      $('pause-cam').addEventListener('click', () => {
-        G.toggleCameraMode();
-        renderPauseMenu(true);
-      });
-      $('pause-cam-settings').addEventListener('click', () => {
-        G.renderCameraSettings(() => renderPauseMenu(true));
-      });
-      $('pause-controls').addEventListener('click', () => {
-        G.renderSettings('controls', 'pause');
-      });
-    } else {
-      $('pause-settings').addEventListener('click', () => renderPauseMenu(true));
-    }
+    $('pause-settings').addEventListener('click', () => G.renderSettings('graphics', 'pause'));
   }
   G.renderPauseMenu = renderPauseMenu;
 
@@ -1283,7 +1252,7 @@ function exitLane(s, side) {
     G.keys.gas = G.keys.brake = G.keys.left = G.keys.right = false;
     if (G.releaseStick) G.releaseStick();
     if (G.syncControlUi) G.syncControlUi();
-    renderPauseMenu(false);
+    renderPauseMenu();
   }
   G.togglePause = togglePause;
 

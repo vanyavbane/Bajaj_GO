@@ -57,7 +57,7 @@ export function initUi() {
   function renderSettings(tab = 'graphics', from = 'menu') {
     G.currentScreen = 'settings';
     settingsReturn = () => {
-      if (from === 'pause') G.renderPauseMenu(true);
+      if (from === 'pause') G.renderPauseMenu();
       else renderMainMenu();
     };
 

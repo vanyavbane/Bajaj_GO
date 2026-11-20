@@ -1,3 +1,4 @@
+import { carFollowsRibbon } from './engine/carriage.js';
 import { exitLaneOpen, exitLaneWorld } from './engine/fork.js';
 import { carriageLanes, clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { classifyCarContact, isOncomingLane, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
@@ -184,16 +185,20 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Попутная полоса у правого края уходит на съезд, пока клин только открывается.
-   *  Одна такая полоса, как в горах, тоже уходит. Дальше её не возвращает на прямую. */
-  function followExit(car, edges, runLanes, lastLane) {
+  /** Крайняя попутная уходит на боковую ленту, пока та ещё сбоку и клин узкий. */
+  function followExit(car, edges, phase, runLanes, lastLane) {
     const open = !!edges && exitLaneOpen(edges);
-    if (!open) {
-      car.onExit = false;
-    } else if (!car.onExit && !car.changingLane && runLanes >= 1 && car.laneIdx === lastLane) {
-      const gap = edges.rightInner - edges.leftInner;
-      if (gap < 8) car.onExit = true;
-    }
+    const gap = edges ? edges.rightInner - edges.leftInner : 0;
+    car.onExit = carFollowsRibbon({
+      phase,
+      open,
+      following: !!car.onExit,
+      changingLane: !!car.changingLane,
+      lane: car.laneIdx,
+      lastLane,
+      runLanes,
+      gap,
+    });
     return car.onExit;
   }
 
@@ -298,7 +303,8 @@ export function initTraffic() {
       let carWorldLat = toWorld(car.s, car.lateralOffset);
       const edges = G.roadEdgesAt ? G.roadEdgesAt(car.s) : null;
       const runLanes = road.count - road.oncomingCount;
-      if (followExit(car, edges, runLanes, road.count - 1)) {
+      const phase = G.roadPhaseAt ? G.roadPhaseAt(car.s) : 'road';
+      if (followExit(car, edges, phase, runLanes, road.count - 1)) {
         carWorldLat = exitLaneWorld(edges, carWorldLat, toWorld(car.s, 0));
       }
       const playerWorldLat = G.riderLatAt(G.playerS);

@@ -509,6 +509,10 @@ function roadWayAt(s) {
   return roadCarriageAt(s).way;
 }
 
+function roadPhaseAt(s) {
+  return roadCarriageAt(s).phase;
+}
+
 function roadCurvature(s) {
   const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
   return embedRoad(s, lat).curvature;
@@ -1530,6 +1534,7 @@ export function initBiome() {
   G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
+  G.roadPhaseAt = roadPhaseAt;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
