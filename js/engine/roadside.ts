@@ -49,6 +49,18 @@ function outward(n: number): number {
   return Math.max(0, finite(n));
 }
 
+/** Одна дорога как кромки. Вторая лента в эту оболочку не входит. */
+export function spanEdges(span: { left: number; right: number }): AsphaltEdges {
+  const left = Number.isFinite(span.left) ? span.left : 0;
+  const right = Number.isFinite(span.right) ? span.right : left;
+  return {
+    leftOuter: left,
+    leftInner: right,
+    rightInner: right,
+    rightOuter: right,
+  };
+}
+
 /**
  * Смещение бокового объекта. Точка постановки отодвигается от кромки
  * на зазор и на собственный выступ меша, поэтому грань не попадает на асфальт.

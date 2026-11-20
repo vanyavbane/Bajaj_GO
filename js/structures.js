@@ -214,7 +214,7 @@ export function initStructures() {
     const span = G.megaStructures.length * 320;
     for (const ms of G.megaStructures) {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
-      const cover = G.asphaltSpan(ms.userData.s);
+      const cover = G.drivenSpanAt(ms.userData.s);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, cover.mid, 0);
         ms.userData.baseWidth = cover.width;

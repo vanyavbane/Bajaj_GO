@@ -614,9 +614,9 @@ function exitSideAt(_s) {
   return 1;
 }
 
-/** Попутная полоса у обочины. Справа крайняя правая, слева крайняя левая попутная, если она есть. */
+/** Попутная полоса у обочины дороги байка. Справа крайняя правая, слева крайняя левая попутная. */
 function exitLane(s, side) {
-  const lanes = lanesOf(G.lanesAtS(s));
+  const lanes = lanesOf(G.drivenLanesAt(s));
   if (side >= 0) return outerLane(lanes, 'right', 'with')?.offset ?? 0;
   const left = outerLane(lanes, 'left', 'with');
   if (left) return left.offset;
@@ -649,14 +649,14 @@ function exitLane(s, side) {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      const poiPose = G.besidePose(G.roadsideFrameAt(e.s), {
+      const poiPose = G.besidePose(G.drivenFrameAt(e.s), {
         side: e.side < 0 ? -1 : 1,
         gap: 3.1,
         inset: 0
       });
       const poiLat = poiPose.lateral;
       const markerLogical = exitLane(zoneS, e.side);
-      const markerLat = G.laneWorldOffsetAtS(zoneS, markerLogical);
+      const markerLat = G.drivenLaneAt(zoneS, markerLogical);
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
         G.placeOnRoad(e.group, e.s, poiLat, 0);
         G.placeOnRoad(e.marker, zoneS, markerLat, 0.07);
@@ -769,7 +769,7 @@ function exitLane(s, side) {
   function updateDeliveryMarker() {
     if (activeOrder && activeOrder.targetS != null) {
       deliveryMarker.visible = true;
-      const lat = G.laneWorldOffsetAtS(activeOrder.targetS, exitLane(activeOrder.targetS, 1));
+      const lat = G.drivenLaneAt(activeOrder.targetS, exitLane(activeOrder.targetS, 1));
       deliveryParkS = placeIfMoved(deliveryParkS, activeOrder.targetS, (s) => {
         G.placeOnRoad(deliveryMarker, s, lat, 0);
       }, Math.round(lat * 50));

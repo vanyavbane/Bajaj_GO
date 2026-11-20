@@ -89,10 +89,10 @@ export interface LaneMark {
  * Пока она склеена с шоссе, штрихов у неё нет: это ещё не отдельная дорога.
  * Когда съезд уже пришёл в дорогу, отдельной ленты нет.
  */
-export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage | null {
+export function sideRibbon(road: LiveCarriage, frame: RoadFrame, layout?: LaneLayout): LiveCarriage | null {
   if (road.phase !== 'ribbon' || !exitLaneOpen(frame.local)) return null;
-  const ribbon = riderCarriage(road, frame, 'exit');
-  if (ribbon.way !== 'one-way') return null;
+  const ribbon = riderCarriage(road, frame, 'exit', layout);
+  if (!layout && ribbon.way !== 'one-way') return null;
   return ribbon;
 }
 
@@ -103,10 +103,15 @@ export interface DriveRoads {
 }
 
 /** Прямая убирает съезд из списка дорог. Пока выбор открыт или взят, лента — вторая дорога. */
-export function roadsAt(main: LiveCarriage, frame: RoadFrame, choice: RouteChoice): DriveRoads {
+export function roadsAt(
+  main: LiveCarriage,
+  frame: RoadFrame,
+  choice: RouteChoice,
+  layout?: LaneLayout,
+): DriveRoads {
   return {
     main,
-    exit: choice === 'straight' ? null : sideRibbon(main, frame),
+    exit: choice === 'straight' ? null : sideRibbon(main, frame, layout),
   };
 }
 
@@ -137,6 +142,15 @@ export function carriageLat(axis: number, scale: number, offset: number): number
   const lane = Number.isFinite(offset) ? offset : 0;
   const origin = Number.isFinite(axis) ? axis : 0;
   return origin + lane * span;
+}
+
+/**
+ * Полоса уже пришедшего байка в точке, где въезд ещё лента.
+ * Это та же дорога: камера позади не садится на старую ось.
+ */
+export function ribbonApproachLat(arrived: boolean, ribbon: boolean, lane: number, axis: number, scale: number): number | null {
+  if (!arrived || !ribbon) return null;
+  return carriageLat(axis, scale, lane);
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */
@@ -172,18 +186,23 @@ export function solidMarks(road: LiveCarriage): LaneMark[] {
  * Пока он сидит на боковой ленте, его полосы — съезд, а ось — середина ленты.
  * Дорога вокруг этого не меняется: её по-прежнему описывает carriageAt.
  */
-export function riderCarriage(road: LiveCarriage, frame: RoadFrame, seat: SeatKind): LiveCarriage {
+export function riderCarriage(
+  road: LiveCarriage,
+  frame: RoadFrame,
+  seat: SeatKind,
+  layout?: LaneLayout,
+): LiveCarriage {
   if (seat !== 'exit') return road;
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) return road;
   const half = Math.max(0, exitWidth(frame.local) * 0.5);
-  const lanes = exitCarriage(road.lanes.id);
+  const lanes = layout ? carriageLanes(layout, 'two-way') : exitCarriage(road.lanes.id);
   return {
     phase: 'ribbon',
     lanes,
     axis: frame.origin + ribbon,
     scale: laneFit(half, lanes.offsets),
     half,
-    way: 'one-way',
+    way: lanes.way,
   };
 }

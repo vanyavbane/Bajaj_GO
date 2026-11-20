@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, asphaltShell, followAsphalt, innerTrackEdge, outwardFrom, pinchAsphalt, pinchShell, shoulderLats } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, asphaltShell, followAsphalt, innerTrackEdge, outerRibbon, outwardFrom, pinchAsphalt, pinchShell, shoulderLats } from './engine/fork.js';
 
 export function initRoadSurface() {
 
@@ -41,11 +41,11 @@ export function initRoadSurface() {
     return !!shell && shell.right - shell.left >= 0.5;
   }
 
-  /** Внешняя кромка живого асфальта. Схлопнутая оболочка кромки не даёт. */
-  function shellEdge(row, side) {
-    const shell = shellAt(row);
-    if (!shellWide(shell)) return null;
-    return side < 0 ? shell.left : shell.right;
+  /** Кромка дороги байка. Тротуар и отбойник стоят у неё, не у дальней ленты. */
+  function drivenEdge(row, side) {
+    const span = G.drivenSpanAt(sampleS[row]);
+    if (!span || span.width < 0.5) return null;
+    return side < 0 ? span.left : span.right;
   }
 
   function shellMid(row) {
@@ -54,13 +54,15 @@ export function initRoadSurface() {
     return (shell.left + shell.right) * 0.5;
   }
 
-  /** Точка откоса снаружи оболочки, не снаружи старого центра слота. */
+  function ribbonAt(row, side) {
+    return outerRibbon(G.roadEdgesAt(sampleS[row]), side);
+  }
+
+  /** Точка откоса снаружи своей ленты, не от середины обеих. */
   function slopeLat(row, side, fromCenter) {
-    const edge = shellEdge(row, side);
-    const origin = shellMid(row);
-    if (edge == null) return origin;
-    const edgeDist = Math.abs(edge - origin);
-    return outwardFrom(edge, origin, Math.max(0, fromCenter - edgeDist));
+    const ribbon = ribbonAt(row, side);
+    if (!ribbon) return shellMid(row);
+    return outwardFrom(ribbon.edge, ribbon.center, Math.max(0, fromCenter - ribbon.half));
   }
 
   /* Кладёт плоский объект вдоль курса в точке s.
@@ -151,6 +153,8 @@ export function initRoadSurface() {
   const curbRightMesh = makeRibbon(0.35, G.M.curbWhite);
   const centerDoubleLine1 = makeRibbon(0.13, G.M.lineYellow);
   const centerDoubleLine2 = makeRibbon(0.13, G.M.lineYellow);
+  const ribbonDoubleLine1 = makeRibbon(0.13, G.M.lineYellow);
+  const ribbonDoubleLine2 = makeRibbon(0.13, G.M.lineYellow);
   const edgeLineLeft = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineRight = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineLeftB = makeRibbon(0.16, G.M.lineWhite);
@@ -172,7 +176,8 @@ export function initRoadSurface() {
   const accentLineR = makeIslandRibbon(accentLineMatR);
 
   for (const mesh of [sidewalkLeftMesh, sidewalkRightMesh, curbLeftMesh, curbRightMesh,
-    centerDoubleLine1, centerDoubleLine2, edgeLineLeft, edgeLineRight, edgeLineLeftB, edgeLineRightB]) {
+    centerDoubleLine1, centerDoubleLine2, ribbonDoubleLine1, ribbonDoubleLine2,
+    edgeLineLeft, edgeLineRight, edgeLineLeftB, edgeLineRightB]) {
     mesh.receiveShadow = false;
   }
 
@@ -193,9 +198,8 @@ export function initRoadSurface() {
 
 /** Удаление живой кромки от середины оболочки. Откос начинается отсюда. */
   function farAsphalt(row, side) {
-    const edge = shellEdge(row, side);
-    if (edge == null) return 0;
-    return Math.abs(edge - shellMid(row));
+    const ribbon = ribbonAt(row, side);
+    return ribbon ? ribbon.half : 0;
   }
 
   /** Нормаль откоса берётся из уже поставленных вершин, по курсу съезда, а не по сплайну. */
@@ -243,7 +247,7 @@ export function initRoadSurface() {
   const BARRIER_PERIOD = 100;
   const BARRIER_GAP = 10;
   const BARRIER_HALF_W = 0.31;
-  const MAX_BLOCKS = 96;
+  const MAX_BLOCKS = 192;
   const blockGeo = new THREE.BoxGeometry(0.62, 0.92, 3.6);
   const blockMesh = new THREE.InstancedMesh(blockGeo, G.M.concrete, MAX_BLOCKS);
   blockMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -283,19 +287,20 @@ export function initRoadSurface() {
     return local >= BARRIER_PERIOD - BARRIER_GAP;
   }
 
-  /** Бетон стоит на границе хода. На съезде границы нет, отбойника нет. */
-  function barrierLat(s) {
-    const marks = G.solidMarksAtS(s);
-    if (!marks || marks.length < 2) return null;
-    return (marks[0].lat + marks[1].lat) * 0.5;
+  /** Бетон стоит на границе хода дороги МКАД. Чужая пришедшая дорога его не получает. */
+  function barrierLats(s) {
+    const lats = G.medianLatsAt(s);
+    return Array.isArray(lats) ? lats : [];
   }
 
   G.medianBlocksBike = (s, worldLat, halfPlayer) => {
     const weight = G.mkadWeightAtS(s);
-    const lat = barrierLat(s);
-    if (weight < 0.55 || lat == null || barrierGapAt(s)) return 0;
+    if (weight < 0.55 || barrierGapAt(s)) return 0;
     const reach = BARRIER_HALF_W + halfPlayer;
-    return Math.abs(worldLat - lat) < reach ? reach : 0;
+    for (const lat of barrierLats(s)) {
+      if (Math.abs(worldLat - lat) < reach) return reach;
+    }
+    return 0;
   };
 
   function updateBarrier(playerS, dense) {
@@ -307,13 +312,15 @@ export function initRoadSurface() {
       const s = startS + k * spacing;
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       const weight = G.mkadWeightAtS(s);
-      const lat = barrierLat(s);
-      const vis = weight > 0.08 && lat != null && !barrierGapAt(s) ? weight : 0;
-      if (vis <= 0.02 || lat == null) continue;
-      dummy.scale.set(1, vis, 1);
-      G.placeOnRoad(dummy, s, lat, 0.46 * vis);
-      dummy.updateMatrix();
-      blockMesh.setMatrixAt(used++, dummy.matrix);
+      const vis = weight > 0.08 && !barrierGapAt(s) ? weight : 0;
+      if (vis <= 0.02) continue;
+      for (const lat of barrierLats(s)) {
+        if (used >= MAX_BLOCKS) break;
+        dummy.scale.set(1, vis, 1);
+        G.placeOnRoad(dummy, s, lat, 0.46 * vis);
+        dummy.updateMatrix();
+        blockMesh.setMatrixAt(used++, dummy.matrix);
+      }
     }
     for (let i = used; i < MAX_BLOCKS; i++) blockMesh.setMatrixAt(i, hidden);
     blockMesh.count = used;
@@ -366,8 +373,8 @@ export function initRoadSurface() {
       const s = sampleS[r];
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight > maxWeight) maxWeight = weight;
-      const vis = weight > 0.02 && shellWide(shellAt(r)) ? weight : 0;
-      const edge = shellEdge(r, side);
+      const edge = drivenEdge(r, side);
+      const vis = weight > 0.02 && edge != null ? weight : 0;
       const lat = edge == null ? shellMid(r) : edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
@@ -410,10 +417,9 @@ export function initRoadSurface() {
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight <= 0.02) continue;
       const row = rowNear(s);
-      if (!shellWide(shellAt(row))) continue;
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
-        const edge = shellEdge(row, side);
+        const edge = drivenEdge(row, side);
         if (edge == null) continue;
         const lat = edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
         dummy.scale.set(weight, weight, weight);
@@ -429,8 +435,8 @@ export function initRoadSurface() {
   }
 
   /* ---------------- Ленты с переменной шириной ----------------
-     Лента держится за свой асфальт. Когда carry кладёт съезд в левый слот,
-     правая лента продолжается, а прямая схлопывается на месте. */
+     Лента держится за свой асфальт. Старая дорога сходит своей лентой,
+     въезд продолжается своей и становится новой дорогой. */
   let roadTracks = [[], []];
 
   function paintSpan(pos, row, s, y, span) {
@@ -539,7 +545,7 @@ export function initRoadSurface() {
     return best;
   }
 
-  /** Тротуар/бордюр города: снаружи оболочки асфальта, не снаружи слота. */
+  /** Тротуар и бордюр города: снаружи дороги байка. */
   function updateCityStrip(mesh, side, baseWidth, width, yOffset) {
     const pos = mesh.geometry.attributes.position;
     let maxWeight = 0;
@@ -547,7 +553,7 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const s = sampleS[r];
-      const edge = shellEdge(r, side);
+      const edge = drivenEdge(r, side);
       const outward = side < 0 ? -1 : 1;
       const halfW = edge == null ? 0 : width * 0.5 * cw;
       const center = (edge == null ? shellMid(r) : edge) + outward * (baseWidth * cw + halfW);
@@ -782,6 +788,12 @@ export function initRoadSurface() {
     };
     updateLateralStrip(centerDoubleLine1, (r) => solidAt(sampleS[r], 0), 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, (r) => solidAt(sampleS[r], 1), 0.13, 0.08);
+    const ribbonSolidAt = (s, index) => {
+      const marks = G.ribbonSolidMarksAtS(s);
+      return marks[index] ? marks[index].lat : null;
+    };
+    updateLateralStrip(ribbonDoubleLine1, (r) => ribbonSolidAt(sampleS[r], 0), 0.13, 0.08);
+    updateLateralStrip(ribbonDoubleLine2, (r) => ribbonSolidAt(sampleS[r], 1), 0.13, 0.08);
     updateLateralStrip(edgeLineLeft, (r) => trackEdge(0, r, -1), 0.16, 0.025);
     updateLateralStrip(edgeLineRight, (r) => trackEdge(0, r, 1), 0.16, 0.025);
     updateLateralStrip(edgeLineLeftB, (r) => trackEdge(1, r, -1), 0.16, 0.025);

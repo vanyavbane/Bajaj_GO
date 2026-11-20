@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
+import { carriageAt, carriageLat, laneMarks, ribbonApproachLat, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, exitClock, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, reachedExit, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
+import { asphaltSpan, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
 import { courseBranches, decideZone } from './engine/route.js';
-import { RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, zoneAt, zoneNose } from './engine/vectors.js';
+import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
-import { besidePose } from './engine/roadside.js';
+import { besidePose, spanEdges } from './engine/roadside.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -364,13 +364,7 @@ function liveForkAtS(s, peak) {
   const frame = frameAt(s);
   const layout = courseLayout();
   const raw = forkSpreadAt(blendMetersAt(s), layout.zoneLength, layout.lead, peak);
-  const amount = liveForkAmount(raw, frame.phase.kind, frame.chosen);
-  if (frame.chosen !== 1 || frame.phase.kind !== 'end') return amount;
-  const width = frame.local.rightOuter - frame.local.rightInner;
-  if (!(width > 1) || !(layout.spread > 0)) return 0;
-  const mid = (frame.local.rightInner + frame.local.rightOuter) * 0.5;
-  const open = Math.max(0, mid - frame.local.leftInner);
-  return amount * Math.min(1, open / layout.spread);
+  return forkOccupancy(raw, frame.phase.kind, frame.chosen, frame.local, frame.phase.t);
 }
 
 function forkSpreadAtS(s) {
@@ -446,22 +440,54 @@ function decisionAt(zone) {
   });
 }
 
+/** Взятые въезды, которые уже стали дорогой. Дальше путь идёт их курсом. */
+function ownedCourse(s) {
+  const layout = courseLayout();
+  const here = zoneAt(s, layout);
+  const owned = [];
+  for (let z = 0; z <= here; z++) {
+    if (decisionAt(z).side !== 1) continue;
+    const spawn = vectorSpawnOf(z, EXIT_RIGHT, layout);
+    if (!spawn || !(s >= spawn.ownsFrom)) continue;
+    owned.push(spawn);
+  }
+  return owned;
+}
+
+/** Биом, в который ведёт взятый въезд. */
+function entranceBiome(s) {
+  const zone = routeAt(s).zone;
+  ensureZonePlan(zone + 1);
+  return biomeIndex(zoneBiomes[zone + 1]);
+}
+
+/** Полосы биома, в который ведёт взятый въезд. */
+function entranceLayout(s) {
+  return LANE_CONFIG[entranceBiome(s)] || LANE_CONFIG[0];
+}
+
+/** Въезд уже стал дорогой: левый слот — это новая дорога, старой ленты нет. */
+function arrivedRoad(frame) {
+  return frame.chosen === 1 && frame.block != null && exitRibbonCenter(frame.local) == null;
+}
+
 function roadHeading(s) {
   if (s === headKey && headHit) return headHit;
   const at = layoutAt(s);
   const frame = frameAt(s);
   const decision = decisionAt(at.zone);
+  const owned = ownedCourse(s);
   headKey = s;
   headHit = vectors.heading({
     s,
     y: biomeRoadY(s),
     nose: at.nose,
     edges: frame.world,
-    owned: [],
+    owned,
     branches: courseBranches(decision.choice, openCourse(RIGHT_FORK, s, at.layout)),
-    origin: roadCenter(frame),
+    origin: owned.length ? laneAnchor(frame) : roadCenter(frame),
     turn: at.layout.turn,
-    ownedHere: false,
+    ownedHere: owned.length > 0,
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u), ddx: biomeRoadDDX(u) }));
   return headHit;
 }
@@ -491,15 +517,51 @@ function laneMarksAtS(s) {
 }
 
 /** Штрихи съезда, пока он ещё боковая лента. */
-function ribbonMarksAtS(s) {
+function ribbonHere(s) {
   const frame = frameAt(s);
-  const ribbon = sideRibbon(roadCarriageAt(s), frame);
+  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
+  return sideRibbon(roadCarriageAt(s), frame, layout);
+}
+
+function ribbonMarksAtS(s) {
+  const ribbon = ribbonHere(s);
   return ribbon ? laneMarks(ribbon) : [];
 }
 
-/** Двойная сплошная несущей дороги. У съезда её нет. */
+/** Двойная сплошная проезжей части. Лента въезда рисует свою отдельно. */
 function solidMarksAtS(s) {
   return solidMarks(roadCarriageAt(s));
+}
+
+/** Двойная сплошная взятого въезда, пока он ещё лента. */
+function ribbonSolidMarksAtS(s) {
+  const frame = frameAt(s);
+  if (frame.chosen !== 1) return [];
+  const ribbon = ribbonHere(s);
+  return ribbon ? solidMarks(ribbon) : [];
+}
+
+function markAxis(marks) {
+  if (!marks || marks.length < 2) return null;
+  return (marks[0].lat + marks[1].lat) * 0.5;
+}
+
+/**
+ * Бетонный отбойник МКАД. Он стоит на дороге МКАД и не переезжает
+ * на пришедшую дорогу другого биома.
+ */
+function medianLatsAt(s) {
+  const frame = frameAt(s);
+  const lats = [];
+  if (carriageBiomeAt(s, frame) === MKAD) {
+    const at = markAxis(solidMarksAtS(s));
+    if (at != null) lats.push(at);
+  }
+  if (frame.chosen === 1 && entranceBiome(s) === MKAD) {
+    const at = markAxis(ribbonSolidMarksAtS(s));
+    if (at != null) lats.push(at);
+  }
+  return lats;
 }
 
 function routeAt(s) {
@@ -551,21 +613,57 @@ function asphaltSpanAt(s) {
   return asphaltSpan(frame.world);
 }
 
+/** Проезжая часть, по которой едет байк. На взятом въезде это его лента, не старая дорога. */
+function drivenCarriageAt(s) {
+  const frame = frameAt(s);
+  const ribbon = frame.chosen === 1 ? ribbonHere(s) : null;
+  return ribbon || roadCarriageAt(s);
+}
+
+/** Портал и мост накрывают эту проезжую часть, не обе ленты. */
+function drivenSpanAt(s) {
+  const road = drivenCarriageAt(s);
+  const half = road.half;
+  return {
+    left: road.axis - half,
+    right: road.axis + half,
+    mid: road.axis,
+    width: half * 2,
+  };
+}
+
+/** Полоса этой проезжей части в мировых метрах. */
+function drivenLaneAt(s, offset) {
+  const road = drivenCarriageAt(s);
+  const lane = Number.isFinite(offset) ? offset : 0;
+  return carriageLat(road.axis, road.scale, lane);
+}
+
+function drivenLanesAt(s) {
+  const at = Number.isFinite(s) ? s : G.playerS;
+  return drivenCarriageAt(at).lanes;
+}
+
+/** Кромки этой же проезжей части. Лес и горы по-прежнему читают всю оболочку. */
+function drivenFrameAt(s) {
+  const span = drivenSpanAt(s);
+  const frame = frameAt(s);
+  return { edges: spanEdges(span), origin: frame.origin };
+}
+
 function laneSpanAt(s) {
   const scale = laneDisplayScaleAtS(s);
   return Number.isFinite(scale) && scale !== 0 ? scale : 1;
 }
 
-/** Проезжая часть дороги в точке. Сиденье байка её не меняет. */
+/** Биом проезжей части в точке. После прихода это биом новой дороги. */
+function carriageBiomeAt(s, frame) {
+  return arrivedRoad(frame) ? entranceBiome(s) : biomeIndex(roadBiomeAtS(s));
+}
+
 function roadCarriageAt(s) {
   const frame = frameAt(s);
-  const entered = frame.chosen === 1 && frame.block != null && frame.block.kind === 'road';
-  let dom = biomeIndex(roadBiomeAtS(s));
-  if (entered) {
-    const zone = routeAt(s).zone;
-    ensureZonePlan(zone + 1);
-    dom = biomeIndex(zoneBiomes[zone + 1]);
-  }
+  const dom = carriageBiomeAt(s, frame);
   return carriageAt({
     frame,
     biome: LANE_CONFIG[dom] || LANE_CONFIG[0],
@@ -580,7 +678,8 @@ function roadWidthAtS(s) {
 /** Полосы под байком. На боковой ленте это съезд, иначе проезжая часть точки. */
 function playerLive(s) {
   const frame = frameAt(s);
-  return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind);
+  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
+  return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind, layout);
 }
 
 /** Единственный перевод полосы в мировые метры. riding — байк ещё на боковой ленте. */
@@ -591,7 +690,12 @@ function roadMetersAt(s, laneOffset, riding) {
 /** Байк на дороге или на ленте съезда. Пришедший въезд сажает его на новую дорогу. */
 function updateExitHold() {
   const frame = frameAt(G.playerS);
-  const ridden = riderCarriage(roadCarriageAt(G.playerS), frame, riderSeat.kind);
+  const ridden = riderCarriage(
+    roadCarriageAt(G.playerS),
+    frame,
+    riderSeat.kind,
+    frame.chosen === 1 ? entranceLayout(G.playerS) : undefined,
+  );
   const scale = Number.isFinite(ridden.scale) && ridden.scale !== 0 ? ridden.scale : 1;
   const seated = rescaleSeat(
     { kind: riderSeat.kind, lane: G.laneOffset },
@@ -617,7 +721,9 @@ function laneWorldOffsetAtS(s, lateralOffset) {
 
 /** Дороги в точке s: основная и боковой съезд, если он ещё отдельный. */
 function roadsHere(s) {
-  return roadsAt(roadCarriageAt(s), frameAt(s), decisionAt(routeAt(s).zone).choice);
+  const frame = frameAt(s);
+  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
+  return roadsAt(roadCarriageAt(s), frame, decisionAt(routeAt(s).zone).choice, layout);
 }
 
 /** Мир машины. Полоса — смещение той дороги, по которой она едет. */
@@ -631,9 +737,14 @@ function trafficLatAt(s, offset, onExit) {
 function riderLatAt(s, laneOffset) {
   const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
   const frame = frameAt(s);
+  const player = frameAt(G.playerS);
+  const arrived = player.chosen === 1 && exitRibbonCenter(player.local) == null;
+  const ribbon = frame.chosen === 1 ? sideRibbon(roadCarriageAt(s), frame, entranceLayout(s)) : null;
+  const approach = ribbonApproachLat(arrived, ribbon != null, lane, ribbon ? ribbon.axis : 0, ribbon ? ribbon.scale : 1);
+  if (approach != null) return approach;
   const seat = riderFrameSeat(s, lane);
   const span = seat.kind === 'exit'
-    ? riderCarriage(roadCarriageAt(s), frame, 'exit').scale
+    ? riderCarriage(roadCarriageAt(s), frame, 'exit', frame.chosen === 1 ? entranceLayout(s) : undefined).scale
     : laneSpanAt(s);
   const scale = Number.isFinite(span) && span !== 0 ? span : 1;
   return seatWorld(frame, seat, scale);
@@ -869,14 +980,12 @@ function smooth01(v) {
 
 function groundOffset(lat, s) {
   const frame = frameAt(s);
-  const shell = roadShell(frame.world);
-  const mid = (shell.left + shell.right) * 0.5;
-  const side = lat < mid ? -1 : 1;
-  const edge = side < 0 ? shell.left : shell.right;
-  const fromCenter = Math.abs(edge - mid);
+  const at = groundAt(frame.world, lat);
+  const fromCenter = at.half;
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
   const lats = shoulderLats(fromCenter, cityOuter, SHOULDER);
-  const dist = Math.abs(lat - mid);
+  const dist = at.dist;
+  const side = lat >= 0 ? 1 : -1;
   // Набережная: справа пологая пешеходная зона и спуск к воде вместо откоса.
   let embW = 0;
   if (side > 0 && EMBANKMENT >= 0) {
@@ -1091,6 +1200,18 @@ function updateScenery() {
 function lanesAtS(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
   return roadCarriageAt(at).lanes;
+}
+
+/** Полосы той дороги, на которой сидит байк. На въезде это уже новая дорога. */
+function riderLanesAt(s) {
+  const at = Number.isFinite(s) ? s : G.playerS;
+  return playerLive(at).lanes;
+}
+
+function riderLaneScaleAt(s) {
+  const at = Number.isFinite(s) ? s : G.playerS;
+  const scale = playerLive(at).scale;
+  return Number.isFinite(scale) && scale !== 0 ? scale : 1;
 }
 
 /** Случайная попутная полоса биома в точке s. */
@@ -1361,7 +1482,7 @@ export function initBiome() {
   G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
-  G.sideRibbonAt = (s) => sideRibbon(roadCarriageAt(s), frameAt(s));
+  G.sideRibbonAt = (s) => ribbonHere(s);
   G.roadsAt = roadsHere;
   G.trafficLatAt = trafficLatAt;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
@@ -1379,6 +1500,10 @@ export function initBiome() {
   };
   G.besidePose = besidePose;
   G.asphaltSpan = asphaltSpanAt;
+  G.drivenSpanAt = drivenSpanAt;
+  G.drivenFrameAt = drivenFrameAt;
+  G.drivenLanesAt = drivenLanesAt;
+  G.drivenLaneAt = drivenLaneAt;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
@@ -1388,6 +1513,10 @@ export function initBiome() {
   G.laneMarksAtS = laneMarksAtS;
   G.ribbonMarksAtS = ribbonMarksAtS;
   G.solidMarksAtS = solidMarksAtS;
+  G.ribbonSolidMarksAtS = ribbonSolidMarksAtS;
+  G.medianLatsAt = medianLatsAt;
+  G.riderLanesAt = riderLanesAt;
+  G.riderLaneScaleAt = riderLaneScaleAt;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
   G.dominantBiomeAtS = dominantBiomeAtS;
   G.forkView = 0;
@@ -1505,14 +1634,10 @@ export function initBiomeWorld() {
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
           const sideSign = side < 0 ? -1 : 1;
-          const frame = frameAt(s);
-          const shell = roadShell(frame.world);
-          const edge = sideSign < 0 ? shell.left : shell.right;
-          const gap = Math.max(8, entry.lat - Math.abs(edge - (shell.left + shell.right) * 0.5));
-          const pose = besidePose(
-            { edges: frame.world, origin: frame.origin },
-            { side: sideSign, gap, inset: 0 }
-          );
+          const span = drivenSpanAt(s);
+          const edge = sideSign < 0 ? span.left : span.right;
+          const gap = Math.max(8, entry.lat - Math.abs(edge - span.mid));
+          const pose = besidePose(drivenFrameAt(s), { side: sideSign, gap, inset: 0 });
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;

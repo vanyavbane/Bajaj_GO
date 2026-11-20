@@ -355,7 +355,7 @@ export function initRoadside() {
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
       const decorAt = (at, side, gap) => {
-        const frame = G.roadsideFrameAt(at);
+        const frame = G.drivenFrameAt(at);
         const pose = G.besidePose(frame, { side, gap, inset: 0 });
         return pose.lateral;
       };
@@ -378,7 +378,7 @@ export function initRoadside() {
           G.placeOnRoad(bb.group, boardS, boardLat, G.groundOffset(boardLat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
-          const cover = G.asphaltSpan(slot.s);
+          const cover = G.drivenSpanAt(slot.s);
           G.placeOnRoad(slot.portal.group, slot.s, cover.mid, 0);
           const wf = Math.max(1, cover.width / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);

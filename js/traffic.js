@@ -38,6 +38,12 @@ export function initTraffic() {
     return G.lanesAtS(s);
   }
 
+  /** Полосы той дороги, по которой машина уже едет. Смена полос байка её не пересаживает. */
+  function carLanes(car) {
+    const roads = G.roadsAt(car.s);
+    return car.onExit && roads.exit ? roads.exit.lanes : roads.main.lanes;
+  }
+
   function quteLane(cfg) {
     const forward = lanesOf(cfg).filter((lane) => lane.direction === 'with');
     if (forward.length === 0) return 0;
@@ -107,6 +113,7 @@ export function initTraffic() {
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
       onExit: false,
+      heldLat: NaN,
       heading: lanesOf(cfg)[idx]?.direction === 'against' ? Math.PI : 0,
       flashReactTimer: 0,
       steerAngle: 0,
@@ -146,7 +153,7 @@ export function initTraffic() {
 
   G.remapTrafficLanes = () => {
     for (const car of G.trafficPool) {
-      const cfg = lanesAt(car.s);
+      const cfg = carLanes(car);
       if (car.model.type === 'qute_traffic') {
         const q = quteLane(cfg);
         car.laneIdx = q;
@@ -307,6 +314,14 @@ export function initTraffic() {
       holdForRepair(car, oncoming);
 
       const carWorldLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
+      // Старая дорога ушла из-под машины. На новую её не переносит.
+      if (!car.onExit && Number.isFinite(car.heldLat) && Math.abs(carWorldLat - car.heldLat) > 6) {
+        car.active = false;
+        car.retiring = false;
+        car.model.root.visible = false;
+        continue;
+      }
+      car.heldLat = carWorldLat;
       const playerWorldLat = G.riderLatAt(G.playerS);
 
       const nudge = menuTrafficNudge(car.s, carWorldLat, G.playerS, playerWorldLat, menuDemo);
@@ -365,7 +380,7 @@ export function initTraffic() {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
-        const pts = nearMissPoints(G.comboCount, offsetDirection(lanesOf(G.lanesAtS(G.playerS)), G.laneOffset));
+        const pts = nearMissPoints(G.comboCount, offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset));
         G.score += pts;
         const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);

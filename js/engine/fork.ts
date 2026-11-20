@@ -150,6 +150,25 @@ export function liveForkAmount(amount: number, phase: ExitKind, chosen: ChosenSi
   return raw;
 }
 
+/**
+ * Занятость с учётом кромок.
+ * Взятый въезд гасит развилку по мере прихода ленты к новой дороге.
+ * Уход старой кромки в сторону эту занятость не держит.
+ */
+export function forkOccupancy(
+  amount: number,
+  phase: ExitKind,
+  chosen: ChosenSide,
+  edges: AsphaltEdges,
+  close = 0,
+): number {
+  const raw = liveForkAmount(amount, phase, chosen);
+  if (chosen !== 1 || phase !== 'end') return raw;
+  if (!(exitWidth(edges) > 1)) return 0;
+  const left = Math.max(0, Math.min(1, close));
+  return raw * (1 - left);
+}
+
 /** -1 слева, включая ровно ноль. */
 export function forkSide(lateralOffset: number): -1 | 1 {
   return lateralOffset <= 0 ? -1 : 1;
@@ -175,27 +194,38 @@ function exitPhase(d: number): ExitPhase {
   return { kind: 'settle', t: smooth01(span.u), open: 1 };
 }
 
+/** Дорога ширины `half` с центром `center`. Правой ленты нет. */
+function roadAt(center: number, half: number): AsphaltEdges {
+  return {
+    leftOuter: center - half,
+    leftInner: center + half,
+    rightInner: center + half,
+    rightOuter: center + half,
+  };
+}
+
+/** Середина съезда, когда он уже отошёл на полный разъезд. */
+function entranceHome(road: number): number {
+  return exitRibbonMid(branchEdges(road, FORK_SPREAD));
+}
+
 /**
  * Взятый въезд за закрытие.
- * Старая дорога сужается и уходит влево. Въезд идёт к центру и становится новой дорогой.
- * К концу отдельной ленты нет: левый слот — это уже новая дорога.
+ * Старая дорога сужается на месте. Въезд остаётся лентой на своей линии до конца закрытия:
+ * путь подхватывает её в тот же метр, и полотно не рвётся.
  */
 function takenEntrance(road: number, arrive: number, t: number): AsphaltEdges {
-  const open = branchEdges(road, FORK_SPREAD);
-  const fromMid = exitRibbonMid(open);
-  const fromHalf = exitWidth(open) * 0.5;
+  const home = entranceHome(road);
+  const fromHalf = exitWidth(branchEdges(road, FORK_SPREAD)) * 0.5;
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : fromHalf);
   const u = Math.max(0, Math.min(1, t));
   const oldHalf = road * (1 - u);
-  if (oldHalf <= 0.05) return branchEdges(dest, 0);
-  const oldCenter = -(dest + road) * u;
-  const entranceMid = fromMid * (1 - u);
   const entranceHalf = fromHalf + (dest - fromHalf) * u;
   return {
-    leftOuter: oldCenter - oldHalf,
-    leftInner: oldCenter + oldHalf,
-    rightInner: entranceMid - entranceHalf,
-    rightOuter: entranceMid + entranceHalf,
+    leftOuter: -oldHalf,
+    leftInner: oldHalf,
+    rightInner: home - entranceHalf,
+    rightOuter: home + entranceHalf,
   };
 }
 
@@ -221,8 +251,9 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
     }
     return edge;
   }
-  // Въезд уже стал новой дорогой. Прямой ход оставляет старую.
-  if (chosen === 1) return branchEdges(dest, 0);
+  // Въезд уже стал новой дорогой. За запас она садится на центр пути.
+  // Прямой ход оставляет старую.
+  if (chosen === 1) return roadAt(entranceHome(road) * (1 - smooth01(block.u)), dest);
   return branchEdges(road, 0);
 }
 
@@ -353,12 +384,16 @@ export function exitLaneOpen(edges: AsphaltEdges): boolean {
  * Полоса в единицах руля, когда боковая лента пропала.
  * Далеко справа сажает на край оставшейся дороги. Кто уже на ней — остаётся.
  */
+/** Полоса на левой дороге. Мир за её кромкой садится на край, от центра этой дороги. */
 export function landOnCarriage(origin: number, edges: AsphaltEdges, world: number, span: number): number {
   const scale = Number.isFinite(span) && span !== 0 ? span : 1;
-  const axis = Number.isFinite(origin) ? origin : 0;
-  const edge = axis + edges.leftInner - RIBBON_MARGIN;
+  const base = Number.isFinite(origin) ? origin : 0;
+  const mid = (edges.leftOuter + edges.leftInner) * 0.5;
+  const axis = base + mid;
+  const right = base + edges.leftInner - RIBBON_MARGIN;
+  const left = base + edges.leftOuter + RIBBON_MARGIN;
   const at = Number.isFinite(world) ? world : axis;
-  return (Math.min(at, edge) - axis) / scale;
+  return (Math.min(Math.max(at, left), right) - axis) / scale;
 }
 
 /** Точка снаружи кромки. Сторона берётся от центра дороги, не от нуля маршрута. */
@@ -402,9 +437,52 @@ function asphaltSpans(edges: AsphaltEdges): AsphaltSpan[] {
   return spans;
 }
 
+/** Внешняя лента стороны. Обочина меряет её полуширину, а не середину обеих лент. */
+export function outerRibbon(edges: AsphaltEdges, side: -1 | 1): { edge: number; center: number; half: number } | null {
+  const spans = asphaltSpans(edges);
+  let best: AsphaltSpan | null = null;
+  for (const span of spans) {
+    if (!best || (side < 0 ? span.left < best.left : span.right > best.right)) best = span;
+  }
+  if (!best) return null;
+  const half = (best.right - best.left) * 0.5;
+  const center = (best.left + best.right) * 0.5;
+  return { edge: side < 0 ? best.left : best.right, center, half };
+}
+
+/**
+ * Земля у точки lat.
+ * `dist` — метры от центра ближайшей ленты. На асфальте это 0.
+ * `half` — полуширина этой ленты, откос считается от неё.
+ */
+export function groundAt(edges: AsphaltEdges, lat: number): { dist: number; half: number } {
+  const spans = asphaltSpans(edges);
+  if (spans.length === 0) return { dist: Math.abs(lat), half: 0 };
+  for (const span of spans) {
+    if (lat >= span.left && lat <= span.right) {
+      return { dist: 0, half: (span.right - span.left) * 0.5 };
+    }
+  }
+  let best = spans[0];
+  let edge = best ? best.left : 0;
+  let bestD = Infinity;
+  for (const span of spans) {
+    const leftD = Math.abs(lat - span.left);
+    const rightD = Math.abs(lat - span.right);
+    const d = Math.min(leftD, rightD);
+    if (d < bestD) {
+      bestD = d;
+      best = span;
+      edge = leftD <= rightD ? span.left : span.right;
+    }
+  }
+  const half = best ? (best.right - best.left) * 0.5 : 0;
+  return { dist: half + Math.abs(lat - edge), half };
+}
+
 /**
  * Две ленты асфальта.
- * Лента держится за свой кусок, даже если carry переложил его в другой слот.
+ * Лента держится за свой кусок.
  * Кусок, который прыгнул дальше порога, начинает другую ленту.
  */
 export function followAsphalt(
@@ -718,11 +796,13 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
       maxEdge = (exitHalf - RIBBON_MARGIN) / span;
     }
   } else {
-    minEdge = (edge.leftOuter + RIBBON_MARGIN) / span;
-    maxEdge = (edge.leftInner - RIBBON_MARGIN) / span;
+    // Полоса байка считается от центра его дороги, не от нуля сплайна.
+    const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
+    minEdge = (edge.leftOuter + RIBBON_MARGIN - roadMid) / span;
+    maxEdge = (edge.leftInner - RIBBON_MARGIN - roadMid) / span;
     const reachable = (enter || exitGap(edge) <= 0.01) && exitWidth(edge) > RIDEABLE;
     if (reachable) {
-      maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN) / span);
+      maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN - roadMid) / span);
     }
   }
   if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };

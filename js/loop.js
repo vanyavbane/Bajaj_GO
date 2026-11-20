@@ -82,7 +82,7 @@ export function initLoop() {
 
     // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
     if (!G.jumpState.airborne) {
-      const demoTarget = defaultRunOffset(lanesOf(G.lanesAtS(G.playerS)));
+      const demoTarget = defaultRunOffset(lanesOf(G.riderLanesAt(G.playerS)));
       G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
@@ -289,7 +289,7 @@ export function initLoop() {
       G.comboTimer -= dt;
       if (G.comboTimer <= 0) G.comboCount = 0;
     }
-    const rideDirection = offsetDirection(lanesOf(G.lanesAtS(G.playerS)), G.laneOffset);
+    const rideDirection = offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset);
     const oncomingMult = oncomingMultiplier(rideDirection);
     G.score += distancePoints(G.speed, dt, rideDirection, G.comboCount);
 
@@ -317,7 +317,7 @@ export function initLoop() {
     if (!reach) return;
     G.speed = 0;
     G.lateralVelocity = 0;
-    const scale = G.laneDisplayScaleAtS(G.playerS);
+    const scale = G.riderLaneScaleAt(G.playerS);
     const sign = forkSide(G.laneOffset);
     G.laneOffset = sign * (reach + 0.12) / (Math.abs(scale) < 0.2 ? 1 : scale);
   }
@@ -338,7 +338,7 @@ export function initLoop() {
   }
 
   function updateHud(now) {
-    const activeMult = oncomingMultiplier(offsetDirection(lanesOf(G.lanesAtS(G.playerS)), G.laneOffset));
+    const activeMult = oncomingMultiplier(offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset));
     G.updateCockpitDashboard(now, G.speed, G.distance, G.score, activeMult, G.highBeamTimer > 0);
     G.updateEcoHud(now);
   }

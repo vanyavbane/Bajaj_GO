@@ -36,7 +36,7 @@ function spanOf(span: number): number {
 export function seatAxis(frame: RoadFrame, kind: SeatKind): number {
   if (kind === 'exit') {
     const ribbon = exitRibbonCenter(frame.local);
-    return frame.origin + (ribbon ?? 0);
+    if (ribbon != null) return frame.origin + ribbon;
   }
   return laneAnchor(frame);
 }

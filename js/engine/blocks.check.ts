@@ -81,23 +81,28 @@ for (const joint of [110, 260, 330]) {
   assert(mainHolds(before, after), `прямая дорога непрерывна на стыке ${joint}`);
 }
 
-for (const joint of [110, 260, 330]) {
+for (const joint of [110, 260]) {
   const before = frameAt(joint - 0.02, 1).world;
   const after = frameAt(joint + 0.02, 1).world;
   assert(mainHolds(before, after), `асфальт непрерывен на стыке въезда ${joint}`);
 }
+const seamBefore = frameAt(330 - 0.02, 1).world;
+const seamAfter = frameAt(330 + 0.02, 1).world;
+assert(
+  Math.abs(exitRibbonMid(seamBefore) - (seamAfter.leftOuter + seamAfter.leftInner) * 0.5) < 0.5,
+  'лента въезда переходит в новую дорогу без скачка',
+);
 const openFork = frameAt(250, 1).world;
 const midSeal = frameAt(300, 1).world;
 const arrived = frameAt(340, 1).world;
 assert(openFork.leftOuter === -10 && openFork.leftInner === 10, 'до закрытия старая дорога ещё своей ширины');
 const oldWidth = midSeal.leftInner - midSeal.leftOuter;
 assert(oldWidth < 16 && oldWidth > 1, 'на закрытии старая дорога сужается');
-assert(exitRibbonMid(midSeal) < exitRibbonMid(openFork), 'въезд идёт к новой дороге');
+assert(Math.abs((midSeal.leftOuter + midSeal.leftInner) * 0.5) < 0.2, 'старая дорога сужается на месте');
+assert(Math.abs(exitRibbonMid(midSeal) - exitRibbonMid(openFork)) < 0.5, 'въезд остаётся на своей линии');
 assert(midSeal.rightOuter > midSeal.rightInner + 1, 'на закрытии въезд ещё отдельная лента');
-assert(
-  Math.abs(arrived.leftOuter + EXIT_LANE_HALF) < 0.05 && Math.abs(arrived.leftInner - EXIT_LANE_HALF) < 0.05,
-  'после въезда остаётся новая дорога',
-);
+const home = exitRibbonMid(openFork);
+assert(Math.abs((arrived.leftOuter + arrived.leftInner) * 0.5 - home) < 1, 'сразу после въезда дорога на линии съезда');
 assert(arrived.rightInner === arrived.leftInner && arrived.rightOuter === arrived.rightInner, 'после въезда старой ленты нет');
 const declinedBefore = frameAt(330 - 0.02, -1).local;
 const declinedAfter = frameAt(330 + 0.02, -1).local;
@@ -109,7 +114,7 @@ assert(
 
 let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
 let entrance = 40;
-for (let distance = 250; distance <= 340; distance += 2) {
+for (let distance = 250; distance <= 428; distance += 2) {
   tracks = followAsphalt(tracks, frameAt(distance, 1).world);
   const spans = tracks.filter((span): span is AsphaltSpan => span != null);
   const right = spans.reduce((best, span) => (span.left + span.right > best.left + best.right ? span : best));

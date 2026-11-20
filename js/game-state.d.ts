@@ -313,6 +313,13 @@ export interface GameState {
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
+  /** Проезжая часть байка: одна лента, не оболочка обеих. */
+  drivenSpanAt: (s: number) => { left: number; right: number; mid: number; width: number };
+  drivenFrameAt: (s: number) => { edges: AsphaltEdges; origin: number };
+  /** Полосы проезжей части байка. На въезде это полосы новой дороги. */
+  drivenLanesAt: (s?: number) => CarriageLayout;
+  /** Полоса этой проезжей части в мировых метрах. */
+  drivenLaneAt: (s: number, offset: number) => number;
   roadBiomeAtS: (s: number) => number;
   splitCenterS: (playerS: number) => number;
   shoulder: ShoulderProfile;
@@ -344,6 +351,12 @@ export interface GameState {
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
   ribbonMarksAtS: (s: number) => { lat: number; w: number }[];
   solidMarksAtS: (s: number) => { lat: number; w: number }[];
+  ribbonSolidMarksAtS: (s: number) => { lat: number; w: number }[];
+  /** Оси бетонного отбойника. Пусто, если в точке нет дороги МКАД. */
+  medianLatsAt: (s: number) => number[];
+  /** Полосы дороги, на которой сидит байк. */
+  riderLanesAt: (s?: number) => CarriageLayout;
+  riderLaneScaleAt: (s?: number) => number;
   dominantBiomeAtS: (s: number) => number;
   randomRunLane: (s?: number) => number;
   /** Полосы дороги в точке: биом плюс односторонний или двусторонний проезд. */

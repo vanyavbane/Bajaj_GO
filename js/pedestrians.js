@@ -56,7 +56,7 @@ export function initPedestrians() {
       // подтягиваются к кромке дороги и уменьшаются при переходе.
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
-      const frame = G.roadsideFrameAt(ped.s);
+      const frame = G.drivenFrameAt(ped.s);
       const pose = G.besidePose(frame, { side: ped.side < 0 ? -1 : 1, gap: 1.15 + jitter * cw, inset: 0 });
       const lat = pose.lateral;
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;

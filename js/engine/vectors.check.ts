@@ -1,5 +1,5 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { branchEdges, exitClock, exitRibbonMid, followsExit, onExitRibbon } from './fork.ts';
+import { branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
 import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
@@ -121,12 +121,62 @@ assert(onExitRibbon(goreEdges.rightInner - 0.3, goreEdges) && followsExit(goreEd
 assert(!onExitRibbon(goreEdges.rightInner - 0.5, goreEdges) && !followsExit(goreEdges.rightInner - 0.5, goreEdges), 'в клине ни сиденье, ни курс ещё не на ленте');
 assert(followsExit(goreEdges.rightOuter + 2, goreEdges) && !onExitRibbon(goreEdges.rightOuter + 2, goreEdges), 'обочина едет курсом ленты, сиденье на ней не сидит');
 assert(Math.abs(justOn.x - lip.x) < Math.abs(justOff.x - lip.x), 'на асфальте ленты курс ленты, в клине ещё клин');
-const arriving = { leftOuter: -14, leftInner: -12, rightInner: 0.5, rightOuter: 10 };
-const onArrival = goreAt(5, arriving);
 const stillOut = goreAt(exitRibbonMid(goreEdges));
-assert(Math.abs(onArrival.x - 5) < Math.abs(stillOut.x - exitRibbonMid(goreEdges)), 'у новой дороги курс уже её курс, не угол съезда');
+const narrowed = { leftOuter: -2, leftInner: 2, rightInner: goreEdges.rightInner, rightOuter: goreEdges.rightOuter };
+const held = goreAt(exitRibbonMid(goreEdges), narrowed);
+assert(Math.abs(held.x - stillOut.x) < 0.5, 'сужение старой дороги не снимает курс съезда');
 const shut = { leftOuter: -10, leftInner: 10, rightInner: 32, rightOuter: 32.2 };
 const stayed = goreAt(20, shut);
 assert(Math.abs(stayed.x - 20) < 1, 'схлопнутая лента не утаскивает клин на ветку');
+
+const seamField = createVectorField();
+const seamClock = exitClock();
+const seamSpawn: VectorSpawn = {
+  key: 'seam',
+  nose: 0,
+  yaw: EXIT_RIGHT.yaw,
+  ownsFrom: seamClock.ownAfter,
+};
+const seamRoad = (distance: number) => sampleRoad({
+  forkDistance: distance,
+  half: 10,
+  chosen: 1,
+  baseOrigin: 0,
+  endWeight: 1,
+});
+const beforeS = seamClock.ownAfter - 0.02;
+const afterS = seamClock.ownAfter + 0.02;
+const beforeFrame = seamRoad(beforeS);
+const afterFrame = seamRoad(afterS);
+const beforeLat = exitRibbonMid(beforeFrame.local);
+const afterLat = laneAnchor(afterFrame);
+const beforePose = seamField.embed({
+  s: beforeS,
+  lat: beforeLat,
+  y: 0,
+  nose: 0,
+  edges: beforeFrame.local,
+  owned: [],
+  branches: [seamSpawn],
+  origin: 0,
+  turn: seamClock.turn,
+  ownedHere: false,
+}, straight);
+const afterPose = seamField.embed({
+  s: afterS,
+  lat: afterLat,
+  y: 0,
+  nose: 0,
+  edges: afterFrame.local,
+  owned: [seamSpawn],
+  branches: [seamSpawn],
+  origin: afterLat,
+  turn: seamClock.turn,
+  ownedHere: true,
+}, straight);
+assert(
+  Math.hypot(afterPose.x - beforePose.x, afterPose.z - beforePose.z) < 2,
+  'курс не рвётся, когда въезд становится дорогой',
+);
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('vectors ok');

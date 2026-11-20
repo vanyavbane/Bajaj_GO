@@ -1,5 +1,5 @@
-import { asphaltSpan, branchEdges, goreSpan, shellEdge } from './fork.ts';
-import { besidePose } from './roadside.ts';
+import { asphaltSpan, branchEdges, goreSpan, groundAt, shellEdge } from './fork.ts';
+import { besidePose, spanEdges } from './roadside.ts';
 import type { AsphaltEdges, RoadsideFrame } from './roadside.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -64,5 +64,16 @@ assert(openGore != null && openGore.left >= 10 && openGore.right > openGore.left
 const towed: AsphaltEdges = { leftOuter: -10, leftInner: 10, rightInner: 40, rightOuter: 49.5 };
 assert(goreSpan(towed) == null, 'увезённый съезд не тащит парк за собой');
 assert(goreSpan(carried) == null, 'у одной ленты клина для парка нет');
+const split = branchEdges(10, 22);
+assert(groundAt(split, 0).dist === 0, 'на асфальте прямой земля на уровне полотна');
+const goreLat = (split.leftInner + split.rightInner) * 0.5;
+const goreGround = groundAt(split, goreLat);
+assert(goreGround.dist > goreGround.half, 'клин не считается полотном одной широкой дороги');
+assert(groundAt(split, split.rightOuter + 4).half < 6, 'откос справа меряет ленту съезда, не обе ленты');
+const driven = spanEdges({ left: 27, right: 37 });
+const drivenLeft = besidePose({ edges: driven, origin: 0 }, { side: -1, gap: 2, inset: 0 });
+const drivenRight = besidePose({ edges: driven, origin: 0 }, { side: 1, gap: 2, inset: 0 });
+assert(drivenLeft.lateral === 25, 'объект слева стоит у дороги байка, не у дальней кромки прямой');
+assert(drivenRight.lateral === 39, 'объект справа стоит у той же дороги');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('roadside contract ok');

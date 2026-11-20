@@ -15,11 +15,14 @@ export function initHighbeam() {
     $('badge-beam').hidden = false;
 
     for (const car of G.trafficPool) {
-      const carLanes = G.lanesAtS(car.s);
+      const roads = G.roadsAt(car.s);
+      const carLanes = car.onExit && roads.exit ? roads.exit.lanes : roads.main.lanes;
+      const carLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
+      if (Math.abs(carLat - G.riderLatAt(G.playerS)) >= carLanes.laneWidth) continue;
       const lane = highbeamYieldLane(
         car, G.playerS, G.laneOffset, lanesOf(carLanes), carLanes.laneWidth
       );
-      if (lane == null || car.onExit) continue;
+      if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;
       car.speedKmh = carLanes.speeds[lane];
