@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, builtChain, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { exitCarryOrigin, exitChain, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
+import { exitCarryOrigin, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -38,7 +38,6 @@ assert(carried?.id === 'carry' && carried.kind === 'carry', 'съезд зака
 assert(placedBlock(plan, 0, 1) == null && placedBlock(plan, 430, 1) == null, 'вне рецепта блока нет');
 assert(builtChain(plan, 0).join() === 'split,fork', 'до выбора построено только подход');
 assert(builtChain(plan, 1).join() === 'split,fork,seal-main,carry', 'съезд достраивает свою цепочку');
-assert(exitChain(1).join() === builtChain(plan, 1).join(), 'игра читает ту же цепочку, что рецепт');
 
 const broken: ExitRecipe = {
   id: 'broken',

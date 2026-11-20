@@ -8,7 +8,7 @@
  * ChosenSide: -1 съезд закрыт, +1 съезд стал дорогой, 0 выбор ещё открыт.
  */
 
-import { RIGHT_EXIT, builtChain, compileExit, placedBlock, spanAt } from './blocks.ts';
+import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
 import type { BuildChoice, PlacedBlock } from './blocks.ts';
 
 export type { PlacedBlock };
@@ -38,18 +38,6 @@ export function splitPick(value: number): SplitPick {
   if (value === 1) return 1;
   if (value === 0) return 0;
   return -1;
-}
-
-/** Прямой ход закрывает съезд, правый слот его оставляет. */
-export function pickToSide(pick: BranchPick): -1 | 1 {
-  return pick === 1 ? 1 : -1;
-}
-
-/** Только точные -1 и 1 остаются стороной оси. Остальное — выбор ещё не сдвинул дорогу. */
-export function chosenSideOf(value: number): ChosenSide {
-  if (value === 1) return 1;
-  if (value === -1) return -1;
-  return 0;
 }
 
 /** Кромки двух лент, метры от оси. Слева числа отрицательные. */
@@ -87,8 +75,6 @@ export interface RoadLimits {
 export const EXIT_DIVERGE = EXIT_PLAN.diverge;
 /** Блок, где ветки уже разделены. Здесь игрок выбирает, что строить дальше. */
 export const EXIT_RUN = EXIT_PLAN.run;
-/** Последний блок цепочки: запас до границы зоны. */
-export const EXIT_MARGIN = EXIT_PLAN.margin;
 /** Нос съезда стоит на столько метров раньше границы зоны. */
 export const FORK_LEAD = EXIT_PLAN.length;
 /** Конец общего подхода: дальше строится только выбранная цепочка. */
@@ -148,7 +134,7 @@ export function carriedOriginAt(previous: readonly ZoneRoad[], zone: ZoneRoad): 
 }
 
 /** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
-export const FORK_SEAM = 0.16;
+const FORK_SEAM = 0.16;
 
 function smooth01(v: number): number {
   const t = Math.max(0, Math.min(1, v));
@@ -209,7 +195,7 @@ export interface ExitPhase {
 }
 
 /** Фаза по блоку под этой меткой. До носа и после последнего блока съезда нет. */
-export function exitPhase(d: number): ExitPhase {
+function exitPhase(d: number): ExitPhase {
   const span = spanAt(EXIT_PLAN, d);
   if (!span) return { kind: 'none', t: 0, open: 0 };
   if (span.kind === 'split') return { kind: 'diverge', t: span.u, open: smooth01(span.u) };
@@ -219,13 +205,8 @@ export function exitPhase(d: number): ExitPhase {
 }
 
 /** Какой блок стоит в этой метке и выбран ли уже его хвост. */
-export function exitBlockAt(d: number, chosen: ChosenSide): PlacedBlock | null {
+function exitBlockAt(d: number, chosen: ChosenSide): PlacedBlock | null {
   return placedBlock(EXIT_PLAN, d, chosen);
-}
-
-/** Имена блоков, которые выбор уже поставил. До выбора в списке только подход. */
-export function exitChain(chosen: ChosenSide): readonly string[] {
-  return builtChain(EXIT_PLAN, chosen);
 }
 
 /** Кромки поставленного блока. Непостроенный хвост остаётся развилкой, его ещё не закрывают. */
@@ -263,55 +244,13 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
       rightOuter: eh,
     };
   }
-  if (block.kind === 'road') {
-    // Съезд уже сошёл на нет в закрытии. Дальше одна прямая, без кончика в стороне.
-    return branchEdges(road, 0);
-  }
+  // Обычная дорога и отказ: одна прямая. Съезд уже сошёл на нет в закрытии.
   return branchEdges(road, 0);
-}
-
-/** Земля справа занята съездом: дома и деревья туда не ставятся. */
-export function exitReserved(d: number): boolean {
-  return d > 0.4 && d < FORK_LEAD - 0.4;
 }
 
 /** Середина правой ленты. Одна формула и для полос, и для курса. */
 export function exitRibbonMid(edges: AsphaltEdges): number {
   return (edges.rightInner + edges.rightOuter) * 0.5;
-}
-
-/**
- * Стык сечения и курса.
- * В конце закрытия прямой центр ленты в мире, в начале carry — центр дороги.
- * Это одно число: курс вычитает его и до захвата, и после.
- */
-export interface ExitSeamPoint {
-  /** Середина ленты в конце закрытия прямой. */
-  ribbon: number;
-  /** Центр дороги в начале carry. */
-  origin: number;
-}
-
-export function exitSeam(half: number, base = 0): ExitSeamPoint {
-  const clock = exitClock();
-  const carriedOrigin = exitCarryOrigin(half, base);
-  const seal = sampleRoad({
-    forkDistance: clock.ownAfter - 0.02,
-    half,
-    chosen: 1,
-    baseOrigin: base,
-    carriedOrigin,
-    endWeight: 1,
-  });
-  const carry = sampleRoad({
-    forkDistance: clock.ownAfter,
-    half,
-    chosen: 1,
-    baseOrigin: base,
-    carriedOrigin,
-    endWeight: 1,
-  });
-  return { ribbon: exitRibbonMid(seal.world), origin: carry.origin };
 }
 
 /** Старый сохранённый центр можно оставить, только если он уже равен формуле. */
@@ -429,14 +368,14 @@ export function laneAnchor(frame: RoadFrame): number {
 }
 
 /** Полоса в мировых метрах. riding оставляет байка на боковой ленте старым сдвигом. */
-export function laneMeters(lane: number, scale: number, half: number, frame: RoadFrame, riding: boolean): number {
+export function laneMeters(lane: number, scale: number, frame: RoadFrame, riding: boolean): number {
   const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
   const logical = (Number.isFinite(lane) ? lane : 0) * span;
-  if (riding) return frame.origin + roadLateral(logical, half, frame.local, true);
+  if (riding) return frame.origin + roadLateral(logical, frame.local, true);
   return laneAnchor(frame) + logical;
 }
 
-export function exitGap(edges: AsphaltEdges): number {
+function exitGap(edges: AsphaltEdges): number {
   return edges.rightInner - edges.leftInner;
 }
 
@@ -470,20 +409,6 @@ export function landOnCarriage(origin: number, edges: AsphaltEdges, world: numbe
 }
 
 /**
- * Полоса на ленте съезда. laneZero — нулевая полоса прямой в тех же метрах.
- * Пока съезд приклеен, машина остаётся на прямой. Пока лента сходится,
- * машина возвращается на свою полосу, а не прыгает в последний момент.
- */
-export function exitLaneWorld(edges: AsphaltEdges, laneWorld: number, laneZero: number): number {
-  if (!exitLaneOpen(edges) || !Number.isFinite(laneWorld) || !Number.isFinite(laneZero)) {
-    return laneWorld;
-  }
-  const mainWidth = Math.max(1, edges.leftInner - edges.leftOuter);
-  const keep = Math.max(0, Math.min(1, exitWidth(edges) / mainWidth));
-  return laneWorld + (exitRibbonMid(edges) - laneZero) * keep;
-}
-
-/**
  * Прямая лента ещё накрывает центр дороги, а не сжата в точку.
  * Центр — ось этой ленты. После съезда это уже не ноль маршрута.
  */
@@ -492,16 +417,6 @@ export function mainRoadOpen(edges: AsphaltEdges, center = 0): boolean {
   return edges.leftOuter < axis - 0.5
     && edges.leftInner > axis + 0.5
     && edges.leftInner - edges.leftOuter > 1;
-}
-
-/** Кромка дороги, по которой едут. Пока прямая жива — это она, даже если справа открыт съезд.
- *  Когда прямая сжата в точку, кромки берёт съезд, ставший дорогой. */
-export function carriageEdge(edges: AsphaltEdges, side: -1 | 1, center = 0): number {
-  if (mainRoadOpen(edges, center)) return side < 0 ? edges.leftOuter : edges.leftInner;
-  if (edges.leftInner - edges.leftOuter < 1 && exitWidth(edges) > 1) {
-    return side < 0 ? edges.rightInner : edges.rightOuter;
-  }
-  return side < 0 ? edges.leftOuter : edges.rightOuter;
 }
 
 /** Точка снаружи кромки. Сторона берётся от центра дороги, не от нуля маршрута. */
@@ -514,8 +429,7 @@ export function outwardFrom(edge: number, origin: number, gap: number): number {
 }
 
 /** Весь живой асфальт в точке: прямая и съезд вместе. Узкая прямая остаётся, пока у неё есть ширина. */
-export function asphaltSpan(edges: AsphaltEdges, _center = 0): { left: number; right: number; mid: number; width: number } {
-  void _center;
+export function asphaltSpan(edges: AsphaltEdges): { left: number; right: number; mid: number; width: number } {
   const shell = roadShell(edges);
   return {
     left: shell.left,
@@ -539,7 +453,7 @@ function spanCenter(span: AsphaltSpan): number {
 }
 
 /** Живые куски кадра: прямая и съезд, если у них есть ширина. */
-export function asphaltSpans(edges: AsphaltEdges): AsphaltSpan[] {
+function asphaltSpans(edges: AsphaltEdges): AsphaltSpan[] {
   const spans: AsphaltSpan[] = [];
   if (edges.leftInner - edges.leftOuter > 0.05) spans.push({ left: edges.leftOuter, right: edges.leftInner });
   if (edges.rightOuter - edges.rightInner > 0.05) spans.push({ left: edges.rightInner, right: edges.rightOuter });
@@ -747,17 +661,12 @@ export function onExitRibbon(logical: number, edges: AsphaltEdges): boolean {
   return logical <= edges.rightOuter + RIBBON_ENTER;
 }
 
-/** Байк стоит на асфальте съезда — захватываем его. */
-export function canGrabExit(logical: number, edges: AsphaltEdges): boolean {
-  return onExitRibbon(logical, edges);
-}
-
 /** Пока клин не открылся, уход влево отпускает съезд. */
 export function canReleaseExit(logical: number, edges: AsphaltEdges): boolean {
   return exitGap(edges) < ATTACHED_GAP && logical < edges.rightInner - RELEASE_INSET;
 }
 
-function riderOnExit(logical: number, _roadHalf: number, edges: AsphaltEdges): number | null {
+function riderOnExit(logical: number, edges: AsphaltEdges): number | null {
   const width = exitWidth(edges);
   if (width < 1) return null;
   const pad = Math.min(0.7, width * 0.25);
@@ -774,23 +683,15 @@ function riderOnExit(logical: number, _roadHalf: number, edges: AsphaltEdges): n
  * Без съезда это сама полоса. На съезде — точка на его ленте.
  * Другого бокового сдвига в игре нет.
  */
-export function roadLateral(
-  logical: number,
-  roadHalf: number,
-  edges: AsphaltEdges,
-  riding: boolean,
-): number {
+export function roadLateral(logical: number, edges: AsphaltEdges, riding: boolean): number {
   if (!Number.isFinite(logical)) return 0;
   if (!riding) return logical;
-  return logical + exitRiderShift(logical, roadHalf, edges);
+  return logical + exitRiderShift(logical, edges);
 }
 
-/**
- * Сдвиг на ленту съезда. Байк остаётся на ветке всё время, пока она сбоку:
- * его не тянет обратно к полосе прямой дороги.
- */
-export function exitRiderShift(logical: number, roadHalf: number, edges: AsphaltEdges): number {
-  const world = riderOnExit(logical, roadHalf, edges);
+/** Сдвиг на ленту съезда. Байк остаётся на ветке, пока она сбоку. */
+function exitRiderShift(logical: number, edges: AsphaltEdges): number {
+  const world = riderOnExit(logical, edges);
   if (world == null) return 0;
   return world - logical;
 }

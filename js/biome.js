@@ -5,11 +5,11 @@ import { carriageAt, carriageLat, departedRoad, laneMarks, riderCarriage, roadsA
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { EXIT_LANE_HALF, arrivalHalf, asphaltSpan, branchPick, carriedOriginAt, exitChain, exitClock, exitReserved, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
+import { EXIT_LANE_HALF, arrivalHalf, asphaltSpan, branchPick, carriedOriginAt, exitClock, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, originBeforeZones, outwardFrom, roadCenter, roadShell, sampleRoad, shoulderHeight, shoulderLats, splitPick, storedOriginHolds } from './engine/fork.js';
 import { courseBranches, decideZone, zoneRoadOf } from './engine/route.js';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
-import { besidePose, medianFits, medianPose, medianRoom } from './engine/roadside.js';
+import { besidePose } from './engine/roadside.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -55,35 +55,6 @@ function biomeIndex(value) {
 }
 
 const LANE_CONFIG = BIOMES.map(laneLayoutOf);
-
-/** Публичный конфиг полос биома. Принимает id строкой или индекс. */
-function getLaneConfig(biomeId) {
-  let idx = 0;
-  if (typeof biomeId === 'string') {
-    const found = BIOMES.findIndex((b) => b.id === biomeId);
-    if (found >= 0) idx = found;
-  } else {
-    idx = biomeIndex(biomeId);
-  }
-  return LANE_CONFIG[idx];
-}
-
-/** Публичный профиль биома в точке s. */
-function biomeProfile(biomeId, s) {
-  const idx = typeof biomeId === 'string'
-    ? Math.max(0, BIOMES.findIndex((b) => b.id === biomeId))
-    : biomeIndex(biomeId);
-  const p = PROFILES[idx] || PROFILES[0];
-  return {
-    id: BIOMES[idx].id,
-    x: p.x(s),
-    dx: p.dx(s),
-    ddx: p.ddx(s),
-    y: p.y(s),
-    dy: p.dy(s),
-    ddy: p.ddy(s)
-  };
-}
 
 /* ---------- Выбор следующего биома ---------- */
 function getBiomeChoices(currentBiome, visitCounts) {
@@ -385,11 +356,6 @@ function biomeRoadDY(s) {
   return mixDeriv(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.t, r.t1);
 }
 
-function biomeRoadDDY(s) {
-  const r = roadProfiles(s);
-  return mixSecond(r.a.y(s), r.b.y(s), r.a.dy(s), r.b.dy(s), r.a.ddy(s), r.b.ddy(s), r.t, r.t1, r.t2);
-}
-
 /* ---------- Ширина дороги и развилка ---------- */
 function baseRoadWidthAtMeters(meters) {
   const r = roadAtMeters(meters);
@@ -508,15 +474,6 @@ function embedRoad(s, lat) {
   return vectors.place(roadHeading(s), lat);
 }
 
-/** Односторонний съезд или двусторонняя дорога биома. Ответ берётся из фазы кадра. */
-function roadWayAt(s) {
-  return roadCarriageAt(s).way;
-}
-
-function roadPhaseAt(s) {
-  return roadCarriageAt(s).phase;
-}
-
 function roadCurvature(s) {
   const lat = typeof G.riderLatAt === 'function' ? G.riderLatAt(s) : 0;
   return embedRoad(s, lat).curvature;
@@ -568,10 +525,6 @@ function routeAt(s) {
   const meters = Math.max(0, blendMetersAt(s));
   const zone = Math.floor(meters / ZONE_M);
   return { meters, zone, local: meters - zone * ZONE_M };
-}
-
-function forkChosenSideAtS(s) {
-  return forkChosenSideForZone(routeAt(s).zone);
 }
 
 /** 0…1 — насколько выбор развилки уже введён в геометрию. В момент
@@ -676,7 +629,7 @@ function forkCloseAtS(s) {
 /** Оболочка живого асфальта: прямая и съезд, пока у каждой есть ширина. */
 function asphaltSpanAt(s) {
   const frame = frameAt(s);
-  return asphaltSpan(frame.world, frame.origin);
+  return asphaltSpan(frame.world);
 }
 
 function laneSpanAt(s) {
@@ -704,13 +657,9 @@ function playerLive(s) {
   return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind);
 }
 
-function exitReservedAt(s) {
-  return exitReserved(forkOffset(Math.max(0, blendMetersAt(s)), ZONE_M));
-}
-
 /** Единственный перевод полосы в мировые метры. riding — байк ещё на боковой ленте. */
 function roadMetersAt(s, laneOffset, riding) {
-  return laneMeters(laneOffset, laneSpanAt(s), roadWidthAtS(s) * 0.5, frameAt(s), riding);
+  return laneMeters(laneOffset, laneSpanAt(s), frameAt(s), riding);
 }
 
 /** Байк на дороге или на ленте съезда. Пропавшая взятая лента вливается в центр кадра. */
@@ -1342,8 +1291,6 @@ function updateBiome(dt) {
     id: BIOMES[dominant].id
   };
   G.biomeDominant = dominant;
-  G.biomeCityWeight = cityWeight;
-  G.biomeMkadWeight = mkadWeight;
   G.biomeTransition = {
     active: G.started && !G.ended && live.t > 0.001 && live.t < 0.999,
     from: live.a,
@@ -1356,17 +1303,12 @@ function updateBiome(dt) {
   G.splitState = {
     active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < layout.ownAfter,
     zone,
-    meters: splitM,
-    splitMeters: splitM,
     s: splitM - G.biomeOffsetM,
     d: splitD,
     side: bannerSide,
-    previewSide: bannerSide,
     chosen,
     chosenSide,
     choices: choices.slice(),
-    chosenBiome: G.pendingBiome,
-    autoAt: layout.choiceAt
   };
 
   updateBanner(dt);
@@ -1488,20 +1430,16 @@ function biomePauseValue() {
 
 /* ---------- Инициализация ---------- */
 export function initBiome() {
-  G.biomeMetersAt = blendMetersAt;
   G.biomeRoadX = biomeRoadX;
   G.biomeRoadDX = biomeRoadDX;
   G.biomeRoadDDX = biomeRoadDDX;
   G.biomeRoadY = biomeRoadY;
   G.biomeRoadDY = biomeRoadDY;
-  G.biomeRoadDDY = biomeRoadDDY;
   G.cityWeightAtS = cityWeightAtS;
   G.mkadWeightAtS = mkadWeightAtS;
   G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
-  G.roadPhaseAt = roadPhaseAt;
-  G.roadChoiceAt = (s) => decisionAt(routeAt(s).zone).choice;
   G.sideRibbonAt = (s) => sideRibbon(roadCarriageAt(s), frameAt(s));
   G.roadsAt = roadsHere;
   G.trafficLatAt = trafficLatAt;
@@ -1511,20 +1449,14 @@ export function initBiome() {
   G.embedRoad = embedRoad;
   G.roadCurvature = roadCurvature;
   G.roadBlockAt = (s) => frameAt(s).block;
-  G.builtBlocksAt = (s) => exitChain(forkChosenSideAtS(s));
   G.riderLatAt = riderLatAt;
-  G.exitReservedAt = exitReservedAt;
-  G.forkChosenSideAtS = forkChosenSideAtS;
   G.forkCloseAtS = forkCloseAtS;
   G.roadEdgesAt = roadEdgesAt;
   G.roadsideFrameAt = (s) => {
     const frame = frameAt(s);
-    return { edges: frame.world, chosenSide: frame.chosen, origin: frame.origin };
+    return { edges: frame.world, origin: frame.origin };
   };
   G.besidePose = besidePose;
-  G.medianRoom = medianRoom;
-  G.medianFits = medianFits;
-  G.medianPose = medianPose;
   G.asphaltSpan = asphaltSpanAt;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
@@ -1532,16 +1464,11 @@ export function initBiome() {
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
   G.laneDisplayScaleAtS = laneDisplayScaleAtS;
-  G.roadWayAt = roadWayAt;
   G.laneMarksAtS = laneMarksAtS;
   G.ribbonMarksAtS = ribbonMarksAtS;
   G.solidMarksAtS = solidMarksAtS;
   G.laneWorldOffsetAtS = laneWorldOffsetAtS;
   G.dominantBiomeAtS = dominantBiomeAtS;
-  G.nearestRunLane = nearestRunLane;
-  G.biomeProfile = biomeProfile;
-  G.getLaneConfig = getLaneConfig;
-  G.getBiomeChoices = getBiomeChoices;
   G.forkView = 0;
   G.biomeState = null;
   G.biomeTransition = { active: false, from: 0, to: 0, t: 0 };
@@ -1666,7 +1593,7 @@ export function initBiomeWorld() {
           const edge = sideSign < 0 ? shell.left : shell.right;
           const gap = Math.max(8, entry.lat - Math.abs(edge - (shell.left + shell.right) * 0.5));
           const pose = besidePose(
-            { edges: frame.world, chosenSide: frame.chosen, origin: frame.origin },
+            { edges: frame.world, origin: frame.origin },
             { side: sideSign, gap, inset: 0 }
           );
           if (pose.lateral == null) continue;

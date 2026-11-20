@@ -8,7 +8,7 @@
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
 import type { RouteChoice } from './route.ts';
-import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, lanesOf, outerLane, type CarriageLayout, type RoadWay } from './lanes.ts';
+import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, lanesOf, type CarriageLayout, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
 
@@ -43,7 +43,7 @@ function mainHalf(frame: RoadFrame): number {
 }
 
 /** Полуширина асфальта, на котором сейчас стоят полосы этой фазы. */
-export function carriageHalf(frame: RoadFrame, phase: CarriagePhase): number {
+function carriageHalf(frame: RoadFrame, phase: CarriagePhase): number {
   if (phase === 'seal') return Math.max(0, exitWidth(frame.local) * 0.5);
   return mainHalf(frame);
 }
@@ -174,12 +174,6 @@ export function carriageLat(axis: number, scale: number, offset: number): number
   const lane = Number.isFinite(offset) ? offset : 0;
   const origin = Number.isFinite(axis) ? axis : 0;
   return origin + lane * span;
-}
-
-/** Мир крайней правой полосы, которая едет по ходу этой дороги. */
-export function ribbonCarLat(ribbon: LiveCarriage): number {
-  const lane = outerLane(lanesOf(ribbon.lanes), 'right', 'with');
-  return carriageLat(ribbon.axis, ribbon.scale, lane ? lane.offset : 0);
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */

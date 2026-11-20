@@ -3,9 +3,9 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { carFollowsRibbon, carriageAt, carriagePhase, departedRoad, laneFit, laneMarks, ribbonCarLat, riderCarriage, sideRibbon, solidMarks } from './carriage.ts';
+import { carFollowsRibbon, carriageAt, carriagePhase, departedRoad, laneFit, laneMarks, riderCarriage, sideRibbon, solidMarks } from './carriage.ts';
 import { EXIT_LANE_HALF, exitCarryOrigin, exitClock, exitRibbonCenter, exitRibbonMid, laneAnchor, sampleRoad } from './fork.ts';
-import { EXIT_LANE_WIDTH, laneDashOffsets } from './lanes.ts';
+import { EXIT_LANE_WIDTH, laneGapOffsets, lanesOf } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
 import { RIGHT_FORK, courseLayoutOf, courseOwns, createVectorField, openCourse, ownedCourse } from './vectors.ts';
 
@@ -174,7 +174,7 @@ leftMarks.forEach((mark) => {
 });
 assert(departedRoad(lateSeal, city) == null, 'когда прямая сошла на нет, её штрихов нет');
 
-const roadGaps = laneDashOffsets(openRoad.lanes.offsets, openRoad.lanes.oncomingCount);
+const roadGaps = laneGapOffsets(lanesOf(openRoad.lanes));
 const roadMarks = laneMarks(openRoad);
 assert(roadMarks.length === roadGaps.length && roadMarks.every((mark) => mark.w === 1), 'штрихи шоссе — промежутки его полос');
 roadMarks.forEach((mark, index) => {
@@ -209,5 +209,3 @@ assert(!carFollowsRibbon({ ...join, mainPhase: 'seal', following: false }), 'к�
 assert(!carFollowsRibbon({ ...join, mainPhase: 'carry', hasExit: false, following: true }), 'на carry отдельной дороги съезда нет');
 assert(!carFollowsRibbon({ ...join, changingLane: true }), 'перестраивающаяся машина на съезд не прыгает');
 assert(!carFollowsRibbon({ ...join, lane: 2 }), 'не крайняя полоса остаётся на своей дороге');
-const exitLane = openRider.lanes.offsets[openRider.lanes.offsets.length - 1];
-assert(Math.abs(ribbonCarLat(openRider) - (openRider.axis + exitLane * openRider.scale)) < 1e-6, 'машина съезда стоит на крайней полосе ленты');

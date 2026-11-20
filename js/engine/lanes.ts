@@ -247,10 +247,6 @@ export function readLanes(state: LaneSource | null | undefined): LaneConfig {
   return { count, oncoming, offsets: laneOffsets, speeds: laneSpeeds, startLane };
 }
 
-/**
- * Штрихи между соседними полосами. Граница встречных и попутных сюда не входит:
- * её рисует жёлтая осевая. Смещения берутся из конфига, а не из «номер × ширина».
- */
 /** Штрих между соседними полосами одного направления. Смена направления — жёлтая ось, не штрих. */
 export function laneGapOffsets(lanes: readonly Lane[]): number[] {
   const marks: number[] = [];
@@ -261,10 +257,6 @@ export function laneGapOffsets(lanes: readonly Lane[]): number[] {
     marks.push((left.offset + right.offset) * 0.5);
   }
   return marks;
-}
-
-export function laneDashOffsets(offsets: readonly number[] | null | undefined, oncomingCount: number): number[] {
-  return laneGapOffsets(lanesOf({ offsets, oncomingCount, way: 'two-way' }));
 }
 
 /** Одна и та же полоса, даже если у соседних биомов разный номер. Шаг полос от 4.3 м. */

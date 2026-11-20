@@ -1,7 +1,7 @@
 import { exitWidth, mainRoadOpen, outwardFrom, shellEdge } from './fork.ts';
-import type { AsphaltEdges, ChosenSide } from './fork.ts';
+import type { AsphaltEdges } from './fork.ts';
 
-export type { AsphaltEdges, ChosenSide };
+export type { AsphaltEdges };
 
 /**
  * Контракт постановки окружения.
@@ -20,8 +20,7 @@ export type AssetSide = -1 | 1;
 /** Кадр дороги, от которого ставится декор в одной точке s. */
 export interface RoadsideFrame {
   edges: AsphaltEdges;
-  chosenSide: ChosenSide;
-  /** Мировой центр дороги. От него считается, какая кромка внешняя. */
+  /** Мировой центр дороги. От него считается, насколько декор ушёл от оси. */
   origin: number;
 }
 
@@ -64,28 +63,13 @@ function outward(n: number): number {
   return Math.max(0, finite(n));
 }
 
-/** Обе обочины живой дороги открыты. Мёртвая лента уже схлопнута в кромках,
- *  поэтому выбор сам по себе сторону не прячет: иначе отказ от съезда
- *  убирал бы правую обочину прямой, а взятый съезд — левую кромку новой дороги. */
-export function sideOpen(_chosenSide: ChosenSide, _side: AssetSide): boolean {
-  void _chosenSide;
-  void _side;
-  return true;
-}
-
-/** Дальний живой асфальт. Декор стоит снаружи оболочки, не снаружи слота. */
-export function outerEdge(edges: AsphaltEdges, side: AssetSide, _center = 0): number {
-  void _center;
-  return shellEdge(edges, side);
-}
-
 /**
  * Смещение бокового объекта. Точка постановки отодвигается от кромки
  * на зазор и на собственный выступ меша, поэтому грань не попадает на асфальт.
+ * Выбор ветки сторону не прячет: мёртвая лента уже схлопнута в кромках.
  */
 export function besidePose(frame: RoadsideFrame, asset: BesideAsset): RoadsidePose {
-  if (!sideOpen(frame.chosenSide, asset.side)) return HIDDEN;
-  const edge = outerEdge(frame.edges, asset.side, frame.origin);
+  const edge = shellEdge(frame.edges, asset.side);
   const shellMid = (shellEdge(frame.edges, -1) + shellEdge(frame.edges, 1)) * 0.5;
   const lateral = outwardFrom(edge, shellMid, outward(asset.gap) + outward(asset.inset));
   return { lateral, absLat: Math.abs(lateral - frame.origin) };
