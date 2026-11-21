@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { EXIT_DIVERGE, EXIT_RUN, asphaltShell, followAsphalt, innerTrackEdge, outerRibbon, outwardFrom, pinchAsphalt, pinchShell, shoulderLats } from './engine/fork.js';
+import { stripSeam } from './engine/roadside.js';
 
 export function initRoadSurface() {
 
@@ -19,6 +20,8 @@ export function initRoadSurface() {
   const sampleS = new Float32Array(ROW);
   const sampleY = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
+  const solidLat = [new Float32Array(ROW), new Float32Array(ROW)];
+  const ribbonLat = [new Float32Array(ROW), new Float32Array(ROW)];
 
   const _laneDir = new THREE.Vector3();
   const _laneRight = new THREE.Vector3();
@@ -35,6 +38,24 @@ export function initRoadSurface() {
 
   function shellAt(row) {
     return roadShells[row] ?? null;
+  }
+
+  /** Предыдущий ряд схлопывается в точку, текущий пишется без ширины. Клин не затягивается. */
+  function pinchRow(pos, row, verts) {
+    if (row < 1) return;
+    const base = (row - 1) * verts;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (let i = 0; i < verts; i++) {
+      x += pos.getX(base + i);
+      y += pos.getY(base + i);
+      z += pos.getZ(base + i);
+    }
+    x /= verts;
+    y /= verts;
+    z /= verts;
+    for (let i = 0; i < verts; i++) pos.setXYZ(base + i, x, y, z);
   }
 
   function shellWide(shell) {
@@ -108,7 +129,31 @@ export function initRoadSurface() {
       sampleY[r] = G.roadY(s);
       sampleCity[r] = G.cityWeightAtS(s);
     }
+    if (G.rememberRibbonHeadings) G.rememberRibbonHeadings(sampleS);
   }
+
+  function sampleMarkLats() {
+    for (let r = 0; r < ROW; r++) {
+      const s = sampleS[r];
+      const marks = G.solidMarksAtS(s);
+      solidLat[0][r] = marks[0] ? marks[0].lat : NaN;
+      solidLat[1][r] = marks[1] ? marks[1].lat : NaN;
+      const ribbon = G.ribbonSolidMarksAtS(s);
+      ribbonLat[0][r] = ribbon[0] ? ribbon[0].lat : NaN;
+      ribbonLat[1][r] = ribbon[1] ? ribbon[1].lat : NaN;
+    }
+  }
+
+  function storedLat(buf) {
+    return (r) => {
+      const lat = buf[r];
+      return Number.isNaN(lat) ? null : lat;
+    };
+  }
+  const solidAt0 = storedLat(solidLat[0]);
+  const solidAt1 = storedLat(solidLat[1]);
+  const ribbonAt0 = storedLat(ribbonLat[0]);
+  const ribbonAt1 = storedLat(ribbonLat[1]);
 
   /* ---------------- Геометрия лент ---------------- */
   function shadeStrip(geo) {
@@ -190,9 +235,7 @@ export function initRoadSurface() {
   const accentLineL = makeIslandRibbon(accentLineMatL);
   const accentLineR = makeIslandRibbon(accentLineMatR);
 
-  for (const mesh of [sidewalkLeftMesh, sidewalkRightMesh, curbLeftMesh, curbRightMesh,
-    centerDoubleLine1, centerDoubleLine2, ribbonDoubleLine1, ribbonDoubleLine2,
-    edgeLineLeft, edgeLineRight, edgeLineLeftB, edgeLineRightB]) {
+  for (const mesh of [sidewalkLeftMesh, sidewalkRightMesh, curbLeftMesh, curbRightMesh]) {
     mesh.receiveShadow = false;
   }
 
@@ -254,7 +297,7 @@ export function initRoadSurface() {
   const dashMesh = new THREE.InstancedMesh(dashGeo, G.M.lineWhite, MAX_DASHES);
   dashMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   dashMesh.frustumCulled = false;
-  dashMesh.receiveShadow = false;
+  dashMesh.receiveShadow = true;
   G.scene.add(dashMesh);
 
   /* Бетонный отбойник по оси МКАД. Сплошной участок 90 м, проезд 10 м.
@@ -271,7 +314,6 @@ export function initRoadSurface() {
   G.scene.add(blockMesh);
 
   const dummy = new THREE.Object3D();
-  const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
   function updateDashes(playerS, dense) {
     const spacing = 11;
@@ -291,9 +333,8 @@ export function initRoadSurface() {
       for (const mark of G.laneMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
       for (const mark of G.ribbonMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
     }
-    for (let i = used; i < MAX_DASHES; i++) dashMesh.setMatrixAt(i, hidden);
     dashMesh.count = used;
-    dashMesh.instanceMatrix.needsUpdate = true;
+    if (used > 0) dashMesh.instanceMatrix.needsUpdate = true;
   }
 
   function barrierGapAt(s) {
@@ -344,9 +385,8 @@ export function initRoadSurface() {
         blockMesh.setMatrixAt(used++, dummy.matrix);
       }
     }
-    for (let i = used; i < MAX_BLOCKS; i++) blockMesh.setMatrixAt(i, hidden);
     blockMesh.count = used;
-    blockMesh.instanceMatrix.needsUpdate = true;
+    if (used > 0) blockMesh.instanceMatrix.needsUpdate = true;
   }
 
   /* ---------------- Отбойники вдоль кромки асфальта ----------------
@@ -388,15 +428,22 @@ export function initRoadSurface() {
   const guardRightMesh = makeGuardRibbon();
 
   function updateGuardRibbon(mesh, side) {
+    if (!metroAhead()) {
+      mesh.visible = false;
+      return;
+    }
     const pos = mesh.geometry.attributes.position;
     const arr = pos.array;
     let maxWeight = 0;
+    let prevEdge = null;
     for (let r = 0; r < ROW; r++) {
       const s = sampleS[r];
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight > maxWeight) maxWeight = weight;
       const edge = drivenEdge(r, side);
-      const vis = weight > 0.02 && edge != null ? weight : 0;
+      const jumped = stripSeam(prevEdge, edge);
+      if (edge != null) prevEdge = edge;
+      const vis = jumped ? 0 : (weight > 0.02 && edge != null ? weight : 0);
       const lat = edge == null ? shellMid(r) : edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
       const half = GUARD_HALF * vis;
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
@@ -416,10 +463,18 @@ export function initRoadSurface() {
       put(1, right, low);
       put(2, right, high);
       put(3, left, high);
+      if (jumped) pinchRow(pos, r, 4);
     }
     pos.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
     mesh.visible = maxWeight > 0.02;
+  }
+
+  function metroAhead() {
+    for (let r = 0; r < ROW; r++) {
+      if (sampleCity[r] > 0.02 || G.mkadWeightAtS(sampleS[r]) > 0.02) return true;
+    }
+    return false;
   }
 
   const GUARD_POST_STEP = 8;
@@ -451,10 +506,9 @@ export function initRoadSurface() {
         guardPostMesh.setMatrixAt(used++, dummy.matrix);
       }
     }
-    for (let i = used; i < MAX_GUARD_POSTS; i++) guardPostMesh.setMatrixAt(i, hidden);
     guardPostMesh.count = used;
-    guardPostMesh.instanceMatrix.needsUpdate = true;
     guardPostMesh.visible = used > 0;
+    if (used > 0) guardPostMesh.instanceMatrix.needsUpdate = true;
   }
 
   /* ---------------- Ленты с переменной шириной ----------------
@@ -483,7 +537,6 @@ export function initRoadSurface() {
   }
 
   function updateRoadRibbon() {
-    roadRightMat.envMapIntensity = G.M.road.envMapIntensity;
     gapMat.color.copy(G.M.grass.color);
     const raw = [];
     let prev = [null, null];
@@ -570,15 +623,22 @@ export function initRoadSurface() {
 
   /** Тротуар и бордюр города: снаружи дороги байка. */
   function updateCityStrip(mesh, side, baseWidth, width, yOffset) {
-    const pos = mesh.geometry.attributes.position;
     let maxWeight = 0;
+    for (let r = 0; r < ROW; r++) if (sampleCity[r] > maxWeight) maxWeight = sampleCity[r];
+    mesh.visible = maxWeight > 0.02;
+    if (!mesh.visible) return;
+    const pos = mesh.geometry.attributes.position;
+    maxWeight = 0;
+    let prevEdge = null;
     for (let r = 0; r < ROW; r++) {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const s = sampleS[r];
       const edge = drivenEdge(r, side);
+      const jumped = stripSeam(prevEdge, edge);
+      if (edge != null) prevEdge = edge;
       const outward = side < 0 ? -1 : 1;
-      const halfW = edge == null ? 0 : width * 0.5 * cw;
+      const halfW = edge == null || jumped ? 0 : width * 0.5 * cw;
       const center = (edge == null ? shellMid(r) : edge) + outward * (baseWidth * cw + halfW);
       const y = sampleY[r] + yOffset;
       const course = edge == null ? center : edge;
@@ -587,6 +647,7 @@ export function initRoadSurface() {
       const idx = r * 2;
       pos.setXYZ(idx, a.x, y, a.z);
       pos.setXYZ(idx + 1, b.x, y, b.z);
+      if (jumped) pinchRow(pos, r, 2);
     }
     pos.needsUpdate = true;
     mesh.visible = maxWeight > 0.02;
@@ -595,6 +656,8 @@ export function initRoadSurface() {
   function updateSlopeRibbons() {
     const posL = slopeLeftMesh.geometry.attributes.position;
     const posR = slopeRightMesh.geometry.attributes.position;
+    let prevLeft = null;
+    let prevRight = null;
     for (let r = 0; r < ROW; r++) {
       const s = sampleS[r];
       const cy = sampleY[r];
@@ -619,12 +682,39 @@ export function initRoadSurface() {
         return [p.x, cy + height, p.z];
       };
       const idx = r * 3;
+      const lipEdge = (side) => {
+        if (!shellWide(shellAt(r))) return null;
+        const lip = slopeRibbon(r, side);
+        return lip ? lip.edge : null;
+      };
+      const leftEdge = lipEdge(-1);
+      const rightEdge = lipEdge(1);
+      const leftJump = stripSeam(prevLeft, leftEdge);
+      const rightJump = stripSeam(prevRight, rightEdge);
+      if (leftEdge != null) prevLeft = leftEdge;
+      if (rightEdge != null) prevRight = rightEdge;
       posL.setXYZ(idx,     ...at(-1, left.far, sh.farY));
       posL.setXYZ(idx + 1, ...at(-1, left.berm, sh.bermY));
       posL.setXYZ(idx + 2, ...at(-1, left.lip, sh.lipY));
       posR.setXYZ(idx,     ...at(1, rLip, rLipY));
       posR.setXYZ(idx + 1, ...at(1, rBerm, rBermY));
       posR.setXYZ(idx + 2, ...at(1, rFar, rFarY));
+      if (leftJump) {
+        const x = posL.getX(idx + 2);
+        const y = posL.getY(idx + 2);
+        const z = posL.getZ(idx + 2);
+        posL.setXYZ(idx, x, y, z);
+        posL.setXYZ(idx + 1, x, y, z);
+        pinchRow(posL, r, 3);
+      }
+      if (rightJump) {
+        const x = posR.getX(idx);
+        const y = posR.getY(idx);
+        const z = posR.getZ(idx);
+        posR.setXYZ(idx + 1, x, y, z);
+        posR.setXYZ(idx + 2, x, y, z);
+        pinchRow(posR, r, 3);
+      }
     }
     posL.needsUpdate = true;
     posR.needsUpdate = true;
@@ -732,10 +822,24 @@ export function initRoadSurface() {
     pos.needsUpdate = true;
   }
 
+  let islandOn = false;
+
   function updateIsland(playerS) {
     const splitS = G.splitCenterS(playerS);
     const amount = G.splitAmountAtS(splitS + EXIT_DIVERGE);
     const active = amount > 0.2;
+    if (!active) {
+      if (!islandOn) return;
+      islandOn = false;
+      accentLineL.visible = false;
+      accentLineR.visible = false;
+      arrowLeftA.visible = false;
+      arrowLeftB.visible = false;
+      arrowRightA.visible = false;
+      arrowRightB.visible = false;
+      return;
+    }
+    islandOn = true;
 
     const choices = G.splitState && G.splitState.choices ? G.splitState.choices : null;
     const leftBiome = choices ? G.BIOMES[choices[0]] : null;
@@ -809,18 +913,12 @@ export function initRoadSurface() {
     updateCityStrip(sidewalkRightMesh, 1, 0.35, 3.2, 0.11);
 
     // Двойная сплошная — граница хода этой дороги, не клин развилки.
-    const solidAt = (s, index) => {
-      const marks = G.solidMarksAtS(s);
-      return marks[index] ? marks[index].lat : null;
-    };
-    updateLateralStrip(centerDoubleLine1, (r) => solidAt(sampleS[r], 0), 0.13, 0.08);
-    updateLateralStrip(centerDoubleLine2, (r) => solidAt(sampleS[r], 1), 0.13, 0.08);
-    const ribbonSolidAt = (s, index) => {
-      const marks = G.ribbonSolidMarksAtS(s);
-      return marks[index] ? marks[index].lat : null;
-    };
-    updateLateralStrip(ribbonDoubleLine1, (r) => ribbonSolidAt(sampleS[r], 0), 0.13, 0.08);
-    updateLateralStrip(ribbonDoubleLine2, (r) => ribbonSolidAt(sampleS[r], 1), 0.13, 0.08);
+    // Обе линии делят один запрос на точку, а не спрашивают разметку заново.
+    sampleMarkLats();
+    updateLateralStrip(centerDoubleLine1, solidAt0, 0.13, 0.08);
+    updateLateralStrip(centerDoubleLine2, solidAt1, 0.13, 0.08);
+    updateLateralStrip(ribbonDoubleLine1, ribbonAt0, 0.13, 0.08);
+    updateLateralStrip(ribbonDoubleLine2, ribbonAt1, 0.13, 0.08);
     updateLateralStrip(edgeLineLeft, (r) => trackEdge(0, r, -1), 0.16, 0.025);
     updateLateralStrip(edgeLineRight, (r) => trackEdge(0, r, 1), 0.16, 0.025);
     updateLateralStrip(edgeLineLeftB, (r) => trackEdge(1, r, -1), 0.16, 0.025);

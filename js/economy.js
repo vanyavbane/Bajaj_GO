@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { accidentArrival } from './engine/carriage.js';
 import { lanesOf, nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
@@ -1183,9 +1184,11 @@ function exitLane(s, side) {
         // Та же дорога, по которой машина ехала. Если въезд уже стал дорогой,
         // это её продолжение, не полосы оставшейся прямой.
         const roads = G.roadsAt(pendingAccidentCar.s);
-        const stay = !!(pendingAccidentCar.onExit && roads.exit);
+        const wasOnExit = !!pendingAccidentCar.onExit;
+        const stay = !!(wasOnExit && roads.exit);
         const lanes = stay ? roads.exit.lanes : roads.main.lanes;
-        const idx = nearestLaneIndex(lanes.offsets, pendingAccidentCar.lateralOffset);
+        const seat = accidentArrival(wasOnExit, stay, lanesOf(lanes), pendingAccidentCar.lateralOffset);
+        const idx = nearestLaneIndex(lanes.offsets, seat);
         pendingAccidentCar.onExit = stay;
         pendingAccidentCar.laneIdx = idx;
         pendingAccidentCar.targetLaneIdx = idx;

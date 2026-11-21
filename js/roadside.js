@@ -257,6 +257,7 @@ export function initRoadside() {
 
     lgrp.add(pole, arm, head, arm2, head2);
     lgrp.userData.extraHeads = [arm2, head2];
+    lgrp.userData.lightHead = head;
   }
 
   for (let i = 0; i < G.NUM_ROADSIDE_SLOTS; i++) {
@@ -349,7 +350,9 @@ export function initRoadside() {
     return dom;
   }
 
-  function updateRoadside(isNightish) {
+  const lampWorld = new THREE.Vector3();
+
+  function updateRoadside() {
     const recycleSpan = G.NUM_ROADSIDE_SLOTS * G.SLOT_STEP;
     const nearestLampPositions = [];
 
@@ -483,9 +486,11 @@ export function initRoadside() {
         const lampScale = infraScale * (1 + 0.18 * mw);
         const headY = 6.05 * lampScale;
         for (const lg of [slot.leftLamp, slot.rightLamp]) {
-          const p = lg.position;
+          const headMesh = lg.userData.lightHead;
+          if (headMesh) headMesh.getWorldPosition(lampWorld);
+          else lampWorld.set(lg.position.x, lg.position.y + headY, lg.position.z);
           nearestLampPositions.push({
-            x: p.x, y: p.y + headY, z: p.z,
+            x: lampWorld.x, y: lampWorld.y, z: lampWorld.z,
             d: Math.abs(slot.s - G.playerS)
           });
         }
@@ -502,13 +507,13 @@ export function initRoadside() {
     const cap = mwNow > 0.5 ? 6 : 4;
     const lampBudget = Math.min(G.MAX_ACTIVE_LAMPS || 6, setting, cap);
     const wetGlow = 1 + 0.55 * (G.weather ? G.weather.wet : 0);
-    const lampGlow = Number.isFinite(G.nightGlow) ? G.nightGlow : (isNightish ? 1 : 0);
+    const lampGlow = G.nightGlow;
     for (let i = 0; i < G.lampLights.length; i++) {
       const pl = G.lampLights[i];
       if (lampGlow > 0.04 && i < lampBudget && i < nearestLampPositions.length) {
         const lp = nearestLampPositions[i];
         pl.position.set(lp.x, lp.y, lp.z);
-        pl.intensity = 14 * wetGlow * lampGlow;
+        pl.intensity = 42 * wetGlow * lampGlow;
       } else {
         pl.intensity = 0;
       }

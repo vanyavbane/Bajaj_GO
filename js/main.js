@@ -15,6 +15,7 @@ import { initEmbankment } from './embankment.js';
 import { initGraphics } from './graphics.js';
 import { initHighbeam } from './highbeam.js';
 import { initInput } from './input.js';
+import { initLighting } from './lighting.js';
 import { initLoop } from './loop.js';
 import { initMileage } from './mileage.js';
 import { initPedestrians } from './pedestrians.js';
@@ -62,6 +63,7 @@ initShopPreview();
 initCamera();
 initPostFx();
 initAtmosphere();
+initLighting();
 initHighbeam();
 
 initUi();

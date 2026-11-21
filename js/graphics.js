@@ -130,8 +130,6 @@ export function initGraphics() {
         ? THREE.PCFSoftShadowMap
         : THREE.PCFShadowMap;
       if (G.renderer.shadowMap.type !== shadowType) G.renderer.shadowMap.type = shadowType;
-      G.sunLight.shadow.bias = -0.00018;
-      G.sunLight.shadow.normalBias = 0.05;
     }
     const crisp = current.exposure === 1.18;
     const roadEnv = current.reflections ? (crisp ? 1.15 : 0.7) : 0.45;

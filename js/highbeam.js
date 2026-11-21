@@ -15,9 +15,7 @@ export function initHighbeam() {
     $('badge-beam').hidden = false;
 
     const riderLat = G.riderLatAt(G.playerS);
-    const here = G.roadsAt(G.playerS);
-    const drivenMid = G.drivenSpanAt(G.playerS).mid;
-    const bikeOnExit = !!(here.exit && Math.abs(here.exit.axis - drivenMid) < 0.5);
+    const bikeOnExit = G.drivenIsExitAt(G.playerS);
     for (const car of G.trafficPool) {
       const roads = G.roadsAt(car.s);
       const onExit = !!(car.onExit && roads.exit);
@@ -29,8 +27,11 @@ export function initHighbeam() {
       const sameRoad = onExit === bikeOnExit;
       const scale = road.scale || 1;
       const playerLane = sameRoad ? G.laneOffset : (riderLat - road.axis) / scale;
+      const lanes = lanesOf(road.lanes).map((lane) => (
+        onExit ? { ...lane, direction: 'with' } : lane
+      ));
       const lane = highbeamYieldLane(
-        car, G.playerS, playerLane, lanesOf(road.lanes), road.lanes.laneWidth
+        car, G.playerS, playerLane, lanes, road.lanes.laneWidth
       );
       if (lane == null) continue;
       car.changingLane = true;

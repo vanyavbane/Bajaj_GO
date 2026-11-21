@@ -1,5 +1,5 @@
 import { asphaltSpan, branchEdges, goreSpan, groundAt, shellEdge } from './fork.ts';
-import { besidePose, spanEdges } from './roadside.ts';
+import { besidePose, spanEdges, stripSeam } from './roadside.ts';
 import type { AsphaltEdges, RoadsideFrame } from './roadside.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -75,5 +75,8 @@ const drivenLeft = besidePose({ edges: driven, origin: 0 }, { side: -1, gap: 2, 
 const drivenRight = besidePose({ edges: driven, origin: 0 }, { side: 1, gap: 2, inset: 0 });
 assert(drivenLeft.lateral === 25, 'объект слева стоит у дороги байка, не у дальней кромки прямой');
 assert(drivenRight.lateral === 39, 'объект справа стоит у той же дороги');
+assert(!stripSeam(10, 12), 'кромка одной дороги ленту не рвёт');
+assert(stripSeam(10, 37), 'перескок на другую дорогу рвёт тротуар и откос');
+assert(!stripSeam(null, 37), 'первая точка ленты не рвётся');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('roadside contract ok');

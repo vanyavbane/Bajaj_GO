@@ -53,13 +53,6 @@ export function initSky() {
 
   G.sunLight = new THREE.DirectionalLight(0x9aabc4, 0.40);
   G.sunLight.castShadow = true;
-  G.sunLight.shadow.camera.near = 8;
-  G.sunLight.shadow.camera.far = 96;
-  G.sunLight.shadow.camera.left = -18;
-  G.sunLight.shadow.camera.right = 18;
-  G.sunLight.shadow.camera.top = 24;
-  G.sunLight.shadow.camera.bottom = -16;
-  G.sunLight.shadow.camera.updateProjectionMatrix();
   G.sunLight.shadow.bias = -0.00018;
   G.sunLight.shadow.normalBias = 0.05;
   G.scene.add(G.sunLight);
@@ -157,6 +150,4 @@ export function initSky() {
     G.scene.add(pl);
     G.lampLights.push(pl);
   }
-
-  G.applyGraphics();
 }

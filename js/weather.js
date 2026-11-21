@@ -146,6 +146,9 @@ export function initWeather() {
   }
 
   /* ---------- Дорога: влажный асфальт ---------- */
+  let wetPaint = NaN;
+  let envPaint = NaN;
+
   function applyRoadWetness() {
     // Мочим всё покрытие: основную ленту и правую половину на развилке.
     const mats = (G.roadWetMats && G.roadWetMats.length)
@@ -165,6 +168,9 @@ export function initWeather() {
     const baseColor = road.userData.baseColor;
 
     const w = state.wet;
+    if (w === wetPaint && baseEnv === envPaint) return;
+    wetPaint = w;
+    envPaint = baseEnv;
     for (const mat of mats) {
       mat.roughness = baseRough - 0.44 * w;
       mat.metalness = baseMetal + 0.32 * w;

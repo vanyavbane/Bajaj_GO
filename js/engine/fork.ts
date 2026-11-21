@@ -708,13 +708,21 @@ export function reachedExit(lateral: number, edges: AsphaltEdges): boolean {
   return onExitRibbon(lateral, edges) || lateral > edges.leftInner + EXIT_INTENT;
 }
 
+/** Довоз до ленты, м/с. У самой кромки он спадает, чтобы не пронести байк на ту сторону. */
+const EXIT_PULL = 16;
+const EXIT_PULL_EASE = 8;
+
 /**
  * Скорость к ленте, м/с. Только в клине, когда байк уже ушёл с прямой и ещё не на асфальте.
  * На самой ленте и на прямой догонять нечего.
+ * Последние метры до кромки скорость падает до нуля.
  */
 export function exitEntryPull(lateral: number, edges: AsphaltEdges): number {
   if (!reachedExit(lateral, edges) || onExitRibbon(lateral, edges)) return 0;
-  return 16;
+  const gap = edges.rightInner - lateral;
+  if (!(gap > 0)) return 0;
+  if (gap >= EXIT_PULL_EASE) return EXIT_PULL;
+  return EXIT_PULL * (gap / EXIT_PULL_EASE);
 }
 
 /** Пока клин не открылся, уход влево отпускает съезд. */

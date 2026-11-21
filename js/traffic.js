@@ -1,6 +1,6 @@
-import { carFollowsRibbon, carriageLat } from './engine/carriage.js';
+import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, carriageLat, repairQueue, ribbonDirection } from './engine/carriage.js';
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
-import { besideWithLane, lanesGoing, lanesOf, offsetDirection, outerLane } from './engine/lanes.js';
+import { besideWithLane, lanesOf, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -36,8 +36,7 @@ export function initTraffic() {
   /** Новая машина рождается на дороге байка. На ленте съезда — только когда байк уже на ней. */
   function spawnRoad(s) {
     const roads = G.roadsAt(s);
-    const span = G.drivenSpanAt(s);
-    if (roads.exit && span && Math.abs(roads.exit.axis - span.mid) < 0.5) {
+    if (G.drivenIsExitAt(s) && roads.exit) {
       return { lanes: roads.exit.lanes, onExit: true };
     }
     return { lanes: roads.main.lanes, onExit: false };
@@ -56,8 +55,12 @@ export function initTraffic() {
     return pick ? pick.index : 0;
   }
 
-  function pickLane(cfg, model, forcedLane) {
+  function pickLane(cfg, model, forcedLane, onRibbon) {
     if (model.type === 'qute_traffic') return quteLane(cfg);
+    if (onRibbon) {
+      const roll = forcedLane == null ? Math.random() * cfg.count : forcedLane;
+      return birthLane(lanesOf(cfg), true, roll);
+    }
     if (forcedLane == null) return Math.floor(Math.random() * cfg.count);
     return clampLaneIndex(forcedLane, cfg.count);
   }
@@ -109,7 +112,8 @@ export function initTraffic() {
   function parkedTraffic(model, s, forcedLane = null) {
     const road = spawnRoad(s);
     const cfg = road.lanes;
-    const idx = pickLane(cfg, model, forcedLane);
+    const idx = pickLane(cfg, model, forcedLane, road.onExit);
+    const facing = lanesOf(cfg)[idx];
     return {
       model,
       laneIdx: idx,
@@ -119,8 +123,9 @@ export function initTraffic() {
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
       onExit: road.onExit,
+      joiningExit: false,
       heldLat: NaN,
-      heading: lanesOf(cfg)[idx]?.direction === 'against' ? Math.PI : 0,
+      heading: ribbonDirection(road.onExit, facing?.direction) === 'against' ? Math.PI : 0,
       flashReactTimer: 0,
       steerAngle: 0,
       nearMissAwarded: false,
@@ -142,7 +147,7 @@ export function initTraffic() {
 
   /** Полоса машины — ближайший центр в биоме её точки, не старый номер. */
   function settleCarLane(car, cfg) {
-    if (car.changingLane) return;
+    if (car.changingLane || car.joiningExit) return;
     const idx = nearestLaneIndex(cfg.offsets, car.lateralOffset);
     const target = cfg.offsets[idx];
     if (idx === car.laneIdx && Math.abs(car.lateralOffset - target) < 0.05) return;
@@ -172,13 +177,14 @@ export function initTraffic() {
     }
   };
 
-  /** 1 — по ходу дороги, -1 — навстречу. Направление берётся у полосы, не у номера. */
-  function travelFlow(car, road) {
+  /** 1 — по ходу дороги, -1 — навстречу. На ленте въезда все едут вперёд. */
+  function travelFlow(car, road, onRibbon) {
     const lanes = lanesOf(road);
     const target = lanes[car.targetLaneIdx];
     const current = lanes[car.laneIdx];
-    if (car.changingLane && target && target.direction === 'with') return 1;
-    return current && current.direction === 'against' ? -1 : 1;
+    const sense = (lane) => ribbonDirection(onRibbon, lane && lane.direction);
+    if (car.changingLane && sense(target) === 'with') return 1;
+    return sense(current) === 'against' ? -1 : 1;
   }
 
   function faceTraffic(car, flow, dt) {
@@ -190,31 +196,61 @@ export function initTraffic() {
     car.heading += turn * Math.min(1, dt * 2.4);
   }
 
-  /** Крайняя попутная переходит на дорогу съезда. Номер её полосы с номером шоссе не сравнивается. */
-  function followExit(car, roads, wasOnExit) {
-    const main = roads.main;
-    const gate = outerLane(lanesOf(main.lanes), 'right', 'with');
-    const lastLane = gate ? gate.index : main.lanes.count - 1;
-    return carFollowsRibbon({
-      hasExit: roads.exit != null,
-      mainPhase: main.phase,
-      following: wasOnExit,
+  /** Крайняя попутная начинает переезд, только пока съезд ещё прижат к шоссе. */
+  function beginExitJoin(car, roads) {
+    const ribbon = roads.exit;
+    if (!ribbon || car.onExit) return false;
+    const gate = outerLane(lanesOf(roads.main.lanes), 'right', 'with');
+    if (!gate) return false;
+    return canStartExitJoin({
       changingLane: !!car.changingLane,
-      lane: wasOnExit ? lastLane : car.laneIdx,
-      lastLane,
-      runLanes: lanesGoing(lanesOf(main.lanes), 'with').length,
+      lane: car.laneIdx,
+      lastLane: gate.index,
+      roadRight: roads.main.axis + roads.main.half,
+      ribbonLeft: ribbon.axis - ribbon.half,
     });
+  }
+
+  /** Доезд до асфальта съезда. Пока его нет, машина остаётся в мире шоссе. */
+  function slideOntoExit(car, dt) {
+    const roads = G.roadsAt(car.s);
+    const ribbon = roads.exit;
+    if (!ribbon) {
+      car.joiningExit = false;
+      return;
+    }
+    const world = G.trafficLatAt(car.s, car.lateralOffset, false);
+    const moved = approachExit(world, ribbon.axis - ribbon.half, ribbon.axis + ribbon.half, dt);
+    if (!moved.arrived) {
+      const scale = roads.main.scale || 1;
+      car.lateralOffset = (moved.lat - roads.main.axis) / scale;
+      return;
+    }
+    const scale = ribbon.scale || 1;
+    const logical = (moved.lat - ribbon.axis) / scale;
+    const idx = nearestLaneIndex(ribbon.lanes.offsets, logical);
+    car.onExit = true;
+    car.joiningExit = false;
+    car.laneIdx = idx;
+    car.targetLaneIdx = idx;
+    car.lateralOffset = logical;
+    car.changingLane = Math.abs(ribbon.lanes.offsets[idx] - logical) > 0.06;
+    if (!car.changingLane) car.lateralOffset = ribbon.lanes.offsets[idx];
   }
 
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
-    if (!ev || !ev.active || oncoming || car.changingLane || car.onExit) return;
+    if (!ev || !ev.active || oncoming || car.changingLane) return;
+    const holeOnExit = G.drivenIsExitAt(ev.s);
+    const carOnExit = !!(car.onExit && G.roadsAt(car.s).exit);
+    if (!repairQueue(carOnExit, holeOnExit)) return;
     const hole = G.holdDrivenLane(ev.s, ev.laneOffset);
     if (!sameLaneOffset(car.lateralOffset, hole)) return;
     if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
     let rank = 0;
     for (const other of G.trafficPool) {
-      if (other !== car && other.active && sameLaneOffset(other.lateralOffset, hole) && other.s > car.s && other.s < ev.s) rank++;
+      const otherOnExit = !!(other.onExit && G.roadsAt(other.s).exit);
+      if (other !== car && other.active && repairQueue(otherOnExit, holeOnExit) && sameLaneOffset(other.lateralOffset, hole) && other.s > car.s && other.s < ev.s) rank++;
     }
     const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
     if (car.s > stop) {
@@ -231,6 +267,39 @@ export function initTraffic() {
         car.speedKmh = 22;
       }
     }
+  }
+
+  /** Одна дорога машины на этот кадр: остаётся, переезжает или садится на новую. */
+  function assignCarRoad(car) {
+    const roads = G.roadsAt(car.s);
+    const highway = roads.main.lanes;
+    const ribbon = roads.exit;
+    const wasOnExit = !!car.onExit;
+    car.onExit = carFollowsRibbon({ hasExit: ribbon != null, following: wasOnExit });
+    if (!car.onExit && !wasOnExit && beginExitJoin(car, roads)) car.joiningExit = true;
+    if (car.onExit || !ribbon) car.joiningExit = false;
+    let departed = false;
+    if (wasOnExit && !car.onExit) {
+      const from = G.sideRibbonAt(car.s);
+      const world = from
+        ? carriageLat(from.axis, from.scale, car.lateralOffset)
+        : G.trafficLatAt(car.s, car.lateralOffset, false);
+      const axis = roads.main.axis;
+      const scale = roads.main.scale || 1;
+      if (!carriageHolds(world, axis, roads.main.half)) {
+        departed = true;
+      } else {
+        const moved = arrivalMove(lanesOf(highway), (world - axis) / scale);
+        const here = nearestLaneIndex(highway.offsets, moved.offset);
+        const dest = nearestLaneIndex(highway.offsets, moved.target);
+        car.laneIdx = moved.changing ? here : dest;
+        car.targetLaneIdx = dest;
+        car.lateralOffset = moved.offset;
+        car.changingLane = moved.changing;
+      }
+    }
+    const onRibbon = !!(car.onExit && ribbon);
+    return { lanes: onRibbon ? ribbon.lanes : highway, onRibbon, departed };
   }
 
   function updateTraffic(dt, now, isQute) {
@@ -256,33 +325,15 @@ export function initTraffic() {
         car.retiring = true;
       }
 
-      // Машина едет по одной дороге из списка: основная или съезд.
-      const roads = G.roadsAt(car.s);
-      const highway = roads.main.lanes;
-      const ribbon = roads.exit;
-      const wasOnExit = !!car.onExit;
-      car.onExit = followExit(car, roads, wasOnExit);
-      if (car.onExit && ribbon && !wasOnExit) {
-        const seat = outerLane(lanesOf(ribbon.lanes), 'right', 'with');
-        const idx = seat ? seat.index : Math.max(0, ribbon.lanes.offsets.length - 1);
-        car.laneIdx = idx;
-        car.targetLaneIdx = idx;
-        car.lateralOffset = seat ? seat.offset : ribbon.lanes.offsets[idx];
-        car.changingLane = false;
-      } else if (wasOnExit && !car.onExit) {
-        const from = G.sideRibbonAt(car.s);
-        const world = from
-          ? carriageLat(from.axis, from.scale, car.lateralOffset)
-          : G.trafficLatAt(car.s, car.lateralOffset, false);
-        const axis = roads.main.axis;
-        const scale = roads.main.scale || 1;
-        const idx = nearestLaneIndex(highway.offsets, (world - axis) / scale);
-        car.laneIdx = idx;
-        car.targetLaneIdx = idx;
-        car.lateralOffset = highway.offsets[idx];
-        car.changingLane = false;
+      const seat = assignCarRoad(car);
+      if (seat.departed) {
+        car.active = false;
+        car.retiring = false;
+        car.model.root.visible = false;
+        continue;
       }
-      const road = car.onExit && ribbon ? ribbon.lanes : highway;
+      const road = seat.lanes;
+      const onRibbon = seat.onRibbon;
       settleCarLane(car, road);
       const targetSpeed = car.model.type === 'qute_traffic'
         ? QUTE_TRAFFIC_SPEED
@@ -290,7 +341,7 @@ export function initTraffic() {
       car.speedKmh += (targetSpeed - car.speedKmh) * Math.min(1, dt * 1.6);
 
       const wasFlashing = car.flashReactTimer > 0;
-      const flow = travelFlow(car, road);
+      const flow = travelFlow(car, road, onRibbon);
       const step = stepTrafficCar(car, dt, lanesOf(road), flow);
       faceTraffic(car, flow, dt);
       car.s = step.s;
@@ -317,7 +368,9 @@ export function initTraffic() {
       const recycle = trafficRecycle(car.s, G.playerS);
       if (recycle && !choosing) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
 
-      const oncoming = lanesOf(road)[car.laneIdx]?.direction === 'against';
+      if (car.joiningExit) slideOntoExit(car, dt);
+
+      const oncoming = flow < 0;
       holdForRepair(car, oncoming);
 
       const carWorldLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
@@ -387,7 +440,10 @@ export function initTraffic() {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
-        const pts = nearMissPoints(G.comboCount, offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset));
+        const pts = nearMissPoints(
+          G.comboCount,
+          ribbonDirection(G.drivenIsExitAt(G.playerS), offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset))
+        );
         G.score += pts;
         const side = carWorldLat < playerWorldLat ? 'left' : 'right';
         G.pushFeed(`КОМБО ×${G.comboCount} · +${pts} ₽`, 'combo', G.comboCount, side);

@@ -72,3 +72,13 @@ export function besidePose(frame: RoadsideFrame, asset: BesideAsset): RoadsidePo
   const lateral = outwardFrom(edge, shellMid, outward(asset.gap) + outward(asset.inset));
   return { lateral, absLat: Math.abs(lateral - frame.origin) };
 }
+
+/**
+ * Лента обочины рвётся, если кромка перескочила на другую дорогу.
+ * Плавный отход той же кромки её не рвёт.
+ */
+export function stripSeam(prev: number | null, edge: number | null, jump = 6): boolean {
+  if (prev == null || edge == null || !Number.isFinite(prev) || !Number.isFinite(edge)) return false;
+  const limit = Number.isFinite(jump) && jump > 0 ? jump : 6;
+  return Math.abs(edge - prev) > limit;
+}

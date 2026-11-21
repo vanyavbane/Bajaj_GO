@@ -222,7 +222,9 @@ assert(blocked.max < splitRoad.leftInner, 'после отказа с прямо
 assert(openChoice.max > splitRoad.rightInner, 'пока съезд можно взять, правая стена стоит за ним');
 assert(!reachedExit(splitRoad.leftInner, splitRoad), 'кромка прямой ещё не ход на съезд');
 assert(reachedExit(splitRoad.leftInner + 2, splitRoad), 'уход правее прямой — это съезд');
-assert(exitEntryPull(splitRoad.leftInner + 2, splitRoad) > 0, 'в клине байк доезжает до ленты');
+assert(exitEntryPull(splitRoad.leftInner + 2, splitRoad) === 16, 'в глубине клина довоз 16 м/с');
+assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) < 16, 'у кромки ленты довоз спадает');
+assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) > 0, 'спад начинается ещё в клине');
 assert(exitEntryPull(splitRoad.rightInner + 1, splitRoad) === 0, 'на ленте догонять уже нечего');
 assert(exitEntryPull(0, splitRoad) === 0, 'с прямой в клин не вытягивает');
 assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');

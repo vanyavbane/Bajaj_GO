@@ -1,3 +1,4 @@
+import { ribbonDirection } from './engine/carriage.js';
 import { exitEntryPull } from './engine/fork.js';
 import { defaultRunOffset, lanesOf, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
@@ -203,12 +204,15 @@ export function initLoop() {
     G.lateralVelocity = steered.lateralVelocity;
     // Рулевой расчёт сглаживает скорость к обычной. В клине удержание вправо
     // остаётся довозом до ленты и не гасится этим сглаживанием.
+    // У кромки довоз спадает, и запас скорости на ленту не переносится.
     if (wantsRight && fork && fork.active && fork.chosenSide !== 0 && G.roadEdgesAt && G.riderLatAt) {
       const pull = exitEntryPull(G.riderLatAt(G.playerS), G.roadEdgesAt(G.playerS));
       if (pull > G.lateralVelocity) {
         const room = G.roadEdgeMax - G.laneOffset;
         const extra = Math.min(Math.max(0, room), (pull - G.lateralVelocity) * dt);
         G.laneOffset += extra;
+        G.lateralVelocity = pull;
+      } else if (pull > 0 && G.lateralVelocity > pull) {
         G.lateralVelocity = pull;
       }
     }
@@ -294,7 +298,7 @@ export function initLoop() {
       G.comboTimer -= dt;
       if (G.comboTimer <= 0) G.comboCount = 0;
     }
-    const rideDirection = offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset);
+    const rideDirection = riderDirection();
     const oncomingMult = oncomingMultiplier(rideDirection);
     G.score += distancePoints(G.speed, dt, rideDirection, G.comboCount);
 
@@ -305,6 +309,13 @@ export function initLoop() {
     }
 
     spinOwnWheels(forwardMeters);
+  }
+
+  function riderDirection() {
+    return ribbonDirection(
+      G.drivenIsExitAt(G.playerS),
+      offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset)
+    );
   }
 
   function stopAtMedian(prevS, halfPlayer) {
@@ -345,7 +356,7 @@ export function initLoop() {
   }
 
   function updateHud(now) {
-    const activeMult = oncomingMultiplier(offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset));
+    const activeMult = oncomingMultiplier(riderDirection());
     G.updateCockpitDashboard(now, G.speed, G.distance, G.score, activeMult, G.highBeamTimer > 0);
     G.updateEcoHud(now);
   }
@@ -401,12 +412,12 @@ export function initLoop() {
     if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
     G.updateRoadSurface(G.playerS);
-    const isNightish = G.updateAtmosphereAndTimeOfDay(dt, G.playerS);
-    G.aimSunAtPlayer();
+    G.updateAtmosphereAndTimeOfDay(dt, G.playerS);
+    if (G.updateFrameLighting) G.updateFrameLighting();
     G.recycleRamps();
     if (G.updateRepair) G.updateRepair(dt, now);
     G.tickJumpParticles(dt);
-    G.updateRoadside(isNightish);
+    G.updateRoadside();
     if (G.updateAdManager) G.updateAdManager(dt);
     G.updateMegaStructures(dt);
     G.updateExitWorld(dt);

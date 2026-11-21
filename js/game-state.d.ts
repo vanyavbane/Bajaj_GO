@@ -327,6 +327,8 @@ export interface GameState {
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
   /** Проезжая часть байка: одна лента, не оболочка обеих. */
   drivenSpanAt: (s: number) => { left: number; right: number; mid: number; width: number };
+  /** Дорога байка в этой точке — лента съезда. */
+  drivenIsExitAt: (s: number) => boolean;
   drivenFrameAt: (s: number) => { edges: AsphaltEdges; origin: number };
   /** Полосы проезжей части байка. На въезде это полосы новой дороги. */
   drivenLanesAt: (s?: number) => CarriageLayout;

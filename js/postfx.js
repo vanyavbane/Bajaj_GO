@@ -539,7 +539,7 @@ export function initPostFx() {
     if (obj.isLight) obj.layers.enable(1);
   });
   if (G.sunLight) {
-    // Байк продолжает отбрасывать тень, хотя рендерится отдельным проходом.
+    // Байк в том же проходе, что и мир, и тоже пишет в карту теней.
     G.sunLight.shadow.camera.layers.enable(1);
   }
   camera.layers.set(0);
@@ -615,9 +615,10 @@ export function initPostFx() {
   godRaysPass.compositeMaterial.uniforms.tMask.value = maskRT.texture;
 
   G.postFx = { composer, scenePass, brightnessPass, hdrPlusPass, godRaysPass, motionBlurPass, sharpenPass, outputPass };
-  G.postFxLevel = 1;
+  let sceneReady = false;
 
   function applySize() {
+    sceneReady = false;
     const pr = renderer.getPixelRatio();
     composer.setPixelRatio(pr);
     composer.setSize(innerWidth, innerHeight);
@@ -634,7 +635,6 @@ export function initPostFx() {
     godRaysPass.compositeMaterial.uniforms.tMask.value = maskRT.texture;
   }
   G.applyPostFxSize = applySize;
-  applySize();
 
   /* ---------- Авто-качество по FPS (скользящее среднее за 60 кадров) ---------- */
   let autoLevel = weak ? 0.5 : 1;
@@ -642,6 +642,8 @@ export function initPostFx() {
   let fpsFrames = 0;
   godRaysPass.setLowQuality(autoLevel < 1);
   if (G.setGraphicsLoad) G.setGraphicsLoad(autoLevel);
+  // Слабый уровень уже применил графику. Обычный уровень её ещё не трогал.
+  if (autoLevel === 1 && G.applyGraphics) G.applyGraphics();
 
   function updateAutoQuality(dt) {
     if (G.paused || G.uiModal || document.hidden) {
@@ -663,7 +665,6 @@ export function initPostFx() {
 
     if (next !== autoLevel) {
       autoLevel = next;
-      G.postFxLevel = autoLevel;
       godRaysPass.setLowQuality(autoLevel < 1);
       if (G.setGraphicsLoad) G.setGraphicsLoad(autoLevel);
     }
@@ -703,21 +704,25 @@ export function initPostFx() {
     return { onScreen, target, tunnel: inTunnel };
   }
 
+  const maskSaved = [];
+
+  function stampBikeMask(obj) {
+    if (obj.visible === false) return;
+    if (obj.isMesh && obj.layers.test(camera.layers)) {
+      maskSaved.push(obj, obj.material);
+      obj.material = maskMat;
+    }
+    const children = obj.children;
+    for (let i = 0; i < children.length; i++) stampBikeMask(children[i]);
+  }
+
+  function restoreBikeMask() {
+    for (let i = 0; i < maskSaved.length; i += 2) maskSaved[i].material = maskSaved[i + 1];
+    maskSaved.length = 0;
+  }
+
   function updateRenderFrame(dt) {
     updateAutoQuality(dt);
-
-    const g = G.graphics;
-    if (g) {
-      const b = (g.brightness || 0) / 100;
-      brightnessPass.uniforms.uAmount.value = b;
-      brightnessPass.enabled = Math.abs(b) > 0.001;
-
-      hdrPlusPass.enabled = !!g.hdrPlus;
-
-      const sh = (g.sharpness || 0) / 100;
-      sharpenPass.uniforms.uAmount.value = sh;
-      sharpenPass.enabled = Math.abs(sh) > 0.001;
-    }
 
     if (G.visual) {
       const paused = G.paused || G.uiModal;
@@ -754,6 +759,14 @@ export function initPostFx() {
     }
 
     /* ---------- Мир и байк в один кадр, затем постобработка ---------- */
+    const worldStill = !!(G.paused || G.uiModal);
+    const shadowReady = !renderer.shadowMap.enabled || !!(G.sunLight && G.sunLight.shadow.map);
+    if (worldStill && sceneReady && shadowReady) {
+      composer.render();
+      camera.layers.set(0);
+      return;
+    }
+
     renderer.shadowMap.autoUpdate = false;
     if (renderer.shadowMap.enabled) renderer.shadowMap.needsUpdate = true;
 
@@ -773,15 +786,20 @@ export function initPostFx() {
       const prevAlpha = renderer.getClearAlpha();
       renderer.autoClear = true;
       renderer.setClearColor(0x000000, 1);
+      let prevAuto = true;
       try {
         renderer.setRenderTarget(maskRT);
         depthBlit.render(renderer);
         renderer.autoClear = false;
-        scene.overrideMaterial = maskMat;
         camera.layers.set(1);
-        renderer.render(scene, camera);
+        // Мир уже в буфере, матрицы байка свежие. Второй проход рисует только его, белым.
+        prevAuto = G.bikeRoot.matrixWorldAutoUpdate;
+        G.bikeRoot.matrixWorldAutoUpdate = false;
+        stampBikeMask(G.bikeRoot);
+        renderer.render(G.bikeRoot, camera);
       } finally {
-        scene.overrideMaterial = null;
+        G.bikeRoot.matrixWorldAutoUpdate = prevAuto;
+        restoreBikeMask();
         camera.layers.mask = prevMask;
         renderer.setRenderTarget(null);
         renderer.setClearColor(maskClear, prevAlpha);
@@ -789,6 +807,7 @@ export function initPostFx() {
       }
     }
 
+    sceneReady = true;
     composer.render();
     camera.layers.set(0);
   }

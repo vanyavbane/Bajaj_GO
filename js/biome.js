@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, laneMarks, ribbonApproachLat, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
+import { carriageAt, carriageLat, drivenIsExit, laneMarks, ribbonApproachLat, ribbonTrailLat, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
@@ -471,8 +471,9 @@ function arrivedRoad(frame) {
   return frame.chosen === 1 && frame.block != null && exitRibbonCenter(frame.local) == null;
 }
 
-function roadHeading(s) {
-  if (s === headKey && headHit) return headHit;
+const ribbonHeads = new Map();
+
+function computeHeading(s) {
   const at = layoutAt(s);
   const frame = frameAt(s);
   const decision = decisionAt(at.zone);
@@ -490,6 +491,21 @@ function roadHeading(s) {
     ownedHere: owned.length > 0,
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u), ddx: biomeRoadDDX(u) }));
   return headHit;
+}
+
+function roadHeading(s) {
+  const remembered = ribbonHeads.get(s);
+  if (remembered) return remembered;
+  if (s === headKey && headHit) return headHit;
+  return computeHeading(s);
+}
+
+function rememberRibbonHeadings(samples) {
+  ribbonHeads.clear();
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i];
+    ribbonHeads.set(s, computeHeading(s));
+  }
 }
 
 function embedRoad(s, lat) {
@@ -654,6 +670,13 @@ function drivenSpanAt(s) {
   };
 }
 
+/** Байк на ленте съезда. Единственное сравнение осей в игре. */
+function drivenIsExitAt(s) {
+  const roads = roadsHere(s);
+  const span = drivenSpanAt(s);
+  return drivenIsExit(roads.exit ? roads.exit.axis : null, span.mid);
+}
+
 /** Полоса этой проезжей части в мировых метрах. */
 function drivenLaneAt(s, offset) {
   const road = drivenCarriageAt(s);
@@ -781,6 +804,18 @@ function riderLatAt(s, laneOffset) {
   const ribbon = frame.chosen === 1 ? sideRibbon(roadCarriageAt(s), frame, entranceLayout(s)) : null;
   const approach = ribbonApproachLat(arrived, ribbon != null, lane, ribbon ? ribbon.axis : 0, ribbon ? ribbon.scale : 1);
   if (approach != null) return approach;
+  const playerRibbon = exitRibbonCenter(player.local);
+  const playerAxis = playerRibbon == null ? 0 : player.origin + playerRibbon;
+  const trail = ribbonTrailLat(
+    playerRibbon != null,
+    exitRibbonCenter(frame.local) != null,
+    laneAnchor(frame),
+    frame.origin,
+    playerAxis,
+    lane,
+    riderLaneScaleAt(G.playerS),
+  );
+  if (trail != null) return trail;
   const seat = riderFrameSeat(s, lane);
   const span = seat.kind === 'exit'
     ? riderCarriage(roadCarriageAt(s), frame, 'exit', frame.chosen === 1 ? entranceLayout(s) : undefined).scale
@@ -1540,6 +1575,7 @@ export function initBiome() {
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
   G.embedRoad = embedRoad;
+  G.rememberRibbonHeadings = rememberRibbonHeadings;
   G.embedBeside = embedBeside;
   G.roadCurvature = roadCurvature;
   G.roadBlockAt = (s) => frameAt(s).block;
@@ -1553,6 +1589,7 @@ export function initBiome() {
   G.besidePose = besidePose;
   G.asphaltSpan = asphaltSpanAt;
   G.drivenSpanAt = drivenSpanAt;
+  G.drivenIsExitAt = drivenIsExitAt;
   G.drivenFrameAt = drivenFrameAt;
   G.drivenLanesAt = drivenLanesAt;
   G.drivenLaneAt = drivenLaneAt;

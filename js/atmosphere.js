@@ -31,8 +31,7 @@ export function initAtmosphere() {
       hemiSky: new THREE.Color(0xd6e6f2),
       hemiGround: new THREE.Color(0x2b3640),
       sunInt: 2.3,
-      hemiInt: 1.25,
-      headInt: 0.7
+      hemiInt: 1.25
     },
     sunset: {
       top: new THREE.Color(0x241a3a),
@@ -45,8 +44,7 @@ export function initAtmosphere() {
       hemiSky: new THREE.Color(0xb48c86),
       hemiGround: new THREE.Color(0x2a2320),
       sunInt: 1.65,
-      hemiInt: 0.85,
-      headInt: 2.6
+      hemiInt: 0.85
     },
     night: {
       top: new THREE.Color(0x121a30),
@@ -59,8 +57,7 @@ export function initAtmosphere() {
       hemiSky: new THREE.Color(0x5a6a86),
       hemiGround: new THREE.Color(0x141a26),
       sunInt: 0.40,
-      hemiInt: 0.30,
-      headInt: 4.8
+      hemiInt: 0.30
     }
   };
 
@@ -136,30 +133,6 @@ export function initAtmosphere() {
   }
   G.smoothstep = smoothstep;
 
-  function fadeEmissive(mat, day, night, glow) {
-    if (!mat) return;
-    mat.emissiveIntensity = day + (night - day) * glow;
-  }
-
-  function applyNightLights(glow) {
-    fadeEmissive(G.windowLitMat, 0.04, 0.85, glow);
-    fadeEmissive(G.lampHeadMat, 0.05, 1.5, glow);
-    fadeEmissive(G.mkadLightMat, 0.06, 1.8, glow);
-    fadeEmissive(G.mkadGlassMat, 0.04, 0.9, glow);
-    fadeEmissive(G.quayLampMat, 0.04, 0.9, glow);
-    if (G.M) {
-      fadeEmissive(G.M.headlightMat, 0.12, 1.55, glow);
-      fadeEmissive(G.M.drlMat, 0.45, 1.6, glow);
-    }
-    fadeEmissive(G.trafficHeadMat, 0.1, 1.7, glow);
-    fadeEmissive(G.trafficTailMat, 0.22, 1.15, glow);
-    fadeEmissive(G.trafficDrlMat, 0.4, 1.5, glow);
-    if (G.trafficGlowMat) G.trafficGlowMat.opacity = 0.05 + 0.65 * glow;
-    const braking = !!(G.keys && (G.keys.brake || G.stickBrake));
-    const tail = 0.35 + 0.75 * glow;
-    if (G.tailLightBrakeMat) G.tailLightBrakeMat.emissiveIntensity = braking ? tail * 3.1 : tail;
-  }
-
   function updateAtmosphereAndTimeOfDay(dt, playerS) {
     if (!G.started && !G.ended) {
       G.todCycleTime = 0.385;
@@ -193,7 +166,6 @@ export function initAtmosphere() {
 
     const weather = G.weather;
     const wc = weather ? clamp(weather.cloud || 0, 0, 1) : 0;
-    const wet = weather ? clamp(weather.wet || 0, 0, 1) : 0;
 
     _skyTop.copy(pA.top).lerp(pB.top, t);
     _skyMid.copy(pA.mid).lerp(pB.mid, t);
@@ -244,16 +216,6 @@ export function initAtmosphere() {
     G.hemiLight.intensity = inTunnel ? 0.35 : lerp(pA.hemiInt, pB.hemiInt, t) * (1 + 0.18 * wc);
 
     G.inTunnel = inTunnel;
-    const isNightish = (G.todCycleTime >= 0.36 && G.todCycleTime <= 0.88) || inTunnel;
-    const baseHeadInt = inTunnel ? 5.2 : lerp(pA.headInt, pB.headInt, t);
-    const beamBoost = G.highBeamTimer > 0 ? 3.8 : 1.0;
-    // На мокрой дороге ночью фары светят чуть ярче и «дороже».
-    const wetBoost = isNightish ? 1 + 0.45 * wet : 1;
-
-    for (const sp of G.bikeSpotLights) {
-      sp.intensity = baseHeadInt * beamBoost * wetBoost;
-      sp.distance = G.highBeamTimer > 0 ? 135 : 92;
-    }
 
     const px = G.bikeRoot.position.x, pz = G.bikeRoot.position.z;
     G.skyDome.position.set(px, 0, pz);
@@ -269,12 +231,6 @@ export function initAtmosphere() {
       G.moonBody.position.set(px - Math.cos(sunAngle) * 180, -Math.sin(sunAngle) * 140 + 35, pz - 260);
       G.moonBody.visible = G.moonBody.position.y > -10;
     }
-
-    // Окна и фонари следуют за высотой диска, не за подписью «день/ночь».
-    // В тоннеле городской свет включён полностью.
-    const nightGlow = inTunnel ? 1 : 1 - smoothstep(20, 100, G.sunBody.position.y);
-    G.nightGlow = nightGlow;
-    applyNightLights(nightGlow);
 
     for (let ci = 0; ci < G.clouds.length; ci++) {
       const c = G.clouds[ci];
@@ -301,8 +257,6 @@ export function initAtmosphere() {
 
     const badgeTod = $('badge-tod');
     if (badgeTod) badgeTod.textContent = inTunnel ? '🚇 ТОННЕЛЬ' : label;
-
-    return isNightish;
   }
   G.updateAtmosphereAndTimeOfDay = updateAtmosphereAndTimeOfDay;
 }

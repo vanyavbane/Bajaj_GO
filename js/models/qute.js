@@ -103,7 +103,6 @@ export function buildQuteExterior() {
   G.quteExteriorGroup.add(mesh(box(1.24, 0.035, 0.04), G.M.chrome, 0, 0.72, -1.86));
 
   // Корпуса фар, стёкла, отражатели, DRL и противотуманки.
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xfff8e1, emissive: 0xffe082, emissiveIntensity: 1.8 });
   for (const lx of [-0.5, 0.5]) {
     G.quteExteriorGroup.add(mesh(box(0.36, 0.26, 0.05), G.M.mattePlastic, lx, 0.78, -1.8));
     G.quteExteriorGroup.add(mesh(box(0.3, 0.18, 0.015), G.M.glass, lx, 0.78, -1.83));
