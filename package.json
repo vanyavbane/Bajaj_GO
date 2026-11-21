@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/sync-admanager.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.engine.json --noEmit",
     "test": "npm run check:roadside && npm run check:biomes && npm run check:blocks && npm run check:branch && npm run check:vectors && npm run check:route && npm run check:seat && npm run check:carriage",

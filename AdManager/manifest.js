@@ -1,0 +1,1 @@
+window.__BAJAJ_AD_MANIFEST__ = {"billboards":["AB_pokos.jpg","GAZ_perevzki.jpg","bass_by_vvb_banner.jpg","bollo_de_pasas.jpg","cbpnk.jpg","ogorodni_zames.jpg","svarshik.jpg"],"overheads":[]};

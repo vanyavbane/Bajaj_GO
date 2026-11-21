@@ -383,10 +383,30 @@ async function discoverFromListing() {
   return result;
 }
 
+function manifestFromGlobal() {
+  try {
+    const data = /** @type {any} */ (/** @type {any} */ (window).__BAJAJ_AD_MANIFEST__);
+    if (!data || typeof data !== 'object') return null;
+    if (!Array.isArray(data.billboards) && !Array.isArray(data.overheads)) return null;
+    /** @type {DiscoveryResult} */
+    const result = {
+      source: 'manifest',
+      billboards: sanitizeFileList(data.billboards),
+      overheads: sanitizeFileList(data.overheads)
+    };
+    return (result.billboards.length || result.overheads.length) ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 /** @returns {Promise<DiscoveryResult>} */
 async function discover() {
   // fetch к file:// браузер режет CORS и пишет ошибку в консоль ещё до catch.
+  // Но локальный manifest.js может положить список в window — это работает и в file://.
   if (openedAsFile()) {
+    const fromGlobal = manifestFromGlobal();
+    if (fromGlobal) return fromGlobal;
     return { source: 'fallback', billboards: [], overheads: [] };
   }
 
