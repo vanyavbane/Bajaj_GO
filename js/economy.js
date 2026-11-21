@@ -686,7 +686,7 @@ function exitLane(s, side) {
 
       if (G.started && !G.ended && !G.uiModal && !G.paused && !e.used
         && G.speed < EXIT_ENTER_SPEED
-        && crossedExitBox(fromS, G.playerS, G.laneOffset, e.s, exitLane(zoneS, e.side))) {
+        && crossedExitBox(fromS, G.playerS, G.riderLatAt(zoneS), e.s, markerLat)) {
         openExitFromBox(e);
         break;
       }

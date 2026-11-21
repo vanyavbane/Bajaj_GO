@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { G } from './state.js';
 
 const PRESETS = {
@@ -58,6 +59,12 @@ function defaultGraphics() {
   return copyPreset(sharp ? 'sharp' : 'fast');
 }
 
+function shadowMapSize(mode) {
+  if (mode === 'high') return 2048;
+  if (mode === 'low') return 1024;
+  return 0;
+}
+
 export function initGraphics() {
   const saved = localStorage.getItem('bajajGO_lighting');
   let graphics = defaultGraphics();
@@ -72,26 +79,59 @@ export function initGraphics() {
   }
   G.graphics = graphics;
   G.graphicsLabel = LABELS[graphics.preset];
+  // 1 — настройки как есть, 0.5 — тише, 0 — тени и лишние фонари выключены.
+  const runtime = { level: 1 };
+
+  function effectiveGraphics() {
+    const current = G.graphics;
+    const level = runtime.level;
+    let shadows = current.shadows;
+    let scale = current.scale;
+    let lamps = current.lamps;
+    if (level <= 0) {
+      shadows = 'off';
+      scale = Math.min(scale, 0.75);
+      lamps = 0;
+    } else if (level < 1) {
+      if (shadows === 'high') shadows = 'low';
+      scale = Math.min(scale, 1);
+      lamps = Math.min(lamps, 2);
+    }
+    return { ...current, shadows, scale, lamps };
+  }
 
   function applyGraphics() {
     const current = G.graphics;
+    const draw = effectiveGraphics();
     G.graphicsLabel = LABELS[current.preset];
+    G.shadowQuality = draw.shadows;
+    G.activeLampBudget = draw.lamps;
     if (!G.renderer || !G.sunLight || !G.M) return;
 
     const dpr = window.devicePixelRatio || 1;
-    G.renderer.setPixelRatio(Math.min(dpr, current.scale));
+    G.renderer.setPixelRatio(Math.min(dpr, draw.scale));
     G.renderer.setSize(innerWidth, innerHeight);
     G.renderer.toneMappingExposure = current.exposure;
-    const shadowsOn = current.shadows !== 'off';
+    const shadowsOn = draw.shadows !== 'off';
     G.renderer.shadowMap.enabled = shadowsOn;
     G.sunLight.castShadow = shadowsOn;
     if (shadowsOn) {
-      const size = current.shadows === 'high' ? 1024 : 512;
-      G.sunLight.shadow.mapSize.set(size, size);
-      if (G.sunLight.shadow.map) {
-        G.sunLight.shadow.map.dispose();
-        G.sunLight.shadow.map = null;
+      const size = shadowMapSize(draw.shadows);
+      if (G.sunLight.shadow.mapSize.x !== size) {
+        G.sunLight.shadow.mapSize.set(size, size);
+        if (G.sunLight.shadow.map) {
+          G.sunLight.shadow.map.dispose();
+          G.sunLight.shadow.map = null;
+        }
       }
+      // Мягкая карта на высоком качестве. Низкое остаётся на обычном PCF:
+      // меньше выборок, та же коробка.
+      const shadowType = draw.shadows === 'high'
+        ? THREE.PCFSoftShadowMap
+        : THREE.PCFShadowMap;
+      if (G.renderer.shadowMap.type !== shadowType) G.renderer.shadowMap.type = shadowType;
+      G.sunLight.shadow.bias = -0.00018;
+      G.sunLight.shadow.normalBias = 0.05;
     }
     const crisp = current.exposure === 1.18;
     const roadEnv = current.reflections ? (crisp ? 1.15 : 0.7) : 0.45;
@@ -146,4 +186,10 @@ export function initGraphics() {
 
   G.applyGraphics = applyGraphics;
   G.chooseGraphics = chooseGraphics;
+  G.setGraphicsLoad = (level) => {
+    const next = level <= 0 ? 0 : level < 1 ? 0.5 : 1;
+    if (runtime.level === next) return;
+    runtime.level = next;
+    applyGraphics();
+  };
 }

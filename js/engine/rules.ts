@@ -12,7 +12,11 @@ export function exitBoxCenter(exitS: number): number {
   return exitS - EXIT_ZONE_OFFSET;
 }
 
-/** Отрезок fromS→toS пересёк коробку, и байк стоит в её ширине. */
+/**
+ * Отрезок fromS→toS пересёк коробку, и байк стоит в её ширине.
+ * lane и targetLane — одна и та же единица. Игра передаёт мировые метры,
+ * поэтому ширина совпадает с нарисованной коробкой.
+ */
 export function crossedExitBox(fromS: number, toS: number, lane: number, exitS: number, targetLane: number): boolean {
   const center = exitBoxCenter(exitS);
   const halfL = EXIT_ZONE_LENGTH * 0.5;

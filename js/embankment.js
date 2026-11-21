@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -150,6 +149,7 @@ export function initEmbankment() {
     bridge: M(0x6a7076),
     bank: M(0x3d4650)
   };
+  G.quayLampMat = mats.lampGlow;
   const fadeMats = Object.values(mats);
 
   /* ---------- Пулы ---------- */
@@ -235,9 +235,9 @@ export function initEmbankment() {
     obj.rotation.set(-Math.PI / 2, Math.atan2(-pose.fx, -pose.fz), 0);
   }
 
-  function put(pool, s, lat, yOff, sx, sy, sz, yaw, counter) {
+  function put(pool, s, edge, lat, yOff, sx, sy, sz, yaw, counter) {
     if (counter.value >= pool.instanceMatrix.count) return;
-    G.placeOnRoad(dummy, s, lat, yOff);
+    G.placeBeside(dummy, s, edge, lat, yOff);
     dummy.rotation.set(0, yaw, 0);
     dummy.scale.set(sx, sy, sz);
     dummy.updateMatrix();
@@ -260,16 +260,16 @@ export function initEmbankment() {
       const s = startS + d + CFG.FACADE_W * 0.5;
       const k = embK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, -1);
-      const lat = edge - CFG.FACADE_DEPTH;
       const h = (CFG.FACADE_H_MIN + rng() * (CFG.FACADE_H_MAX - CFG.FACADE_H_MIN)) * k;
       const w = CFG.FACADE_W * (0.96 + rng() * 0.08);
       const dep = (10 + rng() * 3) * k;
       const yaw = (rng() - 0.5) * 0.03;
       const roll = rng();
       const pool = roll < 0.4 ? pools.turq : roll < 0.75 ? pools.beige : pools.yellow;
-      put(pool, s, lat, h * 0.5, w, h, dep, yaw, counters[pool === pools.turq ? 'turq' : pool === pools.beige ? 'beige' : 'yellow']);
+      const flank = G.flankAt(s, -1, CFG.FACADE_DEPTH);
+      if (flank) {
+        put(pool, s, flank.edge, flank.lat, h * 0.5, w, h, dep, yaw, counters[pool === pools.turq ? 'turq' : pool === pools.beige ? 'beige' : 'yellow']);
+      }
     }
 
     // Парапет и пандус справа.
@@ -277,21 +277,19 @@ export function initEmbankment() {
       const s = startS + d;
       const k = embK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, 1);
-      const lat = edge + CFG.PARAPET_DEPTH;
-      put(pools.parapet, s, lat, 0.55 * k, 8, 1.1 * k, 0.7 * k, 0, counters.parapet);
+      const flank = G.flankAt(s, 1, CFG.PARAPET_DEPTH);
+      if (!flank) continue;
+      put(pools.parapet, s, flank.edge, flank.lat, 0.55 * k, 8, 1.1 * k, 0.7 * k, 0, counters.parapet);
     }
     for (let d = 0; d < CFG.CHUNK_M; d += 16) {
       const s = startS + d + 8;
       const k = embK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, 1);
       for (let step = 0; step < 5; step++) {
-        const lat = edge + CFG.PARAPET_DEPTH + 1 + step * 1.6;
+        const flank = G.flankAt(s, 1, CFG.PARAPET_DEPTH + 1 + step * 1.6);
+        if (!flank) continue;
         const y = -0.4 - step * 1.1;
-        put(pools.ramp, s, lat, y * k, 4, 0.5, 1.6, 0, counters.ramp);
+        put(pools.ramp, s, flank.edge, flank.lat, y * k, 4, 0.5, 1.6, 0, counters.ramp);
       }
     }
 
@@ -300,17 +298,22 @@ export function initEmbankment() {
       const s = startS + d;
       const k = embK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
-      const rightEdge = shellEdge(frame.edges, 1);
-      const leftEdge = shellEdge(frame.edges, -1);
       const h = 5.2 * k;
-      put(pools.lampPole, s, rightEdge + 15.5 * k, h * 0.5, k, h, k, 0, counters.lampPole);
-      put(pools.lampArm, s, rightEdge + 15.5 * k, h + 0.1, 1.6 * k, 0.16 * k, 0.16 * k, 0, counters.lampArm);
-      put(pools.lampHead, s, rightEdge + 16.1 * k, h - 0.15, k, k, k, 0, counters.lampHead);
+      const right = G.flankAt(s, 1, 16.1 * k);
+      if (right) {
+        const pole = right.edge + 15.5 * k;
+        put(pools.lampPole, s, right.edge, pole, h * 0.5, k, h, k, 0, counters.lampPole);
+        put(pools.lampArm, s, right.edge, pole, h + 0.1, 1.6 * k, 0.16 * k, 0.16 * k, 0, counters.lampArm);
+        put(pools.lampHead, s, right.edge, right.lat, h - 0.15, k, k, k, 0, counters.lampHead);
+      }
       if (rng() < 0.5) {
-        put(pools.lampPole, s + 7, leftEdge - 12.5 * k, h * 0.5, k, h, k, 0, counters.lampPole);
-        put(pools.lampArm, s + 7, leftEdge - 12.5 * k, h + 0.1, 1.6 * k, 0.16 * k, 0.16 * k, 0, counters.lampArm);
-        put(pools.lampHead, s + 7, leftEdge - 13.1 * k, h - 0.15, k, k, k, 0, counters.lampHead);
+        const left = G.flankAt(s + 7, -1, 13.1 * k);
+        if (left) {
+          const pole = left.edge - 12.5 * k;
+          put(pools.lampPole, s + 7, left.edge, pole, h * 0.5, k, h, k, 0, counters.lampPole);
+          put(pools.lampArm, s + 7, left.edge, pole, h + 0.1, 1.6 * k, 0.16 * k, 0.16 * k, 0, counters.lampArm);
+          put(pools.lampHead, s + 7, left.edge, left.lat, h - 0.15, k, k, k, 0, counters.lampHead);
+        }
       }
     }
 
@@ -319,10 +322,10 @@ export function initEmbankment() {
       const s = startS + d;
       const k = embK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, 1);
-      put(pools.signPole, s, edge + 13 * k, 1.4 * k, k, 2.8 * k, k, 0, counters.signPole);
-      put(pools.signBoard, s, edge + 13 * k, 2.9 * k, 1.2 * k, 0.8 * k, 0.1 * k, 0, counters.signBoard);
+      const flank = G.flankAt(s, 1, 13 * k);
+      if (!flank) continue;
+      put(pools.signPole, s, flank.edge, flank.lat, 1.4 * k, k, 2.8 * k, k, 0, counters.signPole);
+      put(pools.signBoard, s, flank.edge, flank.lat, 2.9 * k, 1.2 * k, 0.8 * k, 0.1 * k, 0, counters.signBoard);
     }
 
     // Силуэты противоположного берега.
@@ -330,11 +333,11 @@ export function initEmbankment() {
       const s = startS + d;
       const k = embK(s);
       if (k < 0.05) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, 1);
-      const lat = edge + CFG.BANK_LAT + rng() * 50;
+      const depth = CFG.BANK_LAT + rng() * 50;
       const h = (12 + rng() * 22) * k;
-      put(pools.bank, s, lat, h * 0.5 - 2, 16 + rng() * 14, h, 14, 0, counters.bank);
+      const w = 16 + rng() * 14;
+      const flank = G.flankAt(s, 1, depth);
+      if (flank) put(pools.bank, s, flank.edge, flank.lat, h * 0.5 - 2, w, h, 14, 0, counters.bank);
     }
   }
 
@@ -346,26 +349,26 @@ export function initEmbankment() {
       const s = startS + rng() * CFG.CHUNK_M;
       const k = embK(s);
       if (k < 0.05) continue;
-      const frame = G.roadsideFrameAt(s);
       const left = rng() < 0.55;
-      const edge = shellEdge(frame.edges, left ? -1 : 1);
-      const lat = edge + (left ? -1 : 1) * (11 + rng() * 3.5) * k;
+      const depth = (11 + rng() * 3.5) * k;
       const h = (1.7 + rng() * 0.25) * k;
       const yaw = rng() * Math.PI * 2;
-      put(pools.pedTorso, s, lat, h * 0.62, 0.46 * k, 0.72 * k, 0.28 * k, yaw, counters.pedTorso);
-      put(pools.pedHead, s, lat, h * 1.08, 0.3 * k, 0.3 * k, 0.3 * k, yaw, counters.pedHead);
+      const flank = G.flankAt(s, left ? -1 : 1, depth);
+      if (!flank) continue;
+      put(pools.pedTorso, s, flank.edge, flank.lat, h * 0.62, 0.46 * k, 0.72 * k, 0.28 * k, yaw, counters.pedTorso);
+      put(pools.pedHead, s, flank.edge, flank.lat, h * 1.08, 0.3 * k, 0.3 * k, 0.3 * k, yaw, counters.pedHead);
     }
     for (let d = 0; d < CFG.CHUNK_M; d += 250) {
       if (rng() < 0.5) continue;
       const s = startS + d + rng() * 40;
       const k = embK(s);
       if (k < 0.05) continue;
-      const frame = G.roadsideFrameAt(s);
-      const edge = shellEdge(frame.edges, 1);
-      const lat = edge + (40 + rng() * 25) * k;
+      const depth = (40 + rng() * 25) * k;
       const yaw = rng() * Math.PI * 2;
-      put(pools.boatHull, s, lat, CFG.WATER_Y + 0.5 * k, 7 * k, 1.2 * k, 2.6 * k, yaw, counters.boatHull);
-      put(pools.boatCabin, s, lat, CFG.WATER_Y + 1.4 * k, 3.4 * k, 1.1 * k, 2.0 * k, yaw, counters.boatCabin);
+      const flank = G.flankAt(s, 1, depth);
+      if (!flank) continue;
+      put(pools.boatHull, s, flank.edge, flank.lat, CFG.WATER_Y + 0.5 * k, 7 * k, 1.2 * k, 2.6 * k, yaw, counters.boatHull);
+      put(pools.boatCabin, s, flank.edge, flank.lat, CFG.WATER_Y + 1.4 * k, 3.4 * k, 1.1 * k, 2.0 * k, yaw, counters.boatCabin);
     }
   }
 
@@ -388,11 +391,15 @@ export function initEmbankment() {
   }
 
   let lastChunk = NaN;
+  let lastRoad = 0;
   let lastBridgeS = NaN;
   function updateEmbankment(dt) {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    if (pc !== lastChunk) {
+    const span = G.drivenSpanAt(G.playerS);
+    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
+    if (pc !== lastChunk || road !== lastRoad) {
       lastChunk = pc;
+      lastRoad = road;
       rebuild();
     }
     const w = EMBANKMENT_INDEX >= 0 ? (G.biomeWeightsAtS(G.playerS)[EMBANKMENT_INDEX] || 0) : 0;
@@ -429,6 +436,7 @@ export function initEmbankment() {
   G.updateEmbankment = updateEmbankment;
   G.resetEmbankment = () => {
     lastChunk = NaN;
+    lastRoad = 0;
     lastBridgeS = NaN;
     rebuild();
   };

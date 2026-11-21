@@ -27,7 +27,7 @@ export function initScene() {
   G.renderer.outputColorSpace = THREE.SRGBColorSpace;
   G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
   G.renderer.shadowMap.enabled = true;
-  G.renderer.shadowMap.type = THREE.PCFShadowMap;
+  G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   root.appendChild(G.renderer.domElement);
 
   function createCanvasTexture(w, h, drawFn, repeatX = 1, repeatY = 1, isSRGB = true) {
@@ -75,17 +75,44 @@ export function initScene() {
     }, 1, 40, true);
   }
 
-  const envMapTex = createCanvasTexture(256, 128, (ctx, w, h) => {
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, '#33507a');
-    g.addColorStop(0.48, '#d9a878');
-    g.addColorStop(0.52, '#20293a');
-    g.addColorStop(1, '#0d1119');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  }, 1, 1, true);
+  const envCanvas = document.createElement('canvas');
+  envCanvas.width = 256;
+  envCanvas.height = 128;
+  const envCtx = envCanvas.getContext('2d');
+  const envMapTex = new THREE.CanvasTexture(envCanvas);
   envMapTex.mapping = THREE.EquirectangularReflectionMapping;
+  envMapTex.colorSpace = THREE.SRGBColorSpace;
   G.scene.environment = envMapTex;
+
+  const envHold = {
+    top: new THREE.Color(),
+    mid: new THREE.Color(),
+    bot: new THREE.Color(),
+    ground: new THREE.Color(),
+    key: ''
+  };
+
+  function paintEnvironment(top, mid, bot) {
+    if (!envCtx || !top || !mid || !bot) return;
+    const key = `${top.r.toFixed(3)}:${top.g.toFixed(3)}:${top.b.toFixed(3)}|${mid.r.toFixed(3)}:${mid.g.toFixed(3)}:${mid.b.toFixed(3)}|${bot.r.toFixed(3)}:${bot.g.toFixed(3)}:${bot.b.toFixed(3)}`;
+    if (key === envHold.key) return;
+    envHold.key = key;
+    envHold.top.copy(top);
+    envHold.mid.copy(mid);
+    envHold.bot.copy(bot);
+    envHold.ground.copy(bot).multiplyScalar(0.28);
+    const g = envCtx.createLinearGradient(0, 0, 0, envCanvas.height);
+    g.addColorStop(0, envHold.top.getStyle());
+    g.addColorStop(0.4, envHold.mid.getStyle());
+    g.addColorStop(0.5, envHold.bot.getStyle());
+    g.addColorStop(0.56, envHold.ground.getStyle());
+    g.addColorStop(1, '#0b0e14');
+    envCtx.fillStyle = g;
+    envCtx.fillRect(0, 0, envCanvas.width, envCanvas.height);
+    envMapTex.needsUpdate = true;
+  }
+  G.paintEnvironment = paintEnvironment;
+  paintEnvironment(new THREE.Color(0x121a30), new THREE.Color(0x1e2a44), new THREE.Color(0x2c3a58));
 
   G.glowTex = createCanvasTexture(128, 128, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);

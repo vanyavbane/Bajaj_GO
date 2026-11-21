@@ -236,7 +236,7 @@ export function initRepair() {
     let s = G.playerS + 200;
     for (let attempt = 0; attempt < 6 && siteBlocked(s); attempt++) s += 90;
     if (siteBlocked(s)) return false;
-    const cfg = G.lanesAtS(s);
+    const cfg = G.drivenLanesAt(s);
     const laneIdx = G.randomRunLane(s);
     const length = 6 + Math.random() * 4;
     const slot = G.repairPool.find((item) => !item.active);
@@ -265,7 +265,7 @@ export function initRepair() {
 function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
   const ev = G.repairEvent;
   if (!ev.active) return false;
-  const siteLat = G.laneWorldOffsetAtS(ev.s, ev.laneOffset);
+  const siteLat = G.drivenLaneAt(ev.s, G.holdDrivenLane(ev.s, ev.laneOffset));
   const along = Math.abs(playerS - ev.s) < ev.length * 0.5 + 1;
   return along && Math.abs(playerWorldLat - siteLat) < halfW;
 }
@@ -293,7 +293,7 @@ function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
       return;
     }
 
-    const worldLat = G.laneWorldOffsetAtS(slot.s, slot.lateralOffset);
+    const worldLat = G.drivenLaneAt(slot.s, G.holdDrivenLane(slot.s, slot.lateralOffset));
     G.placeOnRoad(slot.group, slot.s, worldLat, 0);
     const dist = Math.abs(slot.s - G.playerS);
     slot.near.visible = dist < 150;

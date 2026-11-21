@@ -129,6 +129,7 @@ export function initRoadside() {
   G.windowLitMat = new THREE.MeshStandardMaterial({ color: 0xffe082, emissive: 0xffb300, emissiveIntensity: 0.85, roughness: 0.3 });
   const windowOffMat = new THREE.MeshStandardMaterial({ color: 0x2c3847, roughness: 0.25, metalness: 0.6 });
   const lampHeadMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffb74d, emissiveIntensity: 1.5 });
+  G.lampHeadMat = lampHeadMat;
 
   const brickMat = new THREE.MeshStandardMaterial({ color: 0x7a4033, roughness: 0.92 });
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x2f343d, roughness: 0.85 });
@@ -493,18 +494,21 @@ export function initRoadside() {
 
     nearestLampPositions.sort((a, b) => a.d - b.d);
 
-    const setting = G.graphics ? G.graphics.lamps : G.lampLights.length;
+    const setting = Number.isFinite(G.activeLampBudget)
+      ? G.activeLampBudget
+      : (G.graphics ? G.graphics.lamps : G.lampLights.length);
     // Бюджет: 4 источника вне МКАД, до 6 на МКАД, но не больше настройки.
     const mwNow = G.mkadWeightAtS(G.playerS);
     const cap = mwNow > 0.5 ? 6 : 4;
     const lampBudget = Math.min(G.MAX_ACTIVE_LAMPS || 6, setting, cap);
     const wetGlow = 1 + 0.55 * (G.weather ? G.weather.wet : 0);
+    const lampGlow = Number.isFinite(G.nightGlow) ? G.nightGlow : (isNightish ? 1 : 0);
     for (let i = 0; i < G.lampLights.length; i++) {
       const pl = G.lampLights[i];
-      if (isNightish && i < lampBudget && i < nearestLampPositions.length) {
+      if (lampGlow > 0.04 && i < lampBudget && i < nearestLampPositions.length) {
         const lp = nearestLampPositions[i];
         pl.position.set(lp.x, lp.y, lp.z);
-        pl.intensity = 14 * wetGlow;
+        pl.intensity = 14 * wetGlow * lampGlow;
       } else {
         pl.intensity = 0;
       }

@@ -501,9 +501,76 @@ export function initCamera() {
   }
   G.updateFollowCamera = updateFollowCamera;
 
+  const sunFocus = new THREE.Vector3();
+  const sunDir = new THREE.Vector3();
+  const shadowRight = new THREE.Vector3();
+  const shadowUp = new THREE.Vector3();
+  let shadowFit = '';
+
   function aimSunAtPlayer() {
-    G.sunLight.position.set(G.bikeRoot.position.x - 24, G.bikeRoot.position.y + 48, G.bikeRoot.position.z - 25);
-    G.sunLight.target.position.set(G.bikeRoot.position.x, G.bikeRoot.position.y, G.bikeRoot.position.z - 28);
+    if (!G.sunLight || !G.bikeRoot) return;
+    G.bikeRoot.getWorldDirection(sunDir);
+    if (sunDir.lengthSq() < 1e-6) sunDir.set(0, 0, -1);
+    sunFocus.copy(G.bikeRoot.position).addScaledVector(sunDir, 16);
+
+    const sun = G.sunBody;
+    const moon = G.moonBody;
+    const body = sun && sun.visible && sun.position.y > 4 ? sun
+      : moon && moon.visible && moon.position.y > 4 ? moon
+      : null;
+    if (body) sunDir.copy(body.position).sub(sunFocus);
+    else sunDir.set(-16, 42, -12);
+    if (sunDir.lengthSq() < 1) sunDir.set(-16, 42, -12);
+    sunDir.normalize();
+    // Совсем плоский луч кладёт карту теней вскользь: дорога становится полоской.
+    // Диск солнца при этом может сидеть ниже.
+    if (sunDir.y < 0.18) {
+      sunDir.y = 0.18;
+      sunDir.normalize();
+    }
+
+    const quality = G.shadowQuality === 'high' ? 'high' : G.shadowQuality === 'off' ? 'off' : 'low';
+    const distance = quality === 'high' ? 72 : 56;
+    G.sunLight.position.copy(sunFocus).addScaledVector(sunDir, distance);
+    G.sunLight.target.position.copy(sunFocus);
+
+    if (quality !== 'off' && quality !== shadowFit) {
+      shadowFit = quality;
+      const cam = G.sunLight.shadow.camera;
+      const halfW = quality === 'high' ? 48 : 32;
+      const halfH = quality === 'high' ? 36 : 24;
+      cam.near = 4;
+      cam.far = quality === 'high' ? 160 : 120;
+      cam.left = -halfW;
+      cam.right = halfW;
+      cam.top = halfH;
+      cam.bottom = -halfH;
+      cam.updateProjectionMatrix();
+    }
+    if (quality !== 'off') snapShadowFocus();
+  }
+
+  // Сдвиг источника на долю текселя, чтобы тень не плыла вместе с байком.
+  function snapShadowFocus() {
+    const light = G.sunLight;
+    const cam = light.shadow.camera;
+    const mapSize = light.shadow.mapSize.x;
+    if (!light.castShadow || mapSize < 2) return;
+    shadowUp.set(0, 1, 0);
+    shadowRight.crossVectors(shadowUp, sunDir);
+    if (shadowRight.lengthSq() < 1e-8) return;
+    shadowRight.normalize();
+    shadowUp.crossVectors(sunDir, shadowRight);
+    const texelX = (cam.right - cam.left) / mapSize;
+    const texelY = (cam.top - cam.bottom) / mapSize;
+    if (!(texelX > 0) || !(texelY > 0)) return;
+    const focus = light.target.position;
+    const tx = shadowRight.dot(focus);
+    const ty = shadowUp.dot(focus);
+    const ox = Math.round(tx / texelX) * texelX - tx;
+    const oy = Math.round(ty / texelY) * texelY - ty;
+    focus.addScaledVector(shadowRight, ox).addScaledVector(shadowUp, oy);
+    light.position.addScaledVector(shadowRight, ox).addScaledVector(shadowUp, oy);
   }
   G.aimSunAtPlayer = aimSunAtPlayer;
 

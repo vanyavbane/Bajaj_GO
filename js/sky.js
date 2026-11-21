@@ -12,7 +12,9 @@ export function initSky() {
     uniforms: {
       topColor: { value: new THREE.Color(0x121a30) },
       midColor: { value: new THREE.Color(0x1e2a44) },
-      botColor: { value: new THREE.Color(0x2c3a58) }
+      botColor: { value: new THREE.Color(0x2c3a58) },
+      fogColor: { value: new THREE.Color(0x1b2740) },
+      fogDensity: { value: 0.0024 }
     },
     vertexShader: `
       varying vec3 vWorldPos;
@@ -26,11 +28,17 @@ export function initSky() {
       uniform vec3 topColor;
       uniform vec3 midColor;
       uniform vec3 botColor;
+      uniform vec3 fogColor;
+      uniform float fogDensity;
       varying vec3 vWorldPos;
       void main() {
         float h = normalize(vWorldPos - cameraPosition).y;
         vec3 col = mix(botColor, midColor, smoothstep(-0.05, 0.22, h));
         col = mix(col, topColor, smoothstep(0.22, 0.78, h));
+        // Дорога растворяется в тумане, поэтому кромка неба — тот же цвет.
+        float reach = clamp(fogDensity / 0.0024, 0.65, 2.4);
+        float haze = 1.0 - smoothstep(-0.03, 0.14 * reach, h);
+        col = mix(col, fogColor, haze);
         gl_FragColor = vec4(col, 1.0);
       }
     `
@@ -52,7 +60,8 @@ export function initSky() {
   G.sunLight.shadow.camera.top = 24;
   G.sunLight.shadow.camera.bottom = -16;
   G.sunLight.shadow.camera.updateProjectionMatrix();
-  G.sunLight.shadow.bias = -0.0006;
+  G.sunLight.shadow.bias = -0.00018;
+  G.sunLight.shadow.normalBias = 0.05;
   G.scene.add(G.sunLight);
   G.scene.add(G.sunLight.target);
 

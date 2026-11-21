@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { TexturePass } from 'three/examples/jsm/postprocessing/TexturePass.js';
 import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { G } from './state.js';
 
@@ -9,9 +9,10 @@ import { G } from './state.js';
  * 18. ПОСТ-ЭФФЕКТЫ: MOTION BLUR И GOD RAYS (ЛУЧИ ОТ СОЛНЦА)
  * ---------------------------------------------------------------------------
  * Порядок рендера:
- *   RenderPass (слой 0: мир) → GodRaysPass → MotionBlurPass → OutputPass.
- *   Затем слой 1 (мотоцикл/кокпит) рисуется напрямую в canvas поверх кадра,
- *   поэтому размытие и лучи его не касаются. HUD живёт в HTML и защищён by design.
+ *   Мир и мотоцикл в один буфер (глубина общая, байк закрывается геометрией)
+ *   → яркость → HDR+ → резкость → GodRays → MotionBlur → OutputPass.
+ *   Размытие и лучи не трогают пиксели байка: маска слоя 1 пишется по той же
+ *   глубине. Яркость, резкость и HDR+ красят весь кадр. HUD — HTML.
  *
  * Важно: при рендере в render target (EffectComposer) three не применяет
  * tone mapping — его делает только OutputPass (финальный проход в canvas),
@@ -44,6 +45,7 @@ const FULLSCREEN_VERTEX = /* glsl */`
  * ------------------------------------------------------------------------ */
 const MOTION_BLUR_FRAGMENT = /* glsl */`
   uniform sampler2D tDiffuse;
+  uniform sampler2D tMask;
   uniform vec2 uResolution;
   uniform float uSpeedRatio;
   uniform float uIntensity;
@@ -63,16 +65,23 @@ const MOTION_BLUR_FRAGMENT = /* glsl */`
     blurPx = min(blurPx, 9.0) * mix(1.0, 0.5, uComfort);
     float offset = blurPx * 0.5 * uIntensity * speedFactor * edgeFactor * centerMask * verticalMask;
 
+    // Байк остаётся резким и не размазывается на дорогу.
+    if (texture2D(tMask, vUv).r > 0.5) {
+      gl_FragColor = texture2D(tDiffuse, vUv);
+      return;
+    }
+
     vec3 sum = vec3(0.0);
     float totalWeight = 0.0;
     for (int i = -3; i <= 3; i++) {
       float k = float(i);
-      float w = 1.0 - abs(k) / 4.0;
       vec2 sampleUv = vUv + vec2((offset * k / 3.0) / uResolution.x, 0.0);
-      sum += texture2D(tDiffuse, clamp(sampleUv, vec2(0.001), vec2(0.999))).rgb * w;
+      sampleUv = clamp(sampleUv, vec2(0.001), vec2(0.999));
+      float w = (1.0 - abs(k) / 4.0) * (1.0 - texture2D(tMask, sampleUv).r);
+      sum += texture2D(tDiffuse, sampleUv).rgb * w;
       totalWeight += w;
     }
-    gl_FragColor = vec4(sum / totalWeight, 1.0);
+    gl_FragColor = vec4(totalWeight > 0.0 ? sum / totalWeight : texture2D(tDiffuse, vUv).rgb, 1.0);
   }
 `;
 
@@ -87,7 +96,8 @@ class MotionBlurPass extends Pass {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uSpeedRatio: { value: 0 },
       uIntensity: { value: 0 },
-      uComfort: { value: 0 }
+      uComfort: { value: 0 },
+      tMask: { value: null }
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -148,6 +158,7 @@ const GOD_RAYS_FRAGMENT = /* glsl */`
 const GOD_RAYS_COMPOSITE = /* glsl */`
   uniform sampler2D tDiffuse;
   uniform sampler2D tRays;
+  uniform sampler2D tMask;
   uniform vec3 uSunColor;
   uniform float uIntensity;
   uniform float uSunVisible;
@@ -157,8 +168,10 @@ const GOD_RAYS_COMPOSITE = /* glsl */`
     vec4 scene = texture2D(tDiffuse, vUv);
     vec3 rays = texture2D(tRays, vUv).rgb;
     // Не светим на дорогу и приборку: нижняя половина кадра ослаблена.
+    // Пиксели байка лучи не засвечивают.
     float verticalMask = smoothstep(0.10, 0.34, vUv.y);
-    vec3 add = rays * uSunColor * (uIntensity * uSunVisible * 0.55 * verticalMask);
+    float bike = texture2D(tMask, vUv).r;
+    vec3 add = rays * uSunColor * (uIntensity * uSunVisible * 0.55 * verticalMask) * (1.0 - bike);
     gl_FragColor = vec4(scene.rgb + add, 1.0);
   }
 `;
@@ -208,7 +221,8 @@ class GodRaysPass extends Pass {
         tRays: this.uniforms.tRays,
         uSunColor: this.uniforms.uSunColor,
         uIntensity: this.uniforms.uIntensity,
-        uSunVisible: this.uniforms.uSunVisible
+        uSunVisible: this.uniforms.uSunVisible,
+        tMask: { value: null }
       },
       vertexShader: FULLSCREEN_VERTEX,
       fragmentShader: GOD_RAYS_COMPOSITE,
@@ -532,7 +546,56 @@ export function initPostFx() {
 
   /* ---------- Composer ---------- */
   const composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
+  const sceneRT = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    depthBuffer: true,
+    stencilBuffer: false,
+    magFilter: THREE.LinearFilter,
+    minFilter: THREE.LinearFilter
+  });
+  sceneRT.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  sceneRT.texture.name = 'BajajScene';
+  const maskRT = new THREE.WebGLRenderTarget(1, 1, {
+    depthBuffer: true,
+    stencilBuffer: false,
+    magFilter: THREE.NearestFilter,
+    minFilter: THREE.NearestFilter
+  });
+  maskRT.texture.generateMipmaps = false;
+  maskRT.texture.name = 'BajajBikeMask';
+  const depthBlitMat = new THREE.ShaderMaterial({
+    uniforms: { tDepth: { value: null } },
+    vertexShader: FULLSCREEN_VERTEX,
+    fragmentShader: /* glsl */`
+      uniform sampler2D tDepth;
+      varying vec2 vUv;
+      void main() {
+        gl_FragColor = vec4(0.0);
+        gl_FragDepth = texture2D(tDepth, vUv).x;
+      }
+    `,
+    depthTest: false,
+    depthWrite: true,
+    colorWrite: false
+  });
+  const depthBlit = new FullScreenQuad(depthBlitMat);
+  const maskMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    fog: false,
+    toneMapped: false,
+    depthTest: true,
+    depthWrite: false
+  });
+  const maskClear = new THREE.Color();
+
+  function attachSceneDepth(width, height) {
+    const depth = new THREE.DepthTexture(width, height);
+    depth.type = THREE.UnsignedIntType;
+    sceneRT.depthTexture = depth;
+    depthBlitMat.uniforms.tDepth.value = depth;
+  }
+
+  const scenePass = new TexturePass(sceneRT.texture);
   const brightnessPass = new BrightnessPass();
   const hdrPlusPass = new HDRPlusPass();
   const godRaysPass = new GodRaysPass();
@@ -540,21 +603,35 @@ export function initPostFx() {
   const sharpenPass = new SharpenPass();
   const outputPass = new OutputPass();
 
-  composer.addPass(renderPass);
+  composer.addPass(scenePass);
   composer.addPass(brightnessPass);
   composer.addPass(hdrPlusPass);
+  composer.addPass(sharpenPass);
   composer.addPass(godRaysPass);
   composer.addPass(motionBlurPass);
-  composer.addPass(sharpenPass);
   composer.addPass(outputPass);
 
-  G.postFx = { composer, renderPass, brightnessPass, hdrPlusPass, godRaysPass, motionBlurPass, sharpenPass, outputPass };
+  motionBlurPass.uniforms.tMask.value = maskRT.texture;
+  godRaysPass.compositeMaterial.uniforms.tMask.value = maskRT.texture;
+
+  G.postFx = { composer, scenePass, brightnessPass, hdrPlusPass, godRaysPass, motionBlurPass, sharpenPass, outputPass };
   G.postFxLevel = 1;
 
   function applySize() {
     const pr = renderer.getPixelRatio();
     composer.setPixelRatio(pr);
     composer.setSize(innerWidth, innerHeight);
+    const width = composer.renderTarget1.width;
+    const height = composer.renderTarget1.height;
+    const sameDepth = sceneRT.width === width
+      && sceneRT.height === height
+      && sceneRT.depthTexture;
+    sceneRT.setSize(width, height);
+    maskRT.setSize(width, height);
+    if (!sameDepth) attachSceneDepth(width, height);
+    else depthBlitMat.uniforms.tDepth.value = sceneRT.depthTexture;
+    motionBlurPass.uniforms.tMask.value = maskRT.texture;
+    godRaysPass.compositeMaterial.uniforms.tMask.value = maskRT.texture;
   }
   G.applyPostFxSize = applySize;
   applySize();
@@ -564,6 +641,7 @@ export function initPostFx() {
   let fpsAccum = 0;
   let fpsFrames = 0;
   godRaysPass.setLowQuality(autoLevel < 1);
+  if (G.setGraphicsLoad) G.setGraphicsLoad(autoLevel);
 
   function updateAutoQuality(dt) {
     if (G.paused || G.uiModal || document.hidden) {
@@ -587,6 +665,7 @@ export function initPostFx() {
       autoLevel = next;
       G.postFxLevel = autoLevel;
       godRaysPass.setLowQuality(autoLevel < 1);
+      if (G.setGraphicsLoad) G.setGraphicsLoad(autoLevel);
     }
   }
 
@@ -674,19 +753,44 @@ export function initPostFx() {
         && speedRatio > 0.01;
     }
 
-    /* ---------- Слой 0 в composer + слой 1 поверх ---------- */
+    /* ---------- Мир и байк в один кадр, затем постобработка ---------- */
     renderer.shadowMap.autoUpdate = false;
     if (renderer.shadowMap.enabled) renderer.shadowMap.needsUpdate = true;
 
     camera.layers.set(0);
-    composer.render();
-
-    renderer.autoClear = false;
-    renderer.clearDepth();
-    camera.layers.set(1);
+    camera.layers.enable(1);
+    renderer.setRenderTarget(sceneRT);
+    renderer.clear(true, true, true);
     renderer.render(scene, camera);
+    renderer.shadowMap.needsUpdate = false;
+    renderer.setRenderTarget(null);
+
+    const protectBike = godRaysPass.enabled || motionBlurPass.enabled;
+    if (protectBike) {
+      const prevAutoClear = renderer.autoClear;
+      const prevMask = camera.layers.mask;
+      renderer.getClearColor(maskClear);
+      const prevAlpha = renderer.getClearAlpha();
+      renderer.autoClear = true;
+      renderer.setClearColor(0x000000, 1);
+      try {
+        renderer.setRenderTarget(maskRT);
+        depthBlit.render(renderer);
+        renderer.autoClear = false;
+        scene.overrideMaterial = maskMat;
+        camera.layers.set(1);
+        renderer.render(scene, camera);
+      } finally {
+        scene.overrideMaterial = null;
+        camera.layers.mask = prevMask;
+        renderer.setRenderTarget(null);
+        renderer.setClearColor(maskClear, prevAlpha);
+        renderer.autoClear = prevAutoClear;
+      }
+    }
+
+    composer.render();
     camera.layers.set(0);
-    renderer.autoClear = true;
   }
 
   G.renderFrame = updateRenderFrame;

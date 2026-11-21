@@ -58,9 +58,24 @@ export function initRoadSurface() {
     return outerRibbon(G.roadEdgesAt(sampleS[row]), side);
   }
 
+  /**
+   * Откос принадлежит дороге байка.
+   * Если другая живая лента торчит дальше, откос остаётся снаружи неё.
+   */
+  function slopeRibbon(row, side) {
+    const outer = ribbonAt(row, side);
+    const edge = drivenEdge(row, side);
+    const span = G.drivenSpanAt(sampleS[row]);
+    if (edge == null || !span) return outer;
+    const driven = { edge, center: span.mid, half: span.width * 0.5 };
+    if (!outer) return driven;
+    const further = side < 0 ? outer.edge < driven.edge - 0.5 : outer.edge > driven.edge + 0.5;
+    return further ? outer : driven;
+  }
+
   /** Точка откоса снаружи своей ленты, не от середины обеих. */
   function slopeLat(row, side, fromCenter) {
-    const ribbon = ribbonAt(row, side);
+    const ribbon = slopeRibbon(row, side);
     if (!ribbon) return shellMid(row);
     return outwardFrom(ribbon.edge, ribbon.center, Math.max(0, fromCenter - ribbon.half));
   }
@@ -198,7 +213,7 @@ export function initRoadSurface() {
 
 /** Удаление живой кромки от середины оболочки. Откос начинается отсюда. */
   function farAsphalt(row, side) {
-    const ribbon = ribbonAt(row, side);
+    const ribbon = slopeRibbon(row, side);
     return ribbon ? ribbon.half : 0;
   }
 
@@ -295,12 +310,19 @@ export function initRoadSurface() {
 
   G.medianBlocksBike = (s, worldLat, halfPlayer) => {
     const weight = G.mkadWeightAtS(s);
-    if (weight < 0.55 || barrierGapAt(s)) return 0;
+    if (weight < 0.55 || barrierGapAt(s)) return null;
     const reach = BARRIER_HALF_W + halfPlayer;
+    let nearest = null;
+    let best = Infinity;
     for (const lat of barrierLats(s)) {
-      if (Math.abs(worldLat - lat) < reach) return reach;
+      const gap = Math.abs(worldLat - lat);
+      if (gap < reach && gap < best) {
+        best = gap;
+        nearest = lat;
+      }
     }
-    return 0;
+    if (nearest == null) return null;
+    return { lat: nearest, clear: reach + 0.12 };
   };
 
   function updateBarrier(playerS, dense) {
@@ -590,7 +612,10 @@ export function initRoadSurface() {
       const rBermY = eL(sh.bermY, 0.08);
       const rFarY = eL(sh.farY, -6);
       const at = (side, fromCenter, height) => {
-        const p = G.embedRoad(s, shellWide(shellAt(r)) ? slopeLat(r, side, fromCenter) : shellMid(r));
+        const wide = shellWide(shellAt(r));
+        const lat = wide ? slopeLat(r, side, fromCenter) : shellMid(r);
+        const lip = wide ? slopeRibbon(r, side) : null;
+        const p = lip ? G.embedBeside(s, lip.edge, lat) : G.embedRoad(s, lat);
         return [p.x, cy + height, p.z];
       };
       const idx = r * 3;

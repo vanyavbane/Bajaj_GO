@@ -629,11 +629,17 @@ function asphaltSpanAt(s) {
   return asphaltSpan(frame.world);
 }
 
-/** Проезжая часть, по которой едет байк. На взятом въезде это его лента, не старая дорога. */
+/**
+ * Проезжая часть байка.
+ * Взятый въезд — его лента. Пока выбор открыт, лента становится дорогой байка
+ * в тот момент, когда он на неё сел.
+ */
 function drivenCarriageAt(s) {
   const frame = frameAt(s);
-  const ribbon = frame.chosen === 1 ? ribbonHere(s) : null;
-  return ribbon || roadCarriageAt(s);
+  const riding = riderSeat.kind === 'exit';
+  const taken = frame.chosen === 1;
+  if (!riding && !taken) return roadCarriageAt(s);
+  return ribbonHere(s) || roadCarriageAt(s);
 }
 
 /** Портал и мост накрывают эту проезжую часть, не обе ленты. */
@@ -658,6 +664,23 @@ function drivenLaneAt(s, offset) {
 function drivenLanesAt(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
   return drivenCarriageAt(at).lanes;
+}
+
+/**
+ * Точка сбоку от дороги байка.
+ * На чужой асфальт не садится: если между кромкой и точкой лежит другая лента, точки нет.
+ */
+function flankAt(s, side, depth) {
+  const span = drivenSpanAt(s);
+  if (!span || !(span.width > 0.5)) return null;
+  const sign = side < 0 ? -1 : 1;
+  const edge = sign < 0 ? span.left : span.right;
+  const lat = edge + sign * Math.max(0, Number.isFinite(depth) ? depth : 0);
+  const at = groundAt(frameAt(s).world, lat);
+  if (at.dist === 0) return null;
+  const fromNearest = at.dist - at.half;
+  if (fromNearest + 0.25 < Math.abs(lat - edge)) return null;
+  return { edge, lat };
 }
 
 /** Кромки этой же проезжей части. Лес и горы по-прежнему читают всю оболочку. */
@@ -829,6 +852,8 @@ function buildMaterials() {
     mkadLight: new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffb74d, emissiveIntensity: 1.8 }),
     wire: new THREE.MeshStandardMaterial({ color: 0x20262d, roughness: 0.7 })
   };
+  G.mkadLightMat = MAT.mkadLight;
+  G.mkadGlassMat = MAT.mkadGlass;
 }
 
 function addBox(parent, mat, w, h, d, x, y, z) {
@@ -1230,9 +1255,19 @@ function riderLaneScaleAt(s) {
   return Number.isFinite(scale) && scale !== 0 ? scale : 1;
 }
 
-/** Случайная попутная полоса биома в точке s. */
+/** Случайная попутная полоса дороги байка в точке s. */
 function randomRunLane(s) {
-  return laneIndexByRoll(lanesOf(lanesAtS(s)), 'with', Math.random());
+  return laneIndexByRoll(lanesOf(drivenLanesAt(s)), 'with', Math.random());
+}
+
+/** Смещение остаётся, если это попутная полоса дороги байка. Иначе ближайшая такая полоса. */
+function holdDrivenLane(s, offset) {
+  const lanes = lanesOf(drivenLanesAt(s));
+  const lane = Number.isFinite(offset) ? offset : 0;
+  for (const item of lanes) {
+    if (item.direction === 'with' && Math.abs(item.offset - lane) < 0.05) return item.offset;
+  }
+  return nearestLaneOffset(lanes, lane, 'with');
 }
 
 function commitSplit(zone, side, commitMeters) {
@@ -1521,6 +1556,8 @@ export function initBiome() {
   G.drivenFrameAt = drivenFrameAt;
   G.drivenLanesAt = drivenLanesAt;
   G.drivenLaneAt = drivenLaneAt;
+  G.holdDrivenLane = holdDrivenLane;
+  G.flankAt = flankAt;
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;

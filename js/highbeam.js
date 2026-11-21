@@ -14,18 +14,28 @@ export function initHighbeam() {
     G.highBeamCooldown = 0.85;
     $('badge-beam').hidden = false;
 
+    const riderLat = G.riderLatAt(G.playerS);
+    const here = G.roadsAt(G.playerS);
+    const drivenMid = G.drivenSpanAt(G.playerS).mid;
+    const bikeOnExit = !!(here.exit && Math.abs(here.exit.axis - drivenMid) < 0.5);
     for (const car of G.trafficPool) {
       const roads = G.roadsAt(car.s);
-      const carLanes = car.onExit && roads.exit ? roads.exit.lanes : roads.main.lanes;
-      const carLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
-      if (Math.abs(carLat - G.riderLatAt(G.playerS)) >= carLanes.laneWidth) continue;
+      const onExit = !!(car.onExit && roads.exit);
+      const road = onExit ? roads.exit : roads.main;
+      const carLat = G.trafficLatAt(car.s, car.lateralOffset, onExit);
+      if (Math.abs(carLat - riderLat) >= road.lanes.laneWidth) continue;
+      // На одной дороге номер полосы общий. На другой ленте место байка
+      // переводится в её кадр: номера шоссе и съезда сами по себе не совпадают.
+      const sameRoad = onExit === bikeOnExit;
+      const scale = road.scale || 1;
+      const playerLane = sameRoad ? G.laneOffset : (riderLat - road.axis) / scale;
       const lane = highbeamYieldLane(
-        car, G.playerS, G.laneOffset, lanesOf(carLanes), carLanes.laneWidth
+        car, G.playerS, playerLane, lanesOf(road.lanes), road.lanes.laneWidth
       );
       if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;
-      car.speedKmh = carLanes.speeds[lane];
+      car.speedKmh = road.lanes.speeds[lane];
       car.flashReactTimer = 1.6;
       car.model.alertSprite.visible = true;
     }

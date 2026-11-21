@@ -35,10 +35,13 @@ function paint(color) {
 
 const headMat = new THREE.MeshStandardMaterial({ color: 0xfff8e1, emissive: 0xffe082, emissiveIntensity: 1.7, roughness: 0.18 });
 const tailMat = new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0xd50000, emissiveIntensity: 1.15, roughness: 0.3 });
+G.trafficHeadMat = headMat;
+G.trafficTailMat = tailMat;
 const brakeMat = new THREE.MeshStandardMaterial({ color: 0xff5252, emissive: 0xff1744, emissiveIntensity: 1.4, roughness: 0.3 });
 const reverseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff7e0, emissiveIntensity: 1.0, roughness: 0.25 });
 const amberMat = new THREE.MeshStandardMaterial({ color: 0xffb300, emissive: 0xff8f00, emissiveIntensity: 1.25, roughness: 0.35 });
 const drlMat = new THREE.MeshStandardMaterial({ color: 0xf4f8ff, emissive: 0xdfe9ff, emissiveIntensity: 1.5, roughness: 0.2 });
+G.trafficDrlMat = drlMat;
 const redReflectorMat = new THREE.MeshStandardMaterial({ color: 0xb71c1c, emissive: 0x7f0000, emissiveIntensity: 0.45, roughness: 0.4 });
 const bedMat = new THREE.MeshStandardMaterial({ color: 0x5d646e, roughness: 0.72, metalness: 0.2 });
 const crateMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.9 });
@@ -68,6 +71,7 @@ function getHeadGlowMat() {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
+    G.trafficGlowMat = headGlowMat;
   }
   return headGlowMat;
 }

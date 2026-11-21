@@ -136,6 +136,30 @@ export function initAtmosphere() {
   }
   G.smoothstep = smoothstep;
 
+  function fadeEmissive(mat, day, night, glow) {
+    if (!mat) return;
+    mat.emissiveIntensity = day + (night - day) * glow;
+  }
+
+  function applyNightLights(glow) {
+    fadeEmissive(G.windowLitMat, 0.04, 0.85, glow);
+    fadeEmissive(G.lampHeadMat, 0.05, 1.5, glow);
+    fadeEmissive(G.mkadLightMat, 0.06, 1.8, glow);
+    fadeEmissive(G.mkadGlassMat, 0.04, 0.9, glow);
+    fadeEmissive(G.quayLampMat, 0.04, 0.9, glow);
+    if (G.M) {
+      fadeEmissive(G.M.headlightMat, 0.12, 1.55, glow);
+      fadeEmissive(G.M.drlMat, 0.45, 1.6, glow);
+    }
+    fadeEmissive(G.trafficHeadMat, 0.1, 1.7, glow);
+    fadeEmissive(G.trafficTailMat, 0.22, 1.15, glow);
+    fadeEmissive(G.trafficDrlMat, 0.4, 1.5, glow);
+    if (G.trafficGlowMat) G.trafficGlowMat.opacity = 0.05 + 0.65 * glow;
+    const braking = !!(G.keys && (G.keys.brake || G.stickBrake));
+    const tail = 0.35 + 0.75 * glow;
+    if (G.tailLightBrakeMat) G.tailLightBrakeMat.emissiveIntensity = braking ? tail * 3.1 : tail;
+  }
+
   function updateAtmosphereAndTimeOfDay(dt, playerS) {
     if (!G.started && !G.ended) {
       G.todCycleTime = 0.385;
@@ -194,9 +218,14 @@ export function initAtmosphere() {
     G.skyDomeMat.uniforms.topColor.value.copy(_skyTop);
     G.skyDomeMat.uniforms.midColor.value.copy(_skyMid);
     G.skyDomeMat.uniforms.botColor.value.copy(_skyBot);
+    if (G.paintEnvironment) G.paintEnvironment(_skyTop, _skyMid, _skyBot);
     G.scene.fog.color.copy(_fogCol);
     const fork = G.forkView ? 0.62 : 1;
     G.scene.fog.density = FOG_BASE * _biomeFogMul * (1 + 0.85 * wc) * fork;
+    if (G.skyDomeMat.uniforms.fogColor) {
+      G.skyDomeMat.uniforms.fogColor.value.copy(_fogCol);
+      G.skyDomeMat.uniforms.fogDensity.value = G.scene.fog.density;
+    }
 
     _cloudBase.copy(pA.cloud).lerp(pB.cloud, t);
     _stormCol.copy(pA.storm).lerp(pB.storm, t);
@@ -240,6 +269,12 @@ export function initAtmosphere() {
       G.moonBody.position.set(px - Math.cos(sunAngle) * 180, -Math.sin(sunAngle) * 140 + 35, pz - 260);
       G.moonBody.visible = G.moonBody.position.y > -10;
     }
+
+    // Окна и фонари следуют за высотой диска, не за подписью «день/ночь».
+    // В тоннеле городской свет включён полностью.
+    const nightGlow = inTunnel ? 1 : 1 - smoothstep(20, 100, G.sunBody.position.y);
+    G.nightGlow = nightGlow;
+    applyNightLights(nightGlow);
 
     for (let ci = 0; ci < G.clouds.length; ci++) {
       const c = G.clouds[ci];

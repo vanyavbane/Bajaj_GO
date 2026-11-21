@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -98,9 +97,9 @@ export function initMountain() {
   const qYaw = new THREE.Quaternion();
   const UP = new THREE.Vector3(0, 1, 0);
 
-  function put(pool, s, lat, yOff, sx, sy, sz, yaw, k, counter) {
+  function put(pool, s, edge, lat, yOff, sx, sy, sz, yaw, k, counter) {
     if (counter.value >= pool.instanceMatrix.count) return;
-    G.placeOnRoad(dummy, s, lat, G.groundOffset(lat, s) + yOff * k);
+    G.placeBeside(dummy, s, edge, lat, G.groundOffset(lat, s) + yOff * k);
     base.copy(dummy.position);
     qYaw.setFromAxisAngle(UP, yaw);
     q.copy(dummy.quaternion).multiply(qYaw);
@@ -125,35 +124,37 @@ export function initMountain() {
       const s = startS + d;
       const k = mountainK(s);
       if (k < 0.03) continue;
-      const frame = G.roadsideFrameAt(s);
       const curv = G.roadCurvature(s);
       const inside = curv > 0.0006 ? 1 : curv < -0.0006 ? -1 : 0;
       for (const side of SIDES) {
-        const edge = shellEdge(frame.edges, side);
         const isInside = inside !== 0 && side === inside;
         if (isInside) {
           // Скальная стена: 2–3 блока наращиваются вверх и вглубь.
           const depth = CFG.ROAD_MARGIN + 1.2 + rng() * 3.5;
-          const lat = edge + side * depth;
+          const flank = G.flankAt(s, side, depth);
+          if (!flank) continue;
           const h = (CFG.ROCK_MIN_H + rng() * (CFG.ROCK_MAX_H - CFG.ROCK_MIN_H)) * k;
           const w = (5 + rng() * 5) * k;
           const dep = (4 + rng() * 4) * k;
           const yaw = rng() * Math.PI;
-          put(pools.rock, s, lat, h * 0.5, w, h, dep, yaw, 1, counters.rock);
-          if (rng() < 0.6) {
+          put(pools.rock, s, flank.edge, flank.lat, h * 0.5, w, h, dep, yaw, 1, counters.rock);
+          const further = G.flankAt(s + 2.5, side, depth + 1.5);
+          if (rng() < 0.6 && further) {
             const h2 = h * (0.4 + rng() * 0.4);
-            put(pools.rockDark, s + 2.5, lat + side * 1.5, h2 * 0.5, w * 0.7, h2, dep * 0.8, yaw + 0.4, 1, counters.rockDark);
+            put(pools.rockDark, s + 2.5, further.edge, further.lat, h2 * 0.5, w * 0.7, h2, dep * 0.8, yaw + 0.4, 1, counters.rockDark);
           }
         } else {
           // Внешняя сторона: массивная подпорная стена и обрыв за ней.
           const depth = CFG.ROAD_MARGIN + 0.4 + rng() * 1.2;
-          const lat = edge + side * depth;
+          const flank = G.flankAt(s, side, depth);
+          if (!flank) continue;
           const h = CFG.WALL_H * (0.8 + rng() * 0.5) * k;
           const w = CFG.WALL_STEP * (0.9 + rng() * 0.3);
-          put(pools.wall, s, lat, h * 0.5, w, h, 1.6, 0, 1, counters.wall);
-          if (rng() < 0.35) {
+          put(pools.wall, s, flank.edge, flank.lat, h * 0.5, w, h, 1.6, 0, 1, counters.wall);
+          const drop = G.flankAt(s + 3, side, depth + 6);
+          if (rng() < 0.35 && drop) {
             const h2 = h * 1.6;
-            put(pools.rockDark, s + 3, lat + side * 6, h2 * 0.5, 6 * k, h2, 5 * k, rng() * Math.PI, 1, counters.rockDark);
+            put(pools.rockDark, s + 3, drop.edge, drop.lat, h2 * 0.5, 6 * k, h2, 5 * k, rng() * Math.PI, 1, counters.rockDark);
           }
         }
       }
@@ -174,25 +175,24 @@ export function initMountain() {
           const s = startS + (i + 0.5) * CFG.VEG_CELL + (rng() - 0.5) * 2.5;
           const k = mountainK(s);
           if (k < 0.04) continue;
-          const frame = G.roadsideFrameAt(s);
-          const edge = shellEdge(frame.edges, side);
           const depth = CFG.ROAD_MARGIN + 2 + (j + 0.5) * CFG.VEG_CELL + (rng() - 0.5) * 2.5;
-          const lat = edge + side * depth;
+          const flank = G.flankAt(s, side, depth);
+          if (!flank) continue;
           const roll = rng();
           if (roll < 0.38) {
             const h = (7 + rng() * 7) * k;
-            put(pools.pineTrunk, s, lat, h * 0.5, k, h, k, rng() * Math.PI, 1, counters.pineTrunk);
+            put(pools.pineTrunk, s, flank.edge, flank.lat, h * 0.5, k, h, k, rng() * Math.PI, 1, counters.pineTrunk);
             const cr = (2.4 + rng() * 1.4) * k;
-            put(pools.pineCrown, s, lat, h * 0.86, cr, h * 0.5, cr, rng() * Math.PI, 1, counters.pineCrown);
+            put(pools.pineCrown, s, flank.edge, flank.lat, h * 0.86, cr, h * 0.5, cr, rng() * Math.PI, 1, counters.pineCrown);
             if (rng() < 0.5) {
-              put(pools.pineCrown, s, lat, h * 1.02, cr * 0.7, h * 0.35, cr * 0.7, rng() * Math.PI, 1, counters.pineCrown);
+              put(pools.pineCrown, s, flank.edge, flank.lat, h * 1.02, cr * 0.7, h * 0.35, cr * 0.7, rng() * Math.PI, 1, counters.pineCrown);
             }
           } else if (roll < 0.68) {
             const sc = (0.8 + rng() * 1.2) * k;
-            put(pools.bush, s, lat, sc * 0.5, sc * 1.4, sc, sc * 1.4, rng() * Math.PI, 1, counters.bush);
+            put(pools.bush, s, flank.edge, flank.lat, sc * 0.5, sc * 1.4, sc, sc * 1.4, rng() * Math.PI, 1, counters.bush);
           } else {
             const sc = (1.4 + rng() * 2.2) * k;
-            put(pools.grass, s, lat, sc * 0.25, sc * 2.4, sc * 0.4, sc * 2.4, rng() * Math.PI, 1, counters.grass);
+            put(pools.grass, s, flank.edge, flank.lat, sc * 0.25, sc * 2.4, sc * 0.4, sc * 2.4, rng() * Math.PI, 1, counters.grass);
           }
         }
       }
@@ -208,14 +208,13 @@ export function initMountain() {
       const s = startS + d + rng() * 20;
       const k = mountainK(s);
       if (k < 0.05) continue;
-      const frame = G.roadsideFrameAt(s);
       const side = /** @type {-1 | 1} */ (rng() < 0.5 ? -1 : 1);
-      const edge = shellEdge(frame.edges, side);
-      const lat = edge + side * (CFG.ROAD_MARGIN + 1.6 + rng() * 2.5);
+      const flank = G.flankAt(s, side, CFG.ROAD_MARGIN + 1.6 + rng() * 2.5);
+      if (!flank) continue;
       const sc = 0.75 * k;
       const yaw = (rng() - 0.5) * 0.6 + (side > 0 ? 0 : Math.PI);
-      put(pools.carPaint, s, lat, 0.45 * sc, 3.6 * sc, 0.7 * sc, 1.7 * sc, yaw, 1, counters.carPaint);
-      put(pools.carGlass, s, lat, 1.05 * sc, 2.0 * sc, 0.55 * sc, 1.5 * sc, yaw, 1, counters.carGlass);
+      put(pools.carPaint, s, flank.edge, flank.lat, 0.45 * sc, 3.6 * sc, 0.7 * sc, 1.7 * sc, yaw, 1, counters.carPaint);
+      put(pools.carGlass, s, flank.edge, flank.lat, 1.05 * sc, 2.0 * sc, 0.55 * sc, 1.5 * sc, yaw, 1, counters.carGlass);
     }
   }
 
@@ -243,10 +242,14 @@ export function initMountain() {
   }
 
   let lastChunk = NaN;
+  let lastRoad = 0;
   function updateMountain() {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    if (pc !== lastChunk) {
+    const span = G.drivenSpanAt(G.playerS);
+    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
+    if (pc !== lastChunk || road !== lastRoad) {
       lastChunk = pc;
+      lastRoad = road;
       rebuild();
     }
   }

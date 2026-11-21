@@ -1,4 +1,4 @@
-import { exitEntryPull, forkSide } from './engine/fork.js';
+import { exitEntryPull } from './engine/fork.js';
 import { defaultRunOffset, lanesOf, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
@@ -103,13 +103,12 @@ export function initLoop() {
       return;
     }
 
-    const toWorld = G.laneWorldOffsetAtS;
     const bikeLat = G.riderLatAt(G.playerS);
     let deckHeight = 0;
     for (const ramp of G.rampsPool) {
       // Флаг мог остаться с прошлого заезда: пока трамплин впереди, сбрасываем.
       if (G.playerS < ramp.s - ramp.length * 0.5) ramp.triggeredThisPass = false;
-      const rampLat = toWorld(ramp.s, ramp.lateralOffset);
+      const rampLat = G.drivenLaneAt(ramp.s, G.holdDrivenLane(ramp.s, ramp.lateralOffset));
       const contact = rampUnderBike(G.playerS, prevS, bikeLat, {
         s: ramp.s,
         length: ramp.length,
@@ -155,7 +154,6 @@ export function initLoop() {
     });
     G.speed = stepped.speed;
 
-    G.tailLightBrakeMat.emissiveIntensity = brakeOn ? 3.4 : 1.1;
     for (const fl of G.yuraFlames) {
       fl.visible = effStats.isYura && gasOn && G.speed > 40 && (Math.floor(now / 60) % 2 === 0);
       fl.scale.z = 0.7 + Math.random() * 0.9;
@@ -164,20 +162,17 @@ export function initLoop() {
     G.accelPitchOffset = lerp(G.accelPitchOffset, clamp((stepped.speed - prevSpeed) / Math.max(dt, 0.001) * 0.0008, -0.04, 0.05), dt * 6);
 
     // Lane-assist: после развилки мягко возвращает байк в попутную полосу.
-    // Пока выбор открыт, он не тянет обратно на прямую.
+    // Пока выбор открыт и пока взятый въезд ещё не кончился, он не тянет на старую дорогу.
     const fork = G.splitState;
     const forkOpen = fork && fork.active && !fork.chosen;
-    if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen) {
+    const forkTaken = fork && fork.active && fork.chosenSide === 1;
+    if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen && !forkTaken) {
       const assist = G.laneAssistTarget - G.laneOffset;
       G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
     }
     const wantsRight = G.keys.right
       || (G.controlMode === 'tilt' && !G.swipeActive && G.tiltSmoothed > 0.2)
       || (G.controlMode === 'stick' && G.stickHeld && G.stickSteer > 0.2);
-    if (wantsRight && fork && fork.active && fork.chosenSide !== 0 && G.roadEdgesAt && G.riderLatAt) {
-      const pull = exitEntryPull(G.riderLatAt(G.playerS), G.roadEdgesAt(G.playerS));
-      if (pull > G.lateralVelocity) G.lateralVelocity = pull;
-    }
 
     const steered = stepSteer({
       laneOffset: G.laneOffset,
@@ -206,6 +201,17 @@ export function initLoop() {
     });
     G.laneOffset = steered.laneOffset;
     G.lateralVelocity = steered.lateralVelocity;
+    // Рулевой расчёт сглаживает скорость к обычной. В клине удержание вправо
+    // остаётся довозом до ленты и не гасится этим сглаживанием.
+    if (wantsRight && fork && fork.active && fork.chosenSide !== 0 && G.roadEdgesAt && G.riderLatAt) {
+      const pull = exitEntryPull(G.riderLatAt(G.playerS), G.roadEdgesAt(G.playerS));
+      if (pull > G.lateralVelocity) {
+        const room = G.roadEdgeMax - G.laneOffset;
+        const extra = Math.min(Math.max(0, room), (pull - G.lateralVelocity) * dt);
+        G.laneOffset += extra;
+        G.lateralVelocity = pull;
+      }
+    }
     G.steerVisual = steered.steerVisual;
     G.slipDriftVel = steered.slipDriftVel;
     G.jumpState.wobbleTimer = steered.wobbleTimer;
@@ -224,11 +230,10 @@ export function initLoop() {
     G.tickOrder(dt);
 
     // 4. ФИЗИКА ТРАМПЛИНОВ И ПРЫЖКОВ
-    const toWorld = G.laneWorldOffsetAtS;
     let surfaceRampHeight = 0;
     for (const ramp of G.rampsPool) {
       const bikeLat = G.riderLatAt(G.playerS);
-      const rampLat = toWorld(ramp.s, ramp.lateralOffset);
+      const rampLat = G.drivenLaneAt(ramp.s, G.holdDrivenLane(ramp.s, ramp.lateralOffset));
       const contact = !G.jumpState.airborne && rampUnderBike(G.playerS, prevS, bikeLat, {
         s: ramp.s,
         length: ramp.length,
@@ -304,22 +309,24 @@ export function initLoop() {
 
   function stopAtMedian(prevS, halfPlayer) {
     if (!G.medianBlocksBike || G.jumpState.airborne) return;
-    const toWorld = G.laneWorldOffsetAtS;
-    let reach = 0;
+    let hit = null;
     for (let i = 0; i <= 4; i++) {
       const s = prevS + (G.playerS - prevS) * (i / 4);
-      const hit = G.medianBlocksBike(s, G.riderLatAt(s), halfPlayer);
-      if (hit) {
-        reach = hit;
+      const found = G.medianBlocksBike(s, G.riderLatAt(s), halfPlayer);
+      if (found) {
+        hit = found;
         break;
       }
     }
-    if (!reach) return;
+    if (!hit) return;
     G.speed = 0;
     G.lateralVelocity = 0;
+    const world = G.riderLatAt(G.playerS);
+    const sign = world <= hit.lat ? -1 : 1;
+    const axis = G.riderLatAt(G.playerS, 0);
     const scale = G.riderLaneScaleAt(G.playerS);
-    const sign = forkSide(G.laneOffset);
-    G.laneOffset = sign * (reach + 0.12) / (Math.abs(scale) < 0.2 ? 1 : scale);
+    const span = Math.abs(scale) < 0.2 ? 1 : scale;
+    G.laneOffset = (hit.lat + sign * hit.clear - axis) / span;
   }
 
   function placePlayer(isQute) {
@@ -393,9 +400,9 @@ export function initLoop() {
     placePlayer(isQute);
     if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
-    G.aimSunAtPlayer();
     G.updateRoadSurface(G.playerS);
     const isNightish = G.updateAtmosphereAndTimeOfDay(dt, G.playerS);
+    G.aimSunAtPlayer();
     G.recycleRamps();
     if (G.updateRepair) G.updateRepair(dt, now);
     G.tickJumpParticles(dt);

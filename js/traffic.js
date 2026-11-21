@@ -33,9 +33,14 @@ export function initTraffic() {
   ];
   const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
 
-  function lanesAt(s) {
-    // Полосы в точке: односторонний съезд уже без встречных, не сырой конфиг биома.
-    return G.lanesAtS(s);
+  /** Новая машина рождается на дороге байка. На ленте съезда — только когда байк уже на ней. */
+  function spawnRoad(s) {
+    const roads = G.roadsAt(s);
+    const span = G.drivenSpanAt(s);
+    if (roads.exit && span && Math.abs(roads.exit.axis - span.mid) < 0.5) {
+      return { lanes: roads.exit.lanes, onExit: true };
+    }
+    return { lanes: roads.main.lanes, onExit: false };
   }
 
   /** Полосы той дороги, по которой машина уже едет. Смена полос байка её не пересаживает. */
@@ -102,7 +107,8 @@ export function initTraffic() {
   }
 
   function parkedTraffic(model, s, forcedLane = null) {
-    const cfg = lanesAt(s);
+    const road = spawnRoad(s);
+    const cfg = road.lanes;
     const idx = pickLane(cfg, model, forcedLane);
     return {
       model,
@@ -112,7 +118,7 @@ export function initTraffic() {
       s,
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
       changingLane: false,
-      onExit: false,
+      onExit: road.onExit,
       heldLat: NaN,
       heading: lanesOf(cfg)[idx]?.direction === 'against' ? Math.PI : 0,
       flashReactTimer: 0,
@@ -203,11 +209,12 @@ export function initTraffic() {
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
     if (!ev || !ev.active || oncoming || car.changingLane || car.onExit) return;
-    if (!sameLaneOffset(car.lateralOffset, ev.laneOffset)) return;
+    const hole = G.holdDrivenLane(ev.s, ev.laneOffset);
+    if (!sameLaneOffset(car.lateralOffset, hole)) return;
     if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
     let rank = 0;
     for (const other of G.trafficPool) {
-      if (other !== car && other.active && sameLaneOffset(other.lateralOffset, ev.laneOffset) && other.s > car.s && other.s < ev.s) rank++;
+      if (other !== car && other.active && sameLaneOffset(other.lateralOffset, hole) && other.s > car.s && other.s < ev.s) rank++;
     }
     const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
     if (car.s > stop) {
@@ -217,7 +224,7 @@ export function initTraffic() {
       car.speedKmh = Math.min(car.speedKmh, 14);
     }
     if (G.playerS > ev.s + ev.length && car.speedKmh < 2) {
-      const alt = besideWithLane(lanesOf(lanesAt(car.s)), car.laneIdx);
+      const alt = besideWithLane(lanesOf(carLanes(car)), car.laneIdx);
       if (alt && alt.index !== car.laneIdx) {
         car.changingLane = true;
         car.targetLaneIdx = alt.index;

@@ -332,6 +332,10 @@ export interface GameState {
   drivenLanesAt: (s?: number) => CarriageLayout;
   /** Полоса этой проезжей части в мировых метрах. */
   drivenLaneAt: (s: number, offset: number) => number;
+  /** Попутная полоса дороги байка: прежнее смещение или ближайшая полоса. */
+  holdDrivenLane: (s: number, offset: number) => number;
+  /** Точка сбоку от дороги байка. null — она попала бы на чужой асфальт. */
+  flankAt: (s: number, side: -1 | 1, depth: number) => { edge: number; lat: number } | null;
   roadBiomeAtS: (s: number) => number;
   splitCenterS: (playerS: number) => number;
   shoulder: ShoulderProfile;

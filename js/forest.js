@@ -1,17 +1,15 @@
 import * as THREE from 'three';
 import { cylinder } from './geom.js';
-import { roadShell, shellEdge } from './engine/fork.js';
 import { G } from './state.js';
 
 /* =========================================================================
  * 5c. ПЛОТНЫЙ ЛЕС
  * -------------------------------------------------------------------------
  * Биом «Лес» собирается из InstancedMesh: берёзы, ели, сосны и кусты.
- * Деревья идут стеной по обе стороны трассы, но не заходят на асфальт и в
- * коридор развилки — точка берётся от внешней кромки живой дороги.
+ * Деревья идут стеной по обе стороны дороги байка и не садятся на чужой асфальт.
  *
- * Позиции детерминированы по чанку 50 м, поэтому лес не «скачет» при
- * смене биома: чанк генерируется один раз и переживает переезд. Плотность,
+ * Глубина детерминирована по чанку 50 м. Кромку читаем заново, когда
+ * дорога байка сдвигается. Плотность,
  * типы, высота и разброс вынесены в конфиг ниже.
  * ========================================================================= */
 
@@ -32,8 +30,7 @@ export const FOREST_CFG = {
   ROAD_MARGIN: 3.6,               // зазор от кромки асфальта
   TREE_DEPTH: 120,                // насколько глубоко сажаем лес
   BUSH_DEPTH: 46,
-  BUSH_CELL: 2.4,
-  CORRIDOR_MARGIN: 1.2
+  BUSH_CELL: 2.4
 };
 
 /** Детерминированный ГПСЧ: один и тот же чанк даёт один и тот же лес. */
@@ -162,22 +159,15 @@ export function initForest() {
     return list;
   }
 
-  /** Общая часть постановки: кромка → смещение → проверка коридора → вес биома. */
+  /** Общая часть постановки: глубина от кромки и вес биома. Кромку читает заполнение. */
   function makePlacement(s, depth, side, type, scale, yaw, tiltX, tiltZ) {
-    const frame = G.roadsideFrameAt(s);
-    const shell = roadShell(frame.edges);
-    const edge = shellEdge(frame.edges, side);
-    const lat = edge + side * depth;
-    if (lat > shell.left - CFG.CORRIDOR_MARGIN && lat < shell.right + CFG.CORRIDOR_MARGIN) {
-      return null;
-    }
     let k = 1;
     if (FOREST_INDEX >= 0) {
       const w = G.biomeWeightsAtS(s);
       k = smooth01(((w[FOREST_INDEX] || 0) - 0.03) / 0.45);
       if (k < 0.02) return null;
     }
-    return { s, lat, type, scale: scale * k, yaw, tiltX, tiltZ };
+    return { s, depth, side, type, scale: scale * k, yaw, tiltX, tiltZ };
   }
 
   /* ---------- Заполнение InstancedMesh ---------- */
@@ -200,7 +190,9 @@ export function initForest() {
   }
 
   function fillTree(p, counters) {
-    G.placeOnRoad(dummy, p.s, p.lat, G.groundOffset(p.lat, p.s));
+    const flank = G.flankAt(p.s, p.side, p.depth);
+    if (!flank) return;
+    G.placeBeside(dummy, p.s, flank.edge, flank.lat, G.groundOffset(flank.lat, p.s));
     base.copy(dummy.position);
     qYaw.setFromAxisAngle(UP, p.yaw);
     eul.set(p.tiltX, 0, p.tiltZ);
@@ -302,10 +294,14 @@ export function initForest() {
   }
 
   let lastChunk = NaN;
+  let lastRoad = 0;
   function updateForest() {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    if (pc !== lastChunk) {
+    const span = G.drivenSpanAt(G.playerS);
+    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
+    if (pc !== lastChunk || road !== lastRoad) {
       lastChunk = pc;
+      lastRoad = road;
       rebuild();
     }
   }
@@ -315,6 +311,7 @@ export function initForest() {
   G.resetForest = () => {
     chunkCache.clear();
     lastChunk = NaN;
+    lastRoad = 0;
     rebuild();
   };
 }

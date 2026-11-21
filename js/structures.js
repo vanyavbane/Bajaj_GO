@@ -184,7 +184,7 @@ export function initStructures() {
       height: r.height,
       s: safeS,
       laneIdx,
-      lateralOffset: G.lanesAtS(safeS).offsets[laneIdx],
+      lateralOffset: G.drivenLanesAt(safeS).offsets[laneIdx],
       triggeredThisPass: false
     });
   }
@@ -197,14 +197,13 @@ export function initStructures() {
         const nextInterval = 240 + Math.random() * 200;
         ramp.s = findSafeRampS(maxRampS + nextInterval);
         if (G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
-        const cfg = G.lanesAtS(ramp.s);
+        const cfg = G.drivenLanesAt(ramp.s);
         ramp.laneIdx = G.randomRunLane(ramp.s);
         ramp.lateralOffset = cfg.offsets[ramp.laneIdx];
         ramp.triggeredThisPass = false;
       }
-      // Смещение полосы не меняем, пока трамплин впереди: смена числа полос
-      // не должна переносить его на другую полосу в кадре.
-      const lat = G.laneWorldOffsetAtS(ramp.s, ramp.lateralOffset);
+      // Своя полоса сохраняется. Чужая рисуется на ближайшей попутной дороги байка.
+      const lat = G.drivenLaneAt(ramp.s, G.holdDrivenLane(ramp.s, ramp.lateralOffset));
       G.placeOnRoad(ramp.mesh, ramp.s, lat, 0);
     }
   }
