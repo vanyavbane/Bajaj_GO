@@ -18,7 +18,7 @@ import { G } from './state.js';
  * registerExternalProvider(), игровая логика при этом не меняется.
  * ========================================================================== */
 
-const AD_UPLOADED_SHARE = 0.5;          // 0..1 — доля загруженных материалов в показе
+const AD_UPLOADED_SHARE = 1.0;          // 0..1 — доля загруженных материалов в показе
 const AD_MAX_ACTIVE_VIDEOS = 2;         // максимум одновременно воспроизводимых видео
 const AD_VIDEO_MAX_DURATION_SEC = 10;   // лимит длительности видео
 const AD_VIDEO_MAX_SIZE_MB = 10;        // лимит размера видео
