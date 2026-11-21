@@ -109,6 +109,10 @@ export interface TrafficCar {
   changingLane: boolean;
   /** Машина уехала на ленту съезда и остаётся на ней, пока лента есть. */
   onExit: boolean;
+  /** Едет к ленте съезда и ещё не встала на её асфальт. */
+  joiningExit: boolean;
+  /** Прошлый мир поперёк дороги. NaN, пока машину не поставили. */
+  heldLat: number;
   /** Куда смотрит кузов: 0 по ходу, π навстречу. Доворачивается, а не прыгает. */
   heading: number;
   flashReactTimer: number;
