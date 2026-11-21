@@ -474,14 +474,13 @@ export function initCamera() {
       const targetCamZ = camPose.z;
       const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
 
-      const followRate = Math.min(1, dt * 11.5);
-      if (G.camPosSmooth.distanceToSquared(G.bikeRoot.position) > 900) {
-        G.camPosSmooth.set(targetCamX, targetCamY, targetCamZ);
-      } else {
-        G.camPosSmooth.x = lerp(G.camPosSmooth.x, targetCamX, followRate);
-        G.camPosSmooth.y = lerp(G.camPosSmooth.y, targetCamY, followRate);
-        G.camPosSmooth.z = lerp(G.camPosSmooth.z, targetCamZ, followRate);
-      }
+      const distSq = G.camPosSmooth.distanceToSquared(G.bikeRoot.position);
+      // При резком смещении дороги (съезд/переход) не прыгаем камерой мгновенно,
+      // а быстро догоняем цель, чтобы не было рывка.
+      const followRate = distSq > 2500 ? 1 : Math.min(1, dt * (distSq > 900 ? 22 : 11.5));
+      G.camPosSmooth.x = lerp(G.camPosSmooth.x, targetCamX, followRate);
+      G.camPosSmooth.y = lerp(G.camPosSmooth.y, targetCamY, followRate);
+      G.camPosSmooth.z = lerp(G.camPosSmooth.z, targetCamZ, followRate);
       G.camera.position.copy(G.camPosSmooth);
 
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);

@@ -647,15 +647,14 @@ function asphaltSpanAt(s) {
 
 /**
  * Проезжая часть байка.
- * Взятый въезд — его лента. Пока выбор открыт, лента становится дорогой байка
- * в тот момент, когда он на неё сел.
+ * Пока байк не переехал на ленту съезда, декор и портал остаются на его текущей дороге.
+ * После прихода въезда в новую дорогу лента исчезает, и проезжей частью становится новая дорога.
  */
 function drivenCarriageAt(s) {
   const frame = frameAt(s);
-  const riding = riderSeat.kind === 'exit';
-  const taken = frame.chosen === 1;
-  if (!riding && !taken) return roadCarriageAt(s);
-  return ribbonHere(s) || roadCarriageAt(s);
+  const arrived = frame.chosen === 1 && exitRibbonCenter(frame.local) == null;
+  if (riderSeat.kind === 'exit' || arrived) return ribbonHere(s) || roadCarriageAt(s);
+  return roadCarriageAt(s);
 }
 
 /** Портал и мост накрывают эту проезжую часть, не обе ленты. */
@@ -1725,10 +1724,12 @@ export function initBiomeWorld() {
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
           const sideSign = side < 0 ? -1 : 1;
-          const span = drivenSpanAt(s);
-          const edge = sideSign < 0 ? span.left : span.right;
-          const gap = Math.max(8, entry.lat - Math.abs(edge - span.mid));
-          const pose = besidePose(drivenFrameAt(s), { side: sideSign, gap, inset: 0 });
+          const fullEdges = roadEdgesAt(s);
+          const origin = frameAt(s).origin;
+          const fullEdge = sideSign < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
+          const fullMid = (fullEdges.leftOuter + fullEdges.rightOuter) * 0.5;
+          const gap = Math.max(8, entry.lat - Math.abs(fullEdge - fullMid));
+          const pose = besidePose({ edges: fullEdges, origin }, { side: sideSign, gap, inset: 0 });
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;
@@ -1737,7 +1738,7 @@ export function initBiomeWorld() {
           G.placeBeside(
             entry.group,
             s,
-            edge,
+            fullEdge,
             pose.lateral,
             groundOffset(pose.lateral, s),
             entry.yaw

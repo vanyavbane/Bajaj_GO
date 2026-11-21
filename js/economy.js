@@ -650,7 +650,9 @@ function exitLane(s, side) {
         updateExitSign(e);
       }
       const zoneS = e.s - EXIT_ZONE_OFFSET;
-      const poiPose = G.besidePose(G.drivenFrameAt(e.s), {
+      const fullEdges = G.roadEdgesAt(e.s);
+      const fullOrigin = G.drivenFrameAt(e.s).origin;
+      const poiPose = G.besidePose({ edges: fullEdges, origin: fullOrigin }, {
         side: e.side < 0 ? -1 : 1,
         gap: 3.1,
         inset: 0
@@ -658,7 +660,7 @@ function exitLane(s, side) {
       const poiLat = poiPose.lateral;
       const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.drivenLaneAt(zoneS, markerLogical);
-      const poiEdge = e.side < 0 ? G.drivenSpanAt(e.s).left : G.drivenSpanAt(e.s).right;
+      const poiEdge = e.side < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
         G.placeBeside(e.group, e.s, poiEdge, poiLat, 0);
         G.placeOnRoad(e.marker, zoneS, markerLat, 0.07);
