@@ -440,7 +440,7 @@ export function initRoadSurface() {
       const s = sampleS[r];
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight > maxWeight) maxWeight = weight;
-      const edge = drivenEdge(r, side);
+      const edge = ribbonAt(r, side)?.edge ?? null;
       const jumped = stripSeam(prevEdge, edge);
       if (edge != null) prevEdge = edge;
       const vis = jumped ? 0 : (weight > 0.02 && edge != null ? weight : 0);
@@ -497,7 +497,7 @@ export function initRoadSurface() {
       const row = rowNear(s);
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
-        const edge = drivenEdge(row, side);
+        const edge = ribbonAt(row, side)?.edge ?? null;
         if (edge == null) continue;
         const lat = edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
         dummy.scale.set(weight, weight, weight);
@@ -634,7 +634,7 @@ export function initRoadSurface() {
       const cw = sampleCity[r];
       if (cw > maxWeight) maxWeight = cw;
       const s = sampleS[r];
-      const edge = drivenEdge(r, side);
+      const edge = ribbonAt(r, side)?.edge ?? null;
       const jumped = stripSeam(prevEdge, edge);
       if (edge != null) prevEdge = edge;
       const outward = side < 0 ? -1 : 1;

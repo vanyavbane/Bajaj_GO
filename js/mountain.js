@@ -13,8 +13,8 @@ import { G } from './state.js';
 
 export const MOUNTAIN_CFG = {
   WALL_STEP: 7,
-  WALL_AHEAD: 320,
-  WALL_BEHIND: 60,
+  WALL_AHEAD: 520,
+  WALL_BEHIND: 100,
   ROAD_MARGIN: 4.6,
   ROCK_MIN_H: 7,
   ROCK_MAX_H: 21,

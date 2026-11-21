@@ -359,10 +359,12 @@ export function initRoadside() {
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
       const decorAt = (at, side, gap) => {
-        const span = G.drivenSpanAt(at);
-        const frame = G.drivenFrameAt(at);
-        const pose = G.besidePose(frame, { side, gap, inset: 0 });
-        return { lat: pose.lateral, edge: side < 0 ? span.left : span.right };
+        // Полный каркас дороги: декор не должен попадать на вторую ленту развилки.
+        const fullEdges = G.roadEdgesAt(at);
+        const origin = G.drivenFrameAt(at).origin;
+        const pose = G.besidePose({ edges: fullEdges, origin }, { side, gap, inset: 0 });
+        const edge = side < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
+        return { lat: pose.lateral, edge };
       };
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);

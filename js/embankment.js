@@ -13,8 +13,8 @@ import { G } from './state.js';
 
 export const EMBANKMENT_CFG = {
   CHUNK_M: 50,
-  VIEW_AHEAD: 420,
-  VIEW_BEHIND: 80,
+  VIEW_AHEAD: 560,
+  VIEW_BEHIND: 100,
   FACADE_DEPTH: 15,
   FACADE_W: 16,
   FACADE_H_MIN: 16,

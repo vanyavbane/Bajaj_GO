@@ -18,7 +18,7 @@ import { G } from './state.js';
  * registerExternalProvider(), игровая логика при этом не меняется.
  * ========================================================================== */
 
-const AD_UPLOADED_SHARE = 0.5;          // 0..1 — доля загруженных материалов в показе
+const AD_UPLOADED_SHARE = 1.0;          // 0..1 — доля загруженных материалов в показе
 const AD_MAX_ACTIVE_VIDEOS = 2;         // максимум одновременно воспроизводимых видео
 const AD_VIDEO_MAX_DURATION_SEC = 10;   // лимит длительности видео
 const AD_VIDEO_MAX_SIZE_MB = 10;        // лимит размера видео
@@ -383,10 +383,30 @@ async function discoverFromListing() {
   return result;
 }
 
+function manifestFromGlobal() {
+  try {
+    const data = /** @type {any} */ (/** @type {any} */ (window).__BAJAJ_AD_MANIFEST__);
+    if (!data || typeof data !== 'object') return null;
+    if (!Array.isArray(data.billboards) && !Array.isArray(data.overheads)) return null;
+    /** @type {DiscoveryResult} */
+    const result = {
+      source: 'manifest',
+      billboards: sanitizeFileList(data.billboards),
+      overheads: sanitizeFileList(data.overheads)
+    };
+    return (result.billboards.length || result.overheads.length) ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 /** @returns {Promise<DiscoveryResult>} */
 async function discover() {
   // fetch к file:// браузер режет CORS и пишет ошибку в консоль ещё до catch.
+  // Но локальный manifest.js может положить список в window — это работает и в file://.
   if (openedAsFile()) {
+    const fromGlobal = manifestFromGlobal();
+    if (fromGlobal) return fromGlobal;
     return { source: 'fallback', billboards: [], overheads: [] };
   }
 

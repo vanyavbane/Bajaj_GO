@@ -347,8 +347,9 @@ export const BIOMES: readonly BiomeDef[] = [
     decor: 'slots',
     ground: 0x3a4048,
     road: {
-      x: [sin(70, 0.0045), sin(30, 0.0018), cos(12, 0.0009)],
-      y: [sin(1.15, 0.0022), cos(0.75, 0.0011)],
+      // МКАД: прямая магистраль, как поле — только шире и с другой декорацией.
+      x: [sin(14, 0.0035), cos(7, 0.0014)],
+      y: [sin(0.55, 0.0062), cos(0.35, 0.0031)],
     },
     sky: { top: 0xdfe6ee, mid: 0xf0e7dc, bot: 0xf6ece2, fog: 0xe4ded6, cloud: 0xf1eae1, fogMul: 1.06, cloudY: -2, cloudScale: 1.08 },
     signArrows: 2,

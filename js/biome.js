@@ -647,15 +647,14 @@ function asphaltSpanAt(s) {
 
 /**
  * Проезжая часть байка.
- * Взятый въезд — его лента. Пока выбор открыт, лента становится дорогой байка
- * в тот момент, когда он на неё сел.
+ * Пока байк не переехал на ленту съезда, декор и портал остаются на его текущей дороге.
+ * После прихода въезда в новую дорогу лента исчезает, и проезжей частью становится новая дорога.
  */
 function drivenCarriageAt(s) {
   const frame = frameAt(s);
-  const riding = riderSeat.kind === 'exit';
-  const taken = frame.chosen === 1;
-  if (!riding && !taken) return roadCarriageAt(s);
-  return ribbonHere(s) || roadCarriageAt(s);
+  const arrived = frame.chosen === 1 && exitRibbonCenter(frame.local) == null;
+  if (riderSeat.kind === 'exit' || arrived) return ribbonHere(s) || roadCarriageAt(s);
+  return roadCarriageAt(s);
 }
 
 /** Портал и мост накрывают эту проезжую часть, не обе ленты. */
@@ -690,16 +689,17 @@ function drivenLanesAt(s) {
 }
 
 /**
- * Точка сбоку от дороги байка.
+ * Точка сбоку от всей оболочки дороги.
  * На чужой асфальт не садится: если между кромкой и точкой лежит другая лента, точки нет.
+ * На развилке берётся внешняя кромка всей оболочки, чтобы декор ветки был виден издалека.
  */
 function flankAt(s, side, depth) {
-  const span = drivenSpanAt(s);
-  if (!span || !(span.width > 0.5)) return null;
+  const world = frameAt(s).world;
   const sign = side < 0 ? -1 : 1;
-  const edge = sign < 0 ? span.left : span.right;
+  const edge = sign < 0 ? world.leftOuter : world.rightOuter;
+  if (!Number.isFinite(edge)) return null;
   const lat = edge + sign * Math.max(0, Number.isFinite(depth) ? depth : 0);
-  const at = groundAt(frameAt(s).world, lat);
+  const at = groundAt(world, lat);
   if (at.dist === 0) return null;
   const fromNearest = at.dist - at.half;
   if (fromNearest + 0.25 < Math.abs(lat - edge)) return null;
@@ -861,7 +861,22 @@ function fillWeights(live) {
 }
 
 function biomeWeightsAtS(s) {
-  return fillWeights(liveAtMeters(blendMetersAt(s)));
+  const w = fillWeights(liveAtMeters(blendMetersAt(s)));
+  // Preview next biome before zone boundary so decor doesn't pop in at the fork.
+  const m = blendMetersAt(s);
+  const local = m - Math.floor(m / ZONE_M) * ZONE_M;
+  const pre = ZONE_M - ROAD_FADE_M;
+  if (local > pre) {
+    const u = (local - pre) / Math.max(1, ROAD_FADE_M);
+    const t = u * u * (3 - 2 * u);
+    const nb = zoneBiomeAt(Math.floor(m / ZONE_M) + 1);
+    if (t > w[nb]) {
+      const scale = (1 - t) / Math.max(1e-6, 1 - w[nb]);
+      for (let i = 0; i < w.length; i++) w[i] *= scale;
+      w[nb] = t;
+    }
+  }
+  return w;
 }
 
 /* ---------- Материалы декораций ---------- */
@@ -1725,10 +1740,12 @@ export function initBiomeWorld() {
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
           entry.group.scale.setScalar(sceneryScale);
           const sideSign = side < 0 ? -1 : 1;
-          const span = drivenSpanAt(s);
-          const edge = sideSign < 0 ? span.left : span.right;
-          const gap = Math.max(8, entry.lat - Math.abs(edge - span.mid));
-          const pose = besidePose(drivenFrameAt(s), { side: sideSign, gap, inset: 0 });
+          const fullEdges = roadEdgesAt(s);
+          const origin = frameAt(s).origin;
+          const fullEdge = sideSign < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
+          const fullMid = (fullEdges.leftOuter + fullEdges.rightOuter) * 0.5;
+          const gap = Math.max(8, entry.lat - Math.abs(fullEdge - fullMid));
+          const pose = besidePose({ edges: fullEdges, origin }, { side: sideSign, gap, inset: 0 });
           const far = Math.abs(s - G.playerS) > 165;
           if (far !== entry.lodFar) {
             entry.lodFar = far;
@@ -1737,7 +1754,7 @@ export function initBiomeWorld() {
           G.placeBeside(
             entry.group,
             s,
-            edge,
+            fullEdge,
             pose.lateral,
             groundOffset(pose.lateral, s),
             entry.yaw

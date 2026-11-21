@@ -147,19 +147,28 @@ export function initTraffic() {
 
   /** Полоса машины — ближайший центр в биоме её точки, не старый номер. */
   function settleCarLane(car, cfg) {
-    if (car.changingLane || car.joiningExit) return;
+    if (car.joiningExit) return;
     const idx = nearestLaneIndex(cfg.offsets, car.lateralOffset);
     const target = cfg.offsets[idx];
-    if (idx === car.laneIdx && Math.abs(car.lateralOffset - target) < 0.05) return;
     const jump = Math.abs((car.lateralOffset || 0) - target);
-    if (jump > 1.2 && Math.abs(car.s - G.playerS) < 130) {
-      car.s = G.playerS + 170 + Math.random() * 110;
+    if (idx === car.laneIdx && jump < 0.05) {
+      car.targetLaneIdx = idx;
+      if (!car.changingLane) car.lateralOffset = target;
+      return;
     }
     car.laneIdx = idx;
     car.targetLaneIdx = idx;
-    car.lateralOffset = target;
-    car.steerAngle = 0;
-    if (car.model.type !== 'qute_traffic') car.speedKmh = cfg.speeds[idx];
+    // Конфигурация полос изменилась (биом/съезд): машина остаётся в своей полосе,
+    // смещение к новой координате полосы делается плавно, без телепорта.
+    if (car.changingLane || jump > 0.35) {
+      car.changingLane = true;
+    } else {
+      car.lateralOffset = target;
+      car.steerAngle = 0;
+    }
+    if (car.model.type !== 'qute_traffic') {
+      car.speedKmh = cfg.speeds[clampLaneIndex(idx, cfg.count)];
+    }
   }
 
   G.remapTrafficLanes = () => {
@@ -167,10 +176,12 @@ export function initTraffic() {
       const cfg = carLanes(car);
       if (car.model.type === 'qute_traffic') {
         const q = quteLane(cfg);
+        const target = cfg.offsets[q];
+        const jump = Math.abs((car.lateralOffset || 0) - target);
         car.laneIdx = q;
         car.targetLaneIdx = q;
-        car.lateralOffset = cfg.offsets[q];
-        car.changingLane = false;
+        car.changingLane = jump > 0.35;
+        if (!car.changingLane) car.lateralOffset = target;
         car.speedKmh = QUTE_TRAFFIC_SPEED;
       }
       settleCarLane(car, cfg);

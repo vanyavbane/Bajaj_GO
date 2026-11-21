@@ -57,11 +57,11 @@ export function initPedestrians() {
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
       const side = ped.side < 0 ? -1 : 1;
-      const span = G.drivenSpanAt(ped.s);
-      const frame = G.drivenFrameAt(ped.s);
-      const pose = G.besidePose(frame, { side, gap: 1.15 + jitter * cw, inset: 0 });
+      const fullEdges = G.roadEdgesAt(ped.s);
+      const fullOrigin = G.drivenFrameAt(ped.s).origin;
+      const pose = G.besidePose({ edges: fullEdges, origin: fullOrigin }, { side, gap: 1.15 + jitter * cw, inset: 0 });
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
-      G.placeBeside(ped.group, ped.s, side < 0 ? span.left : span.right, pose.lateral, 0.11, facingYaw);
+      G.placeBeside(ped.group, ped.s, side < 0 ? fullEdges.leftOuter : fullEdges.rightOuter, pose.lateral, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);
       if (ped.walkSpeed !== 0) {
         const swing = Math.sin(now * 0.008 + ped.phase) * 0.45;
