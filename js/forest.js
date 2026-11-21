@@ -25,8 +25,8 @@ export const FOREST_CFG = {
   JITTER_AMOUNT: 2.0,             // случайное смещение внутри ячейки
   TILT_MAX: 0.09,                 // максимальный наклон, радианы
   CHUNK_M: 50,
-  VIEW_AHEAD: 380,
-  VIEW_BEHIND: 90,
+  VIEW_AHEAD: 560,
+  VIEW_BEHIND: 100,
   ROAD_MARGIN: 3.6,               // зазор от кромки асфальта
   TREE_DEPTH: 120,                // насколько глубоко сажаем лес
   BUSH_DEPTH: 46,

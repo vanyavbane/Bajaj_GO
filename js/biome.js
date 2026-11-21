@@ -689,16 +689,17 @@ function drivenLanesAt(s) {
 }
 
 /**
- * Точка сбоку от дороги байка.
+ * Точка сбоку от всей оболочки дороги.
  * На чужой асфальт не садится: если между кромкой и точкой лежит другая лента, точки нет.
+ * На развилке берётся внешняя кромка всей оболочки, чтобы декор ветки был виден издалека.
  */
 function flankAt(s, side, depth) {
-  const span = drivenSpanAt(s);
-  if (!span || !(span.width > 0.5)) return null;
+  const world = frameAt(s).world;
   const sign = side < 0 ? -1 : 1;
-  const edge = sign < 0 ? span.left : span.right;
+  const edge = sign < 0 ? world.leftOuter : world.rightOuter;
+  if (!Number.isFinite(edge)) return null;
   const lat = edge + sign * Math.max(0, Number.isFinite(depth) ? depth : 0);
-  const at = groundAt(frameAt(s).world, lat);
+  const at = groundAt(world, lat);
   if (at.dist === 0) return null;
   const fromNearest = at.dist - at.half;
   if (fromNearest + 0.25 < Math.abs(lat - edge)) return null;
@@ -860,7 +861,22 @@ function fillWeights(live) {
 }
 
 function biomeWeightsAtS(s) {
-  return fillWeights(liveAtMeters(blendMetersAt(s)));
+  const w = fillWeights(liveAtMeters(blendMetersAt(s)));
+  // Preview next biome before zone boundary so decor doesn't pop in at the fork.
+  const m = blendMetersAt(s);
+  const local = m - Math.floor(m / ZONE_M) * ZONE_M;
+  const pre = ZONE_M - ROAD_FADE_M;
+  if (local > pre) {
+    const u = (local - pre) / Math.max(1, ROAD_FADE_M);
+    const t = u * u * (3 - 2 * u);
+    const nb = zoneBiomeAt(Math.floor(m / ZONE_M) + 1);
+    if (t > w[nb]) {
+      const scale = (1 - t) / Math.max(1e-6, 1 - w[nb]);
+      for (let i = 0; i < w.length; i++) w[i] *= scale;
+      w[nb] = t;
+    }
+  }
+  return w;
 }
 
 /* ---------- Материалы декораций ---------- */

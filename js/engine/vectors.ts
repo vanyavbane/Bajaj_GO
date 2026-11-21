@@ -328,7 +328,9 @@ export function createVectorField() {
     const bz = legal ? frame.z + frame.rz * along : from.z;
     const aimX = legal ? frame.fx : head.parent.fx;
     const aimZ = legal ? frame.fz : head.parent.fz;
-    const turned = turnToward(head.parent.fx, head.parent.fz, aimX, aimZ, w);
+    // Heading follows the exit geometry as it peels; position can lag behind to stay on asphalt.
+    const hw = Math.max(w, legal ? head.peel : 0);
+    const turned = turnToward(head.parent.fx, head.parent.fz, aimX, aimZ, hw);
     return {
       x: from.x + (bx - from.x) * w,
       y: head.y,
@@ -337,7 +339,7 @@ export function createVectorField() {
       rz: turned.fx,
       fx: turned.fx,
       fz: turned.fz,
-      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * (legal ? w : 0),
+      curvature: head.parent.curvature + (frame.curvature - head.parent.curvature) * (legal ? hw : 0),
     };
   }
 
