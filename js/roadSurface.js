@@ -380,8 +380,9 @@ export function initRoadSurface() {
       const low = GUARD_MID + (GUARD_LOW - GUARD_MID) * vis;
       const high = GUARD_MID + (GUARD_HIGH - GUARD_MID) * vis;
       const cy = sampleY[r];
-      const left = G.embedRoad(s, lat - half);
-      const right = G.embedRoad(s, lat + half);
+      const course = edge == null ? lat : edge;
+      const left = G.embedBeside(s, course, lat - half);
+      const right = G.embedBeside(s, course, lat + half);
       const o = r * 12;
       const put = (slot, point, h) => {
         const p = o + slot * 3;
@@ -423,7 +424,7 @@ export function initRoadSurface() {
         if (edge == null) continue;
         const lat = edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
         dummy.scale.set(weight, weight, weight);
-        G.placeOnRoad(dummy, s, lat, 0.31 * weight);
+        G.placeBeside(dummy, s, edge, lat, 0.31 * weight);
         dummy.updateMatrix();
         guardPostMesh.setMatrixAt(used++, dummy.matrix);
       }
@@ -558,8 +559,9 @@ export function initRoadSurface() {
       const halfW = edge == null ? 0 : width * 0.5 * cw;
       const center = (edge == null ? shellMid(r) : edge) + outward * (baseWidth * cw + halfW);
       const y = sampleY[r] + yOffset;
-      const a = G.embedRoad(s, center - halfW);
-      const b = G.embedRoad(s, center + halfW);
+      const course = edge == null ? center : edge;
+      const a = G.embedBeside(s, course, center - halfW);
+      const b = G.embedBeside(s, course, center + halfW);
       const idx = r * 2;
       pos.setXYZ(idx, a.x, y, a.z);
       pos.setXYZ(idx + 1, b.x, y, b.z);

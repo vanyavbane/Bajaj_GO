@@ -287,6 +287,16 @@ export interface GameState {
     extraPitch?: number,
     extraRoll?: number,
   ) => void;
+  placeBeside: (
+    obj: THREE.Object3D,
+    s: number,
+    edge: number,
+    lat: number,
+    heightOffset?: number,
+    extraYaw?: number,
+    extraPitch?: number,
+    extraRoll?: number,
+  ) => void;
   ROAD_EDGE: number;
   LANE_OFFSETS: number[];
   START_LANE: number;
@@ -305,6 +315,8 @@ export interface GameState {
   roadOriginAt: (s: number) => number;
   /** Точка дороги в мире. На съезде это его собственный вектор, не параллель сплайна. */
   embedRoad: (s: number, lat: number) => RoadEmbed;
+  /** Курс кромки и шаг до lat. Точка в клине хорду не берёт. */
+  embedBeside: (s: number, edge: number, lat: number) => RoadEmbed;
   roadCurvature: (s: number) => number;
   /** Блок рецепта съезда в точке s. null — здесь обычная дорога без съезда. */
   roadBlockAt: (s: number) => PlacedBlock | null;

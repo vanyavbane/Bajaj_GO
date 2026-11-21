@@ -1,5 +1,5 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
+import { besidePoint, branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
 import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
@@ -121,6 +121,13 @@ assert(onExitRibbon(goreEdges.rightInner - 0.3, goreEdges) && followsExit(goreEd
 assert(!onExitRibbon(goreEdges.rightInner - 0.5, goreEdges) && !followsExit(goreEdges.rightInner - 0.5, goreEdges), 'в клине ни сиденье, ни курс ещё не на ленте');
 assert(followsExit(goreEdges.rightOuter + 2, goreEdges) && !onExitRibbon(goreEdges.rightOuter + 2, goreEdges), 'обочина едет курсом ленты, сиденье на ней не сидит');
 assert(Math.abs(justOn.x - lip.x) < Math.abs(justOff.x - lip.x), 'на асфальте ленты курс ленты, в клине ещё клин');
+const shoulderLat = goreEdges.rightInner - 2;
+const shoulder = besidePoint(lip, goreEdges.rightInner, shoulderLat);
+const shoulderGore = goreAt(shoulderLat);
+assert(
+  Math.hypot(shoulder.x - shoulderGore.x, shoulder.z - shoulderGore.z) > 0.5,
+  'обочина ленты идёт курсом кромки, не хордой клина',
+);
 const stillOut = goreAt(exitRibbonMid(goreEdges));
 const narrowed = { leftOuter: -2, leftInner: 2, rightInner: goreEdges.rightInner, rightOuter: goreEdges.rightOuter };
 const held = goreAt(exitRibbonMid(goreEdges), narrowed);

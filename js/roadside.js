@@ -355,9 +355,10 @@ export function initRoadside() {
     for (const slot of G.roadsideSlots) {
       slot.s = keepInWindow(slot.s, G.playerS, 35, Infinity, recycleSpan);
       const decorAt = (at, side, gap) => {
+        const span = G.drivenSpanAt(at);
         const frame = G.drivenFrameAt(at);
         const pose = G.besidePose(frame, { side, gap, inset: 0 });
-        return pose.lateral;
+        return { lat: pose.lateral, edge: side < 0 ? span.left : span.right };
       };
       const city = G.cityWeightAtS(slot.s);
       const dom = dominantBiomeAt(slot.s);
@@ -367,15 +368,15 @@ export function initRoadside() {
       const leftProp = decorAt(slot.s, -1, 12);
       const rightProp = decorAt(slot.s, 1, 12);
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
-        G.placeOnRoad(slot.leftLamp, slot.s, leftLamp, 0);
-        G.placeOnRoad(slot.rightLamp, slot.s, rightLamp, 0);
-        G.placeOnRoad(slot.leftProp, slot.s, leftProp, G.groundOffset(leftProp, slot.s));
-        G.placeOnRoad(slot.rightProp, slot.s, rightProp, G.groundOffset(rightProp, slot.s));
+        G.placeBeside(slot.leftLamp, slot.s, leftLamp.edge, leftLamp.lat, 0);
+        G.placeBeside(slot.rightLamp, slot.s, rightLamp.edge, rightLamp.lat, 0);
+        G.placeBeside(slot.leftProp, slot.s, leftProp.edge, leftProp.lat, G.groundOffset(leftProp.lat, slot.s));
+        G.placeBeside(slot.rightProp, slot.s, rightProp.edge, rightProp.lat, G.groundOffset(rightProp.lat, slot.s));
         if (slot.billboard) {
           const bb = slot.billboard;
           const boardS = slot.s + 6;
-          const boardLat = decorAt(boardS, bb.side < 0 ? -1 : 1, 4.8);
-          G.placeOnRoad(bb.group, boardS, boardLat, G.groundOffset(boardLat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
+          const board = decorAt(boardS, bb.side < 0 ? -1 : 1, 4.8);
+          G.placeBeside(bb.group, boardS, board.edge, board.lat, G.groundOffset(board.lat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
           const cover = G.drivenSpanAt(slot.s);
@@ -383,7 +384,7 @@ export function initRoadside() {
           const wf = Math.max(1, cover.width / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
         }
-      }, Math.round((leftLamp + rightLamp) * 50) + Math.round(city * 20) * 100000);
+      }, Math.round((leftLamp.lat + rightLamp.lat) * 50) + Math.round(city * 20) * 100000);
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.

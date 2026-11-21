@@ -53,4 +53,12 @@ export function initRoad() {
     obj.position.set(here.x, here.y + heightOffset, here.z);
   }
   G.placeOnRoad = placeOnRoad;
+
+  /** Обочина: курс кромки дороги, затем шаг наружу. Хорда клина объект не уводит. */
+  function placeBeside(obj, s, edge, lat, heightOffset = 0, extraYaw = 0, extraPitch = 0, extraRoll = 0) {
+    const here = G.embedBeside(s, edge, lat);
+    orient(obj, here.fx, roadDY(s), here.fz, here.rx, here.rz, extraYaw, extraPitch, extraRoll);
+    obj.position.set(here.x, here.y + heightOffset, here.z);
+  }
+  G.placeBeside = placeBeside;
 }

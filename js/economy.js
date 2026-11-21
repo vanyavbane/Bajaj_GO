@@ -657,8 +657,9 @@ function exitLane(s, side) {
       const poiLat = poiPose.lateral;
       const markerLogical = exitLane(zoneS, e.side);
       const markerLat = G.drivenLaneAt(zoneS, markerLogical);
+      const poiEdge = e.side < 0 ? G.drivenSpanAt(e.s).left : G.drivenSpanAt(e.s).right;
       e.placedS = placeIfMoved(e.placedS, e.s, () => {
-        G.placeOnRoad(e.group, e.s, poiLat, 0);
+        G.placeBeside(e.group, e.s, poiEdge, poiLat, 0);
         G.placeOnRoad(e.marker, zoneS, markerLat, 0.07);
       }, Math.round(poiLat * 50) * 10000 + Math.round(markerLat * 50));
 
@@ -1179,14 +1180,18 @@ function exitLane(s, side) {
       G.saveGarage();
       if (pendingAccidentCar) {
         pendingAccidentCar.s = G.playerS + 120;
-        // Полоса берётся из дороги в новой точке: номер со старого биома
-        // там может быть уже встречной или лежать за кромкой.
-        const lanes = G.lanesAtS(pendingAccidentCar.s);
+        // Та же дорога, по которой машина ехала. Если въезд уже стал дорогой,
+        // это её продолжение, не полосы оставшейся прямой.
+        const roads = G.roadsAt(pendingAccidentCar.s);
+        const stay = !!(pendingAccidentCar.onExit && roads.exit);
+        const lanes = stay ? roads.exit.lanes : roads.main.lanes;
         const idx = nearestLaneIndex(lanes.offsets, pendingAccidentCar.lateralOffset);
+        pendingAccidentCar.onExit = stay;
         pendingAccidentCar.laneIdx = idx;
         pendingAccidentCar.targetLaneIdx = idx;
         pendingAccidentCar.lateralOffset = lanes.offsets[idx];
         pendingAccidentCar.changingLane = false;
+        pendingAccidentCar.heldLat = NaN;
       }
       const playerLat = G.riderLatAt(G.playerS);
       for (const c of G.trafficPool) {

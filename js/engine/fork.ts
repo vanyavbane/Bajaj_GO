@@ -345,6 +345,21 @@ export function courseLocal(lat: number, place: CoursePlace): number {
   return lat;
 }
 
+/**
+ * Обочина от кромки своей дороги.
+ * Точка в клине через курс клина не проводится: шаг идёт поперёк курса кромки.
+ */
+export function besidePoint(
+  pose: { x: number; z: number; rx: number; rz: number },
+  edge: number,
+  lat: number,
+): { x: number; z: number } {
+  const from = Number.isFinite(edge) ? edge : 0;
+  const to = Number.isFinite(lat) ? lat : from;
+  const shift = to - from;
+  return { x: pose.x + pose.rx * shift, z: pose.z + pose.rz * shift };
+}
+
 /** Центр полос той дороги, которая в левом слоте. У ленты съезда своя середина. */
 export function laneAnchor(frame: RoadFrame): number {
   const mid = (frame.local.leftOuter + frame.local.leftInner) * 0.5;

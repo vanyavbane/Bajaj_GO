@@ -5,7 +5,7 @@ import { carriageAt, carriageLat, laneMarks, ribbonApproachLat, riderCarriage, r
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
+import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
 import { courseBranches, decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -494,6 +494,22 @@ function roadHeading(s) {
 
 function embedRoad(s, lat) {
   return vectors.place(roadHeading(s), lat);
+}
+
+/** Точка обочины: курс берётся у кромки дороги, не у хорды клина. */
+function embedBeside(s, edge, lat) {
+  const pose = embedRoad(s, edge);
+  const at = besidePoint(pose, edge, lat);
+  return {
+    x: at.x,
+    y: pose.y,
+    z: at.z,
+    fx: pose.fx,
+    fz: pose.fz,
+    rx: pose.rx,
+    rz: pose.rz,
+    curvature: pose.curvature,
+  };
 }
 
 function roadCurvature(s) {
@@ -1489,6 +1505,7 @@ export function initBiome() {
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
   G.embedRoad = embedRoad;
+  G.embedBeside = embedBeside;
   G.roadCurvature = roadCurvature;
   G.roadBlockAt = (s) => frameAt(s).block;
   G.riderLatAt = riderLatAt;
@@ -1643,9 +1660,10 @@ export function initBiomeWorld() {
             entry.lodFar = far;
             for (let k = 2; k < entry.meshes.length; k++) entry.meshes[k].visible = !far;
           }
-          G.placeOnRoad(
+          G.placeBeside(
             entry.group,
             s,
+            edge,
             pose.lateral,
             groundOffset(pose.lateral, s),
             entry.yaw
