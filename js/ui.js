@@ -4,8 +4,25 @@ import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
 
+function buildStamp() {
+  const iso = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : '';
+  if (!iso) return 'сборка dev';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'сборка dev';
+  const text = date.toLocaleString('ru', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `сборка ${text}`;
+}
+
 export function initUi() {
   const $ = G.$;
+  const builtAt = buildStamp();
+  const buildBadge = $('badge-build');
+  if (buildBadge) buildBadge.textContent = builtAt;
 
   /* =========================================================================
    * 14. ИГРОВОЕ СОСТОЯНИЕ, ГЛАВНОЕ МЕНЮ, МАГАЗИН, ТЮНИНГ И ОКНО СМЕРТИ
@@ -573,7 +590,7 @@ export function initUi() {
         })
       ].join(''),
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
-      footer: 'bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan',
+      footer: `bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan · ${builtAt}`,
       tools: [
         iconButton({ id: 'mm-cam-settings', icon: '🎥', title: 'Настройки камеры от первого лица (FOV, высота)' }),
         iconButton({ id: 'mm-fs-btn', icon: '⛶', title: 'Полный экран' })

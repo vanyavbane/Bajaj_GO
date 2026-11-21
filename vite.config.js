@@ -26,7 +26,10 @@ function copyAdManager() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  define: {
+    __BUILD_TIME__: JSON.stringify(command === 'build' ? new Date().toISOString() : ''),
+  },
   plugins: [
     viteSingleFile({ useRecommendedBuildConfig: true, outputFileName: 'bajaj-go.html' }),
     copyAdManager(),
@@ -47,4 +50,4 @@ export default defineConfig({
     cssCodeSplit: false,
     assetsInlineLimit: 100000000,
   },
-});
+}));

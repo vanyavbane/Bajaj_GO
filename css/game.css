@@ -49,6 +49,12 @@ button{font-family:var(--ds-font)}
   background:rgba(30,14,16,.85);
 }
 .badge.beam{color:var(--bf-signal);border-color:rgba(240,180,41,.55)}
+.badge.build{
+  color:var(--bf-text-mute);
+  letter-spacing:.04em;
+  text-transform:none;
+  font-weight:600;
+}
 
 /* Подсказка «смотри на дорогу»: в нижней трети, чтобы не спорить
  * с баннером локации и подсказкой съезда наверху. */
