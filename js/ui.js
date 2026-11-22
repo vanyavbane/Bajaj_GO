@@ -637,8 +637,9 @@ export function initUi() {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setClearColor(0x000000, 0);
+    renderer.setClearColor(0x1a2636, 1);
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a2636);
     const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 30);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x556677, 1.7));
     const key = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -653,31 +654,43 @@ export function initUi() {
 
     const root = new THREE.Group();
     scene.add(root);
+
+    // Платформа, как в витрине магазина
+    const platform = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.72, 0.78, 0.08, 48),
+      new THREE.MeshStandardMaterial({ color: 0x2a3648, roughness: 0.72, metalness: 0.18 })
+    );
+    platform.position.y = -0.04;
+    root.add(platform);
+    const platformTop = new THREE.Mesh(
+      new THREE.CircleGeometry(0.7, 48),
+      new THREE.MeshStandardMaterial({ color: 0x3a4a62, roughness: 0.55, metalness: 0.12 })
+    );
+    platformTop.rotation.x = -Math.PI / 2;
+    platformTop.position.y = 0.001;
+    root.add(platformTop);
+
     const rider = buildStandingRider();
     const box = new THREE.Box3().setFromObject(rider);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
-    rider.position.sub(center);
+    // Центр по X/Z, ноги на платформу (y=0)
+    rider.position.x -= center.x;
+    rider.position.z -= center.z;
+    rider.position.y -= box.min.y;
     root.add(rider);
 
-    const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(0.72, 48),
-      new THREE.MeshBasicMaterial({ color: 0x90a8c4, transparent: true, opacity: 0.32 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -size.y / 2 + 0.01;
-    root.add(ground);
-
+    // Кадрируем по райдеру
     const maxDim = Math.max(size.x, size.y, 0.001);
     const fov = camera.fov * (Math.PI / 180);
     let dist = (maxDim / 2) / Math.tan(fov / 2);
-    dist *= 1.45;
-    camera.position.set(0, 0, dist);
+    dist *= 1.55;
+    camera.position.set(0, size.y * 0.52, dist);
     camera.near = 0.1;
     camera.far = Math.max(30, dist + 10);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(0, size.y * 0.48, 0);
     camera.updateProjectionMatrix();
 
     const state = { renderer, scene, camera, root, raf: 0, resize: null, ro: null };
@@ -715,6 +728,7 @@ export function initUi() {
     canvas.addEventListener('pointerup', onUp);
     canvas.addEventListener('pointerleave', onUp);
 
+    outfitPreview = state;
     const tick = () => {
       if (!outfitPreview || outfitPreview !== state) return;
       if (!dragging) rotY += velY;
@@ -725,7 +739,6 @@ export function initUi() {
       state.raf = requestAnimationFrame(tick);
     };
     tick();
-    outfitPreview = state;
   }
 
   function renderOutfit() {
