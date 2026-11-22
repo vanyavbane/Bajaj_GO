@@ -585,50 +585,242 @@ export function initUi() {
     const skinMat = p.skinMat || new THREE.MeshStandardMaterial({ color: 0xc49a7c });
 
     const g = new THREE.Group();
-    const add = (mat, geo, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const mesh = (parent, mat, geo, x, y, z, rx = 0, ry = 0, rz = 0) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
       m.rotation.set(rx, ry, rz);
-      g.add(m);
+      parent.add(m);
       return m;
     };
-    const cap = (mat, r, len, x, y, z, rx = 0, ry = 0, rz = 0) =>
-      add(mat, new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 8), x, y, z, rx, ry, rz);
+    const capTo = (parent, mat, r, len, x, y, z, rx = 0, ry = 0, rz = 0) =>
+      mesh(parent, mat, new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 8), x, y, z, rx, ry, rz);
 
-    // Шлем
+    // --- Риг: таз -> торс -> голова; плечи/локти; бёдра/колени ---
+    const hips = new THREE.Group();
+    hips.position.set(0, 0.98, 0);
+    g.add(hips);
+
+    const torso = new THREE.Group();
+    torso.position.set(0, 0, 0);
+    hips.add(torso);
+
+    // Торс/куртка
+    capTo(torso, skinMat, 0.07, 0.04, 0, 0.55, -0.02, 0); // шея
+    mesh(torso, jacketMat, new THREE.BoxGeometry(0.46, 0.56, 0.3), 0, 0.30, 0);
+    mesh(torso, jacketMat, new THREE.BoxGeometry(0.54, 0.14, 0.32), 0, 0.48, -0.01); // плечи
+    mesh(torso, jacketMat, new THREE.BoxGeometry(0.24, 0.09, 0.24), 0, 0.56, -0.02); // воротник
+    mesh(torso, stripeMat, new THREE.BoxGeometry(0.5, 0.085, 0.33), 0, 0.33, 0); // полоса
+    mesh(torso, jacketMat, new THREE.BoxGeometry(0.4, 0.12, 0.28), 0, 0.06, 0.01); // пояс
+
+    // Голова/шлем
+    const head = new THREE.Group();
+    head.position.set(0, 0.74, 0);
+    torso.add(head);
     const helmet = new THREE.Group();
-    helmet.position.set(0, 1.72, 0);
-    g.add(helmet);
+    helmet.position.set(0, 0, 0);
+    head.add(helmet);
     helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.235, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), helmetMat));
     helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.232, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.26), helmetMat));
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.196, 0.022, 8, 20), helmetMat);
-    rim.rotation.x = Math.PI / 2; rim.position.y = -0.13; helmet.add(rim);
+    const helmRim = new THREE.Mesh(new THREE.TorusGeometry(0.196, 0.022, 8, 20), helmetMat);
+    helmRim.rotation.x = Math.PI / 2; helmRim.position.y = -0.13; helmet.add(helmRim);
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.12), visorMat);
     visor.position.set(0, -0.01, -0.19); visor.rotation.x = -0.12; helmet.add(visor);
     const chin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.14), helmetMat);
     chin.position.set(0, -0.15, -0.12); chin.rotation.x = 0.22; helmet.add(chin);
 
-    // Шея, куртка, полоса
-    cap(skinMat, 0.07, 0.04, 0, 1.53, -0.02, 0);
-    add(jacketMat, new THREE.BoxGeometry(0.46, 0.56, 0.3), 0, 1.28, 0);
-    add(jacketMat, new THREE.BoxGeometry(0.54, 0.14, 0.32), 0, 1.46, -0.01); // плечи
-    add(jacketMat, new THREE.BoxGeometry(0.24, 0.09, 0.24), 0, 1.54, -0.02); // воротник
-    add(stripeMat, new THREE.BoxGeometry(0.5, 0.085, 0.33), 0, 1.31, 0); // полоса
-    add(jacketMat, new THREE.BoxGeometry(0.4, 0.12, 0.28), 0, 1.04, 0.01); // пояс
-
+    const sides = {};
     for (const side of [-1, 1]) {
-      // Руки вниз по швам
-      cap(jacketMat, 0.075, 0.28, side * 0.34, 1.27, 0, 0, 0, 0, side * 0.08);
-      cap(jacketMat, 0.065, 0.26, side * 0.38, 0.93, 0.02, 0.08, 0, 0, side * 0.04);
-      add(gloveMat, new THREE.BoxGeometry(0.11, 0.1, 0.16), side * 0.4, 0.74, 0.05, 0.08);
+      const k = side < 0 ? 'L' : 'R';
 
-      // Ноги прямо
-      cap(pantsMat, 0.095, 0.3, side * 0.13, 0.79, 0, 0);
-      cap(pantsMat, 0.082, 0.32, side * 0.13, 0.42, 0, 0);
-      add(bootsMat, new THREE.BoxGeometry(0.16, 0.16, 0.28), side * 0.13, 0.16, 0.03, 0);
-      add(soleMat, new THREE.BoxGeometry(0.17, 0.05, 0.3), side * 0.13, 0.07, 0.04, 0);
+      // Рука: плечо -> предплечье
+      const shoulder = new THREE.Group();
+      shoulder.position.set(side * 0.31, 0.45, 0);
+      torso.add(shoulder);
+      capTo(shoulder, jacketMat, 0.075, 0.28, 0, -0.17, 0, 0, 0, side * 0.06);
+      const elbow = new THREE.Group();
+      elbow.position.set(0, -0.36, 0);
+      shoulder.add(elbow);
+      capTo(elbow, jacketMat, 0.065, 0.26, 0, -0.16, 0.02, 0.08);
+      mesh(elbow, gloveMat, new THREE.BoxGeometry(0.11, 0.1, 0.16), 0, -0.34, 0.05, 0.08);
+
+      // Нога: бедро -> колено
+      const hip = new THREE.Group();
+      hip.position.set(side * 0.13, -0.02, 0);
+      hips.add(hip);
+      capTo(hip, pantsMat, 0.095, 0.3, 0, -0.19, 0, 0);
+      const knee = new THREE.Group();
+      knee.position.set(0, -0.38, 0);
+      hip.add(knee);
+      capTo(knee, pantsMat, 0.082, 0.32, 0, -0.20, 0, 0);
+      mesh(knee, bootsMat, new THREE.BoxGeometry(0.16, 0.16, 0.28), 0, -0.41, 0.03, 0);
+      mesh(knee, soleMat, new THREE.BoxGeometry(0.17, 0.05, 0.3), 0, -0.50, 0.04, 0);
+
+      sides[k] = { shoulder, elbow, hip, knee };
     }
-    return g;
+
+    // --- Анимации ---
+    const clamp01 = (v) => Math.max(0, Math.min(1, v));
+    const ease = (t) => t * t * (3 - 2 * t);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const pose = () => ({
+      hipsY: 0, hipsRotX: 0, hipsRotZ: 0,
+      torsoRotX: 0, torsoRotY: 0, torsoRotZ: 0,
+      headRotX: 0, headRotY: 0, headRotZ: 0,
+      L: { sX: 0, sY: 0, sZ: 0.08, eX: 0.08, hX: 0, kX: 0 },
+      R: { sX: 0, sY: 0, sZ: -0.08, eX: 0.08, hX: 0, kX: 0 },
+    });
+    const copyPose = (p2) => {
+      const o = pose();
+      Object.assign(o, p2, { L: { ...p2.L }, R: { ...p2.R } });
+      return o;
+    };
+    const blendPose = (a, b, t) => {
+      const o = pose();
+      for (const k of ['hipsY','hipsRotX','hipsRotZ','torsoRotX','torsoRotY','torsoRotZ','headRotX','headRotY','headRotZ']) o[k] = lerp(a[k], b[k], t);
+      for (const s of ['L','R']) for (const k of ['sX','sY','sZ','eX','hX','kX']) o[s][k] = lerp(a[s][k], b[s][k], t);
+      return o;
+    };
+    const applyPose = (o) => {
+      hips.position.y = 0.98 + o.hipsY;
+      hips.rotation.set(o.hipsRotX, 0, o.hipsRotZ);
+      torso.rotation.set(o.torsoRotX, o.torsoRotY, o.torsoRotZ);
+      head.rotation.set(o.headRotX, o.headRotY, o.headRotZ);
+      for (const k of ['L','R']) {
+        const s = sides[k]; const a = o[k];
+        s.shoulder.rotation.set(a.sX, a.sY, a.sZ);
+        s.elbow.rotation.set(a.eX, 0, 0);
+        s.hip.rotation.x = a.hX;
+        s.knee.rotation.x = a.kX;
+      }
+    };
+
+    const idlePose = (t) => {
+      const o = pose();
+      const b = Math.sin(t * 1.4) * 0.5 + 0.5;
+      o.hipsY = Math.sin(t * 1.2) * 0.004;
+      o.torsoRotY = Math.sin(t * 0.7) * 0.03;
+      o.torsoRotX = Math.sin(t * 1.1) * 0.008;
+      o.headRotY = Math.sin(t * 0.6 + 0.5) * 0.04;
+      o.headRotX = Math.sin(t * 0.9) * 0.015;
+      o.L.sX = 0.05 + b * 0.02; o.R.sX = 0.05 + (1 - b) * 0.02;
+      o.L.sZ = 0.10; o.R.sZ = -0.10;
+      o.L.eX = 0.10; o.R.eX = 0.10;
+      return o;
+    };
+
+    const walkPose = (t) => {
+      const o = pose();
+      const c = Math.sin(t * 5.2);
+      const s = Math.sin(t * 10.4);
+      o.hipsY = Math.abs(s) * 0.018;
+      o.hipsRotZ = c * 0.02;
+      o.torsoRotY = -c * 0.05;
+      o.torsoRotX = 0.03;
+      o.headRotY = c * 0.03;
+      o.headRotX = 0.02;
+      o.L.hX = c * 0.45; o.R.hX = -c * 0.45;
+      o.L.kX = Math.max(0, -c) * 0.55; o.R.kX = Math.max(0, c) * 0.55;
+      o.L.sX = -c * 0.35 + 0.08; o.R.sX = c * 0.35 + 0.08;
+      o.L.sZ = 0.12; o.R.sZ = -0.12;
+      o.L.eX = 0.18 + Math.max(0, c) * 0.25; o.R.eX = 0.18 + Math.max(0, -c) * 0.25;
+      return o;
+    };
+
+    const helmetPose = (t) => {
+      const o = pose();
+      // фазы: поднять руки -> поправить -> опустить
+      const d = 3.2;
+      const p1 = clamp01(t / 0.7); // up
+      const p2 = clamp01((t - 0.7) / 1.8); // adjust
+      const p3 = clamp01((t - 2.5) / 0.7); // down
+      const up = ease(p1) * (1 - ease(p3));
+      const wiggle = Math.sin(p2 * Math.PI * 6) * ease(p2) * (1 - ease(clamp01((t - 2.2) / 0.4)));
+      o.torsoRotX = -0.03 * up;
+      o.headRotX = -0.08 * up + wiggle * 0.03;
+      o.headRotZ = wiggle * 0.04;
+      for (const k of ['L','R']) {
+        const sign = k === 'L' ? 1 : -1;
+        o[k].sX = lerp(0.05, -2.35, up);
+        o[k].sY = lerp(0, sign * 0.35, up);
+        o[k].sZ = lerp(sign * 0.10, sign * 0.55, up);
+        o[k].eX = lerp(0.10, 1.65, up);
+        o[k].sX += wiggle * 0.05;
+      }
+      o.hipsY = -0.005 * up;
+      return o;
+    };
+
+    const scratchPose = (t) => {
+      const o = pose();
+      const d = 3.0;
+      const p1 = clamp01(t / 0.6);
+      const p2 = clamp01((t - 0.6) / 1.8);
+      const p3 = clamp01((t - 2.4) / 0.6);
+      const up = ease(p1) * (1 - ease(p3));
+      const scratch = Math.sin(p2 * Math.PI * 8) * ease(p2) * (1 - ease(clamp01((t - 2.1) / 0.4)));
+      o.torsoRotX = 0.04 * up;
+      o.torsoRotY = -0.05 * up;
+      o.headRotX = 0.08 * up;
+      o.headRotY = 0.08 * up;
+      // правая рука чешет низ живота
+      o.R.sX = lerp(0.05, -0.55, up);
+      o.R.sY = lerp(0, -0.35, up);
+      o.R.sZ = lerp(-0.10, -0.25, up);
+      o.R.eX = lerp(0.10, 1.35, up);
+      o.R.sY += scratch * 0.08;
+      o.R.eX += scratch * 0.08;
+      // левая рука слегка отводится
+      o.L.sX = 0.06 + up * 0.08;
+      o.L.sZ = 0.14 + up * 0.05;
+      o.L.eX = 0.12;
+      return o;
+    };
+
+    const anims = [
+      { name: 'idle', dur: () => 2.2 + Math.random() * 1.8, pose: idlePose },
+      { name: 'walk', dur: () => 2.8 + Math.random() * 1.8, pose: walkPose },
+      { name: 'helmet', dur: () => 3.2, pose: helmetPose },
+      { name: 'scratch', dur: () => 3.0, pose: scratchPose },
+    ];
+
+    let cur = 0;
+    let next = 0;
+    let t = 0;
+    let local = 0;
+    let dur = anims[cur].dur();
+    let blend = 1;
+    let fromPose = pose();
+
+    const pickNext = () => {
+      const bag = [0, 1, 1, 2, 3]; // walk чаще, idle как пауза
+      let n = bag[Math.floor(Math.random() * bag.length)];
+      if (n === cur) n = (cur + 1) % anims.length;
+      next = n;
+      fromPose = copyPose(curPoseNow);
+      blend = 0;
+      local = 0;
+      dur = anims[next].dur();
+      cur = next;
+    };
+
+    let curPoseNow = pose();
+    applyPose(curPoseNow);
+
+    const update = (dt) => {
+      t += dt;
+      local += dt;
+      const target = anims[cur].pose(local, t);
+      if (blend < 1) {
+        blend = Math.min(1, blend + dt / 0.7);
+        curPoseNow = blendPose(fromPose, target, ease(blend));
+      } else {
+        curPoseNow = target;
+      }
+      applyPose(curPoseNow);
+      if (local >= dur && blend >= 1) pickNext();
+    };
+
+    return { group: g, update };
   }
 
   function startOutfitPreview(canvas) {
@@ -671,16 +863,17 @@ export function initUi() {
     root.add(platformTop);
 
     const rider = buildStandingRider();
-    const box = new THREE.Box3().setFromObject(rider);
+    const riderGroup = rider.group;
+    const box = new THREE.Box3().setFromObject(riderGroup);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
     // Центр по X/Z, ноги на платформу (y=0)
-    rider.position.x -= center.x;
-    rider.position.z -= center.z;
-    rider.position.y -= box.min.y;
-    root.add(rider);
+    riderGroup.position.x -= center.x;
+    riderGroup.position.z -= center.z;
+    riderGroup.position.y -= box.min.y;
+    root.add(riderGroup);
 
     // Кадрируем по райдеру
     const maxDim = Math.max(size.x, size.y, 0.001);
@@ -728,9 +921,13 @@ export function initUi() {
     canvas.addEventListener('pointerup', onUp);
     canvas.addEventListener('pointerleave', onUp);
 
+    let lastT = performance.now();
     outfitPreview = state;
-    const tick = () => {
+    const tick = (now = performance.now()) => {
       if (!outfitPreview || outfitPreview !== state) return;
+      const dt = Math.min(0.05, Math.max(0, (now - lastT) / 1000));
+      lastT = now;
+      if (rider.update) rider.update(dt);
       if (!dragging) rotY += velY;
       velY *= dragging ? 0 : 0.985;
       if (!dragging && Math.abs(velY) < 0.0035) velY = 0.0035 * Math.sign(velY || 1);
