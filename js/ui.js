@@ -618,6 +618,7 @@ export function initUi() {
     torso.add(head);
     const helmet = new THREE.Group();
     helmet.position.set(0, 0, 0);
+    helmet.rotation.y = Math.PI; // лицо к камере в предпросмотре
     head.add(helmet);
     helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.235, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), helmetMat));
     helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.232, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.26), helmetMat));
