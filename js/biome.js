@@ -5,11 +5,12 @@ import { carriageAt, carriageLat, drivenIsExit, laneMarks, ribbonApproachLat, ri
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick } from './engine/fork.js';
-import { courseBranches, decideZone } from './engine/route.js';
+import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt } from './engine/fork.js';
+import { decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
 import { besidePose, spanEdges } from './engine/roadside.js';
+import { icon } from '@bajajgo/design';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -208,6 +209,7 @@ function zoneBiomeAt(zone) {
 }
 
 function persistBiome() {
+  if (G.forkLabActive) return;
   try {
     const km = Math.max(0, Number.isFinite(G.biomeStoredMeters) ? G.biomeStoredMeters : 0) / 1000;
     localStorage.setItem(STORAGE_KEY, km.toFixed(3));
@@ -449,7 +451,7 @@ function ownedCourse(s) {
     if (decisionAt(z).side !== 1) continue;
     const spawn = vectorSpawnOf(z, EXIT_RIGHT, layout);
     if (!spawn || !(s >= spawn.ownsFrom)) continue;
-    owned.push(spawn);
+    owned.push({ ...spawn, born: catalogHalfAt(spawn.nose) });
   }
   return owned;
 }
@@ -459,11 +461,6 @@ function entranceBiome(s) {
   const zone = routeAt(s).zone;
   ensureZonePlan(zone + 1);
   return biomeIndex(zoneBiomes[zone + 1]);
-}
-
-/** Полосы биома, в который ведёт взятый въезд. */
-function entranceLayout(s) {
-  return LANE_CONFIG[entranceBiome(s)] || LANE_CONFIG[0];
 }
 
 /** Въезд уже стал дорогой: левый слот — это новая дорога, старой ленты нет. */
@@ -476,7 +473,6 @@ const ribbonHeads = new Map();
 function computeHeading(s) {
   const at = layoutAt(s);
   const frame = frameAt(s);
-  const decision = decisionAt(at.zone);
   const owned = ownedCourse(s);
   headKey = s;
   headHit = vectors.heading({
@@ -485,7 +481,10 @@ function computeHeading(s) {
     nose: at.nose,
     edges: frame.world,
     owned,
-    branches: courseBranches(decision.choice, openCourse(RIGHT_FORK, s, at.layout)),
+    branches: openCourse(RIGHT_FORK, s, at.layout).map((spawn) => ({
+      ...spawn,
+      born: catalogHalfAt(spawn.nose),
+    })),
     origin: owned.length ? laneAnchor(frame) : roadCenter(frame),
     turn: at.layout.turn,
     ownedHere: owned.length > 0,
@@ -550,9 +549,7 @@ function laneMarksAtS(s) {
 
 /** Штрихи съезда, пока он ещё боковая лента. */
 function ribbonHere(s) {
-  const frame = frameAt(s);
-  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
-  return sideRibbon(roadCarriageAt(s), frame, layout);
+  return sideRibbon(roadCarriageAt(s), frameAt(s));
 }
 
 function ribbonMarksAtS(s) {
@@ -740,8 +737,7 @@ function roadWidthAtS(s) {
 /** Полосы под байком. На боковой ленте это съезд, иначе проезжая часть точки. */
 function playerLive(s) {
   const frame = frameAt(s);
-  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
-  return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind, layout);
+  return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind);
 }
 
 /** Единственный перевод полосы в мировые метры. riding — байк ещё на боковой ленте. */
@@ -749,23 +745,35 @@ function roadMetersAt(s, laneOffset, riding) {
   return laneMeters(laneOffset, laneSpanAt(s), frameAt(s), riding);
 }
 
-/** Байк на дороге или на ленте съезда. Пришедший въезд сажает его на новую дорогу. */
+/** Байк на дороге или на ленте съезда. В клине между ними его нет. */
 function updateExitHold() {
   const frame = frameAt(G.playerS);
-  const ridden = riderCarriage(
-    roadCarriageAt(G.playerS),
-    frame,
-    riderSeat.kind,
-    frame.chosen === 1 ? entranceLayout(G.playerS) : undefined,
-  );
+  const ridden = riderCarriage(roadCarriageAt(G.playerS), frame, riderSeat.kind);
   const scale = Number.isFinite(ridden.scale) && ridden.scale !== 0 ? ridden.scale : 1;
+  if (G.forkLabActive && Number.isFinite(G.forkLabLateral)) {
+    const stick = riderSeat.kind === 'exit' ? 'exit' : 'road';
+    const held = stayOnAsphalt(frame.local, G.forkLabLateral, stick);
+    const kind = onExitRibbon(held, frame.local) ? 'exit' : 'road';
+    const axis = seatAxis(frame, kind);
+    riderSeat = { kind, lane: (frame.origin + held - axis) / scale };
+    riderSpan = scale;
+    G.laneOffset = riderSeat.lane;
+    return;
+  }
   const seated = rescaleSeat(
     { kind: riderSeat.kind, lane: G.laneOffset },
     riderSpan,
     scale,
     seatAxis(frame, riderSeat.kind),
   );
-  riderSeat = stepSeat(frame, seated, scale);
+  const world = seatWorld(frame, seated, scale) - frame.origin;
+  const stick = seated.kind === 'exit' ? 'exit' : 'road';
+  const held = stayOnAsphalt(frame.local, world, stick);
+  const adjusted = {
+    kind: seated.kind,
+    lane: (frame.origin + held - seatAxis(frame, seated.kind)) / scale,
+  };
+  riderSeat = stepSeat(frame, adjusted, scale);
   riderSpan = scale;
   G.laneOffset = riderSeat.lane;
 }
@@ -784,8 +792,7 @@ function laneWorldOffsetAtS(s, lateralOffset) {
 /** Дороги в точке s: основная и боковой съезд, если он ещё отдельный. */
 function roadsHere(s) {
   const frame = frameAt(s);
-  const layout = frame.chosen === 1 ? entranceLayout(s) : undefined;
-  return roadsAt(roadCarriageAt(s), frame, decisionAt(routeAt(s).zone).choice, layout);
+  return roadsAt(roadCarriageAt(s), frame);
 }
 
 /** Мир машины. Полоса — смещение той дороги, по которой она едет. */
@@ -801,7 +808,7 @@ function riderLatAt(s, laneOffset) {
   const frame = frameAt(s);
   const player = frameAt(G.playerS);
   const arrived = player.chosen === 1 && exitRibbonCenter(player.local) == null;
-  const ribbon = frame.chosen === 1 ? sideRibbon(roadCarriageAt(s), frame, entranceLayout(s)) : null;
+  const ribbon = frame.chosen === 1 ? sideRibbon(roadCarriageAt(s), frame) : null;
   const approach = ribbonApproachLat(arrived, ribbon != null, lane, ribbon ? ribbon.axis : 0, ribbon ? ribbon.scale : 1);
   if (approach != null) return approach;
   const playerRibbon = exitRibbonCenter(player.local);
@@ -818,7 +825,7 @@ function riderLatAt(s, laneOffset) {
   if (trail != null) return trail;
   const seat = riderFrameSeat(s, lane);
   const span = seat.kind === 'exit'
-    ? riderCarriage(roadCarriageAt(s), frame, 'exit', frame.chosen === 1 ? entranceLayout(s) : undefined).scale
+    ? riderCarriage(roadCarriageAt(s), frame, 'exit').scale
     : laneSpanAt(s);
   const scale = Number.isFinite(span) && span !== 0 ? span : 1;
   return seatWorld(frame, seat, scale);
@@ -1119,7 +1126,7 @@ function bannerEls() {
 function showBiomeBanner(biome) {
   const els = bannerEls();
   if (!els) return;
-  if (els.icon) els.icon.textContent = biome.icon;
+  if (els.icon) els.icon.setAttribute('name', biome.icon);
   if (els.name) els.name.textContent = biome.name;
   if (els.sub) els.sub.textContent = biome.sub;
   els.root.style.setProperty('--biome-accent', hexColor(biome.accent));
@@ -1153,7 +1160,7 @@ function updateBiomeChip(biomeIndexValue) {
   lastHudKey = key;
   const ico = chip.querySelector('.chip-ico');
   const name = chip.querySelector('.chip-name');
-  if (ico) ico.textContent = biome.icon;
+  if (ico) ico.setAttribute('name', biome.icon);
   if (name) name.textContent = biome.short;
   chip.style.setProperty('--chip-accent', hexColor(biome.accent));
 }
@@ -1197,9 +1204,9 @@ function updateSplitBanner(info) {
 
   const leftBiome = BIOMES[info.left];
   const rightBiome = BIOMES[info.right];
-  if (els.leftIco) els.leftIco.textContent = leftBiome.icon;
+  if (els.leftIco) els.leftIco.setAttribute('name', leftBiome.icon);
   if (els.leftName) els.leftName.textContent = leftBiome.short;
-  if (els.rightIco) els.rightIco.textContent = rightBiome.icon;
+  if (els.rightIco) els.rightIco.setAttribute('name', rightBiome.icon);
   if (els.rightName) els.rightName.textContent = rightBiome.short;
   if (els.left) {
     els.left.style.setProperty('--opt-accent', hexColor(leftBiome.accent));
@@ -1320,6 +1327,27 @@ function holdDrivenLane(s, offset) {
   return nearestLaneOffset(lanes, lane, 'with');
 }
 
+function clearForkChoice(zone) {
+  chosenZones.delete(zone);
+  delete chosenExit[zone];
+  delete splitCommitMeters[zone];
+  delete roadLock[zone + 1];
+}
+
+/** Страница развилки сама называет сторону. Сохранение и счётчик визитов не трогает. */
+function applyForkLab(zone, meters) {
+  if (!G.forkLabActive) return;
+  const want = G.forkLabChoice;
+  if (want !== 0 && want !== 1) {
+    if (chosenZones.has(zone)) clearForkChoice(zone);
+    return;
+  }
+  const stored = want === 1 ? 1 : -1;
+  if (chosenZones.has(zone) && chosenExit[zone] === stored) return;
+  clearForkChoice(zone);
+  commitSplit(zone, want, meters);
+}
+
 function commitSplit(zone, side, commitMeters) {
   if (chosenZones.has(zone)) return;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts);
@@ -1331,6 +1359,10 @@ function commitSplit(zone, side, commitMeters) {
   // Снимаем фикс профиля следующей зоны, чтобы он совпал с фактическим выбором.
   delete roadLock[zone + 1];
   G.pendingBiome = chosen;
+  if (G.forkLabActive) {
+    dropRoadCache();
+    return;
+  }
   G.visitCounts = G.visitCounts || ZERO_VISITS();
   G.visitCounts[chosen] = Math.min(2, (G.visitCounts[chosen] || 0) + 1);
   G.currentBiome = chosen;
@@ -1375,7 +1407,7 @@ function updateZoneProgress(meters) {
 function updateBiome(dt) {
   dropRoadCache();
   const meters = G.biomeOffsetM + G.playerS;
-  if (G.started && !G.ended) {
+  if (G.started && !G.ended && !G.forkLabActive) {
     G.biomeStoredMeters = meters;
     saveTimer += dt;
     if (saveTimer >= 2.5) {
@@ -1407,6 +1439,7 @@ function updateBiome(dt) {
   splitChoices[zone] = choices;
 
   updateExitHold();
+  applyForkLab(zone, meters);
   const chosenBefore = chosenZones.has(zone);
   const previewSide = chosenBefore
     ? (G.pendingBiome === choices[1] ? 1 : 0)
@@ -1414,7 +1447,7 @@ function updateBiome(dt) {
 
   // Выбор фиксируется в конце параллельного участка. До этого следующая
   // локация не переписывается: уход со съезда обратно на прямую остаётся прямым.
-  if (G.started && !G.ended && !chosenBefore && splitD >= layout.choiceAt) {
+  if (G.started && !G.ended && !G.forkLabActive && !chosenBefore && splitD >= layout.choiceAt) {
     commitSplit(zone, previewSide, meters);
   }
   // commitSplit мог выбрать биом прямо в этом кадре — HUD и баннер должны
@@ -1555,10 +1588,10 @@ function biomeMenuMarkup() {
   const visits = G.visitCounts || ZERO_VISITS();
   const marks = info.choices.map((b) => {
     const biome = BIOMES[b];
-    return `<span title="посещений: ${visits[b] || 0}/2">${biome.icon} ${biome.short}</span>`;
+    return `<span title="посещений: ${visits[b] || 0}/2">${icon(biome.icon)} ${biome.short}</span>`;
   }).join('<i>·</i>');
   return `<div class="biome-strip">
-    <span class="biome-strip-icon">${info.biome.icon}</span>
+    <span class="biome-strip-icon">${icon(info.biome.icon)}</span>
     <div class="biome-strip-main">
       <div class="biome-strip-row"><b>${info.biome.short}</b><span>развилка: ${marks} · ${(info.leftM / 1000).toFixed(1)} км</span></div>
       <div class="biome-strip-bar"><i style="width:${pct}%"></i></div>
@@ -1568,7 +1601,7 @@ function biomeMenuMarkup() {
 
 function biomePauseValue() {
   const info = biomeDisplayInfo();
-  return `${info.biome.icon} ${info.biome.short} · ${Math.round(info.progress * 100)}%`;
+  return `${info.biome.short} · ${Math.round(info.progress * 100)}%`;
 }
 
 /* ---------- Инициализация ---------- */

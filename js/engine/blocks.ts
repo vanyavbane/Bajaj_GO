@@ -33,17 +33,17 @@ export const RIGHT_EXIT: ExitRecipe = {
   id: 'right-exit',
   spread: 22,
   approach: [
-    { id: 'split', kind: 'split', length: 110 },
-    { id: 'fork', kind: 'fork', length: 150 },
+    { id: 'split', kind: 'split', length: 80 },
+    { id: 'fork', kind: 'fork', length: 480 },
   ],
   choices: [
     [
-      { id: 'seal-exit', kind: 'seal', length: 70 },
-      { id: 'ahead', kind: 'road', length: 100 },
+      { id: 'seal-exit', kind: 'seal', length: 160 },
+      { id: 'ahead', kind: 'road', length: 180 },
     ],
     [
-      { id: 'seal-main', kind: 'seal', length: 70 },
-      { id: 'arrived', kind: 'road', length: 100 },
+      { id: 'seal-main', kind: 'seal', length: 160 },
+      { id: 'arrived', kind: 'road', length: 180 },
     ],
   ],
 };
@@ -182,7 +182,7 @@ export function compileExit(recipe: ExitRecipe): CompiledExit {
 
 /** Блок линейки в метре d от носа. На стыке это уже следующий блок. */
 export function spanAt(plan: CompiledExit, d: number): SpanHit | null {
-  if (!(d > 0) || d >= plan.length) return null;
+  if (!(d >= 0) || d >= plan.length) return null;
   for (const span of plan.timeline) {
     if (d < span.start + span.length) {
       return { ...span, u: (d - span.start) / span.length };

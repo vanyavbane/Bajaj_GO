@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { button, callout, check, choiceGrid, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabBody, tabs } from '@bajajgo/design';
+import { button, callout, check, choiceGrid, currency, field, heading, icon, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabs, tag } from '@bajajgo/design';
 import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
@@ -75,15 +75,23 @@ export function initUi() {
   };
 
   function renderSettings(tab = 'graphics', from = 'menu') {
+    const overlay = $('overlay');
+    const tabGroup = overlay.querySelector('sl-tab-group.ds-tabs');
+    const stay = G.currentScreen === 'settings'
+      && overlay.classList.contains('mode-shop')
+      && !!tabGroup
+      && !!overlay.querySelector('#settings-back');
+
     G.currentScreen = 'settings';
     settingsReturn = () => {
       if (from === 'pause') G.renderPauseMenu();
       else renderMainMenu();
     };
 
-    const overlay = $('overlay');
-    overlay.style.display = 'flex';
-    overlay.className = 'mode-shop';
+    if (!stay) {
+      overlay.style.display = 'flex';
+      overlay.className = 'mode-shop';
+    }
 
     const g = G.graphics;
     const v = G.visual;
@@ -102,6 +110,7 @@ export function initUi() {
       ['sound', 'Звук']
     ];
 
+    function settingsTabBody(tab) {
     let body = '';
     if (tab === 'graphics') {
       body = `
@@ -140,20 +149,20 @@ export function initUi() {
           label: fxState(!!g.hdrPlus),
           pressed: !!g.hdrPlus
         }))}
-        ${inline('🪞 Отражения', button({
+        ${inline('Отражения', button({
           id: 'fx-toggle-reflections',
           variant: 'compact',
           label: fxState(g.reflections),
           pressed: !!g.reflections
         }))}
-        ${inline('💨 Motion Blur', button({ id: 'fx-open-mb', variant: 'compact', label: fxState(v.motionBlur) }))}
-        ${inline('☀️ Лучи от солнца', button({ id: 'fx-open-gr', variant: 'compact', label: fxState(v.godRays) }))}
+        ${inline('Motion Blur', button({ id: 'fx-open-mb', variant: 'compact', label: fxState(v.motionBlur) }))}
+        ${inline('Лучи от солнца', button({ id: 'fx-open-gr', variant: 'compact', label: fxState(v.godRays) }))}
         ${note('Эффекты применяются мгновенно и сохраняются в браузере.')}
       `;
     } else if (tab === 'camera') {
       body = `
         ${inline('Вид камеры', button({ id: 'settings-cam', variant: 'compact', label: G.cameraMode === 'cockpit' ? 'Кокпит' : '3-е лицо' }))}
-        ${inline('Кокпит: FOV / высота', button({ id: 'settings-cam-fov', variant: 'compact', icon: '🎛', label: 'Настроить' }))}
+        ${inline('Кокпит: FOV / высота', button({ id: 'settings-cam-fov', variant: 'compact', icon: 'sliders', label: 'Настроить' }))}
         ${note('Вид от третьего лица фиксированный. Профиль камеры хранится отдельно для каждого мотоцикла.')}
       `;
     } else if (tab === 'controls') {
@@ -170,20 +179,20 @@ export function initUi() {
         ? `Калибровка: ${calibrationAxis}=${Number(calibration.axis === 'beta' ? calibration.beta : calibration.gamma).toFixed(1)}° · ${new Date(calibration.calibratedAt).toLocaleDateString('ru-RU')}`
         : 'Калибровка ещё не выполнена — она пройдёт автоматически в первые секунды заезда.';
 
-      const keyPreview = (glyphs) => `<div class="ds-choice-keys">${glyphs.map((glyph) => `<span>${glyph}</span>`).join('')}</div>`;
+      const keyPreview = (names) => `<div class="ds-choice-keys">${names.map((name) => `<span>${icon(name)}</span>`).join('')}</div>`;
       body = `
         ${choiceGrid('Способ управления', [
           {
             on: mode === 'stick',
             data: { 'ctrl-mode': 'stick' },
-            preview: keyPreview(['◉', '▲', '▼']),
+            preview: `<span class="ds-choice-hero">${icon('joystick')}</span>`,
             label: 'Джойстик',
             detail: 'Стик справа вместо кнопок: влево и вправо — руль, вверх — газ, вниз — тормоз. Клавиатура работает вместе с ним.'
           },
           {
             on: mode === 'buttons',
             data: { 'ctrl-mode': 'buttons' },
-            preview: keyPreview(['←', '▼', '▲', '→']),
+            preview: keyPreview(['arrow-left', 'arrow-down', 'arrow-up', 'arrow-right']),
             label: 'Кнопки',
             detail: 'Экранные кнопки газа, тормоза и поворота. Работает на любом устройстве.'
           },
@@ -191,7 +200,7 @@ export function initUi() {
             on: mode === 'tilt',
             disabled: !tiltAvailable,
             data: { 'ctrl-mode': 'tilt' },
-            preview: `<div class="ds-choice-phone"><span class="ds-choice-signal">💡</span><span class="ds-choice-steer">← →</span><span class="ds-choice-pedals">▲<br>▼</span><span class="ds-choice-mark"></span></div>`,
+            preview: `<div class="ds-choice-phone"><span class="ds-choice-signal">${icon('lightbulb')}</span><span class="ds-choice-steer">${icon('arrow-left')}${icon('arrow-right')}</span><span class="ds-choice-pedals">${icon('arrow-up')}<br>${icon('arrow-down')}</span><span class="ds-choice-mark"></span></div>`,
             label: 'Акселерометр',
             detail: 'Наклон устройства — руление. Правая часть экрана — газ, левая — тормоз. Кнопка «Сигнал» справа. Для мобильных.'
           }
@@ -212,7 +221,7 @@ export function initUi() {
             hint: '50% — плавное руление (нужен большой наклон) · 200% — резкое (маленький наклон)'
           })}
           ${inline('Инверсия наклона', button({ id: 'tilt-invert', variant: 'compact', label: G.tiltInvert ? 'Вкл' : 'Выкл', pressed: G.tiltInvert }))}
-          ${button({ id: 'tilt-calibrate', variant: 'primary', icon: '🎯', label: 'КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)' })}
+          ${button({ id: 'tilt-calibrate', variant: 'primary', icon: 'bullseye', label: 'КАЛИБРОВАТЬ (ДЕРЖИТЕ РОВНО)' })}
           ${note(calibrationText)}
           ${note('Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Ось выбирается автоматически: в портрете — γ, в ландшафте — β; при повороте телефона калибровка обновляется сама.')}
         ` : ''}
@@ -231,47 +240,70 @@ export function initUi() {
           : 'Игровые звуки включены. Беззвучный режим выключает их все сразу.')}
       `;
     }
+    return body;
+    }
 
-    overlay.innerHTML = panel(`
+    const settingsMarkup = () => panel(`
         ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · УПРАВЛЕНИЕ · ЗВУК')}
-        ${tabs(tabItems, tab)}
-        ${tabBody(body)}
-        ${button({ id: 'settings-back', label: '← НАЗАД' })}
+        ${tabs(tabItems, tab, {
+          graphics: settingsTabBody('graphics'),
+          lighting: settingsTabBody('lighting'),
+          camera: settingsTabBody('camera'),
+          controls: settingsTabBody('controls'),
+          sound: settingsTabBody('sound')
+        })}
+        ${button({ id: 'settings-back', icon: 'arrow-left', label: 'НАЗАД' })}
     `, { size: 'narrow' });
 
-    overlay.querySelectorAll('[data-tab]').forEach(btn => {
-      if (!(btn instanceof HTMLElement)) return;
-      btn.addEventListener('click', () => renderSettings(btn.dataset.tab, from));
-    });
-    overlay.querySelectorAll('[data-gfx]').forEach(btn => {
+    let root = overlay;
+    if (!stay) {
+      overlay.innerHTML = settingsMarkup();
+      $('settings-back').addEventListener('click', () => G.leaveSettings());
+    } else {
+      const card = overlay.querySelector('sl-card.ds-panel');
+      const scroll = card ? card.scrollTop : 0;
+      const host = overlay.querySelector(`sl-tab-panel[name="${tab}"] .ds-tab-body`);
+      if (host) host.innerHTML = settingsTabBody(tab);
+      else overlay.innerHTML = settingsMarkup();
+      root = host || overlay;
+      if (host && tabGroup && typeof tabGroup.show === 'function') tabGroup.show(tab);
+      if (card) card.scrollTop = scroll;
+      if (!host) $('settings-back').addEventListener('click', () => G.leaveSettings());
+    }
+
+    const owned = (id) => {
+      const el = document.getElementById(id);
+      return el && root.contains(el) ? el : null;
+    };
+
+    root.querySelectorAll('[data-gfx]').forEach(btn => {
       if (!(btn instanceof HTMLElement)) return;
       btn.addEventListener('click', () => {
         G.chooseGraphics(btn.dataset.gfx, btn.dataset.value);
-        renderSettings(tab, from);
+        renderSettings('graphics', from);
       });
     });
-    $('settings-back').addEventListener('click', () => G.leaveSettings());
 
-    const openMb = document.getElementById('fx-open-mb');
+    const openMb = owned('fx-open-mb');
     if (openMb) {
       openMb.addEventListener('click', () => {
         fxOpenModal(() => renderMotionBlurSettings(() => renderSettings('lighting', from), from === 'pause'));
       });
     }
-    const openGr = document.getElementById('fx-open-gr');
+    const openGr = owned('fx-open-gr');
     if (openGr) {
       openGr.addEventListener('click', () => {
         fxOpenModal(() => renderGodRaysSettings(() => renderSettings('lighting', from), from === 'pause'));
       });
     }
-    const toggleHdr = document.getElementById('fx-toggle-hdr');
+    const toggleHdr = owned('fx-toggle-hdr');
     if (toggleHdr) {
       toggleHdr.addEventListener('click', () => {
         G.chooseGraphics('hdrPlus', g.hdrPlus ? 'false' : 'true');
         renderSettings('lighting', from);
       });
     }
-    const toggleReflections = document.getElementById('fx-toggle-reflections');
+    const toggleReflections = owned('fx-toggle-reflections');
     if (toggleReflections) {
       toggleReflections.addEventListener('click', () => {
         G.chooseGraphics('reflections', g.reflections ? 'false' : 'true');
@@ -279,10 +311,10 @@ export function initUi() {
       });
     }
 
-    const sharpRange = /** @type {HTMLInputElement|null} */ (document.getElementById('gfx-sharp-range'));
+    const sharpRange = /** @type {HTMLInputElement|null} */ (owned('gfx-sharp-range'));
     if (sharpRange) {
-      const valEl = document.getElementById('gfx-sharp-val');
-      sharpRange.addEventListener('input', () => {
+      const valEl = owned('gfx-sharp-val');
+      sharpRange.addEventListener('sl-input', () => {
         const v = G.clamp(Number(sharpRange.value), -100, 100);
         if (valEl) valEl.textContent = String(Math.round(v));
         if (G.setGraphicsValue) G.setGraphicsValue('sharpness', v);
@@ -295,10 +327,10 @@ export function initUi() {
         });
       }
     }
-    const brightRange = /** @type {HTMLInputElement|null} */ (document.getElementById('gfx-bright-range'));
+    const brightRange = /** @type {HTMLInputElement|null} */ (owned('gfx-bright-range'));
     if (brightRange) {
-      const valEl = document.getElementById('gfx-bright-val');
-      brightRange.addEventListener('input', () => {
+      const valEl = owned('gfx-bright-val');
+      brightRange.addEventListener('sl-input', () => {
         const v = G.clamp(Number(brightRange.value), -100, 100);
         if (valEl) valEl.textContent = String(Math.round(v));
         if (G.setGraphicsValue) G.setGraphicsValue('brightness', v);
@@ -311,21 +343,21 @@ export function initUi() {
         });
       }
     }
-    const cam = document.getElementById('settings-cam');
+    const cam = owned('settings-cam');
     if (cam) {
       cam.addEventListener('click', () => {
         G.toggleCameraMode();
         renderSettings('camera', from);
       });
     }
-    const camFov = document.getElementById('settings-cam-fov');
+    const camFov = owned('settings-cam-fov');
     if (camFov) {
       camFov.addEventListener('click', () => {
         G.renderCameraSettings(() => renderSettings('camera', from));
       });
     }
 
-    overlay.querySelectorAll('[data-ctrl-mode]').forEach(btn => {
+    root.querySelectorAll('[data-ctrl-mode]').forEach(btn => {
       if (!(btn instanceof HTMLElement) || btn.hasAttribute('disabled')) return;
       btn.addEventListener('click', async () => {
         const next = btn.dataset.ctrlMode;
@@ -359,14 +391,14 @@ export function initUi() {
           return;
         }
         if (!(G.started && !G.ended)) G.stopTilt();
-        const activeTab = overlay.querySelector('.ds-tab-on');
+        const activeTab = overlay.querySelector('sl-tab[active]');
         if (G.currentScreen === 'settings' && activeTab instanceof HTMLElement && activeTab.dataset.tab === 'controls') {
           renderSettings('controls', from);
         }
       });
     });
 
-    const soundMute = document.getElementById('sound-mute');
+    const soundMute = owned('sound-mute');
     if (soundMute) {
       soundMute.addEventListener('click', () => {
         if (G.setSoundMuted) G.setSoundMuted(!G.soundMuted);
@@ -374,17 +406,17 @@ export function initUi() {
       });
     }
 
-    const tiltRange = /** @type {HTMLInputElement} */ (document.getElementById('tilt-sens-range'));
+    const tiltRange = /** @type {HTMLInputElement} */ (owned('tilt-sens-range'));
     if (tiltRange) {
       const valueEl = document.getElementById('tilt-sens-val');
-      tiltRange.addEventListener('input', () => {
+      tiltRange.addEventListener('sl-input', () => {
         const percent = G.clamp(Number(tiltRange.value), 50, 200);
         G.setTiltSensitivity(percent / 100);
         if (valueEl) valueEl.textContent = String(Math.round(percent));
       });
     }
 
-    const tiltInvert = document.getElementById('tilt-invert');
+    const tiltInvert = owned('tilt-invert');
     if (tiltInvert) {
       tiltInvert.addEventListener('click', () => {
         G.setTiltInvert(!G.tiltInvert);
@@ -392,7 +424,7 @@ export function initUi() {
       });
     }
 
-    const tiltCalibrate = document.getElementById('tilt-calibrate');
+    const tiltCalibrate = owned('tilt-calibrate');
     if (tiltCalibrate) {
       tiltCalibrate.addEventListener('click', () => {
         if (!G.calibrateTilt()) return;
@@ -419,7 +451,7 @@ export function initUi() {
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
     overlay.innerHTML = panel(`
-        ${heading('💨 MOTION BLUR', 'КИНЕМАТОГРАФИЧНОЕ РАЗМЫТИЕ НА СКОРОСТИ')}
+        ${heading('MOTION BLUR', 'КИНЕМАТОГРАФИЧНОЕ РАЗМЫТИЕ НА СКОРОСТИ', 'wind')}
         ${inline('Включить эффект', button({ id: 'mb-toggle', variant: 'compact', label: fxState(v.motionBlur), pressed: v.motionBlur }))}
         ${slider({
           id: 'mb-range',
@@ -435,14 +467,14 @@ export function initUi() {
         ${check({ id: 'mb-comfort', label: 'Уменьшить укачивание', checked: v.motionBlurComfort })}
         ${note('Размытие сильнее по краям, центр и полосы сверху/снизу остаются чёткими. HUD и мотоцикл игрока не размываются.')}
         ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
-        ${button({ id: 'mb-reset', icon: '↺', label: 'СБРОСИТЬ' })}
-        ${button({ id: 'mb-back', label: '← НАЗАД' })}
-        ${fromPause ? button({ id: 'mb-continue', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' }) : ''}
+        ${button({ id: 'mb-reset', icon: 'arrow-counterclockwise', label: 'СБРОСИТЬ' })}
+        ${button({ id: 'mb-back', icon: 'arrow-left', label: 'НАЗАД' })}
+        ${fromPause ? button({ id: 'mb-continue', variant: 'primary', icon: 'play-fill', label: 'ПРОДОЛЖИТЬ' }) : ''}
     `, { size: 'narrow' });
 
     const range = /** @type {HTMLInputElement} */ ($('mb-range'));
     const valueEl = $('mb-val');
-    range.addEventListener('input', () => {
+    range.addEventListener('sl-input', () => {
       v.motionBlurIntensity = G.clamp(Number(range.value), 0, 100);
       valueEl.textContent = String(Math.round(v.motionBlurIntensity));
       saveVisual();
@@ -454,9 +486,9 @@ export function initUi() {
       renderMotionBlurSettings(backFn, fromPause);
     });
 
-    const comfort = /** @type {HTMLInputElement} */ ($('mb-comfort'));
-    comfort.addEventListener('change', () => {
-      v.motionBlurComfort = comfort.checked;
+    const comfort = $('mb-comfort');
+    comfort.addEventListener('sl-change', () => {
+      v.motionBlurComfort = !!comfort.checked;
       saveVisual();
     });
 
@@ -482,7 +514,7 @@ export function initUi() {
     overlay.style.display = 'flex';
     overlay.className = 'mode-shop';
     overlay.innerHTML = panel(`
-        ${heading('☀️ ЛУЧИ ОТ СОЛНЦА', 'GOD RAYS · СВЕТОВЫЕ ЛУЧИ СКВОЗЬ ОБЛАКА')}
+        ${heading('ЛУЧИ ОТ СОЛНЦА', 'GOD RAYS · СВЕТОВЫЕ ЛУЧИ СКВОЗЬ ОБЛАКА', 'sun')}
         ${inline('Включить эффект', button({ id: 'gr-toggle', variant: 'compact', label: fxState(v.godRays), pressed: v.godRays }))}
         ${slider({
           id: 'gr-range',
@@ -506,14 +538,14 @@ export function initUi() {
         })}
         ${note('Лучи видны только днём и на закате, когда солнце не закрыто тучами. Во время дождя, ночью и в тоннеле лучи автоматически скрываются.')}
         ${callout('Авто-режим: на слабых устройствах эффект снижается или отключается автоматически.', '')}
-        ${button({ id: 'gr-reset', icon: '↺', label: 'СБРОСИТЬ' })}
-        ${button({ id: 'gr-back', label: '← НАЗАД' })}
-        ${fromPause ? button({ id: 'gr-continue', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' }) : ''}
+        ${button({ id: 'gr-reset', icon: 'arrow-counterclockwise', label: 'СБРОСИТЬ' })}
+        ${button({ id: 'gr-back', icon: 'arrow-left', label: 'НАЗАД' })}
+        ${fromPause ? button({ id: 'gr-continue', variant: 'primary', icon: 'play-fill', label: 'ПРОДОЛЖИТЬ' }) : ''}
     `, { size: 'narrow' });
 
     const range = /** @type {HTMLInputElement} */ ($('gr-range'));
     const valueEl = $('gr-val');
-    range.addEventListener('input', () => {
+    range.addEventListener('sl-input', () => {
       v.godRaysIntensity = G.clamp(Number(range.value), 0, 100);
       valueEl.textContent = String(Math.round(v.godRaysIntensity));
       saveVisual();
@@ -521,7 +553,7 @@ export function initUi() {
 
     const lenRange = /** @type {HTMLInputElement} */ ($('gr-len'));
     const lenValueEl = $('gr-len-val');
-    lenRange.addEventListener('input', () => {
+    lenRange.addEventListener('sl-input', () => {
       v.godRaysLength = G.clamp(Number(lenRange.value), 0, 100);
       lenValueEl.textContent = String(Math.round(v.godRaysLength));
       saveVisual();
@@ -710,22 +742,22 @@ export function initUi() {
     ];
 
     overlay.innerHTML = `
-      <div class="outfit-shell ds-panel">
-        <div class="outfit-head">
+      <sl-card class="outfit-shell">
+        <header class="outfit-head">
           <div>
-            <div class="ds-kicker">КАСТОМИЗАЦИЯ</div>
+            <p class="ds-kicker">КАСТОМИЗАЦИЯ</p>
             <h2 class="ds-title">Экипировка</h2>
           </div>
           <div class="outfit-head-actions">
-            <button id="outfit-reset" class="ds-button ds-button--compact">Сбросить</button>
-            <button id="outfit-close" class="ds-icon-button" title="Закрыть" aria-label="Закрыть">✕</button>
+            ${button({ id: 'outfit-reset', variant: 'compact', label: 'Сбросить' })}
+            ${iconButton({ id: 'outfit-close', icon: 'x-lg', title: 'Закрыть' })}
           </div>
-        </div>
+        </header>
         <div class="outfit-body">
           <div class="outfit-left">
             ${cats.map(cat => `
-              <div class="outfit-cat" data-cat="${cat.id}">
-                <div class="outfit-cat-title">${cat.label}</div>
+              <fieldset class="outfit-cat" data-cat="${cat.id}">
+                <legend class="outfit-cat-title">${cat.label}</legend>
                 <div class="outfit-swatches">
                   ${OUTFIT_COLORS.map(c => `
                     <button class="outfit-swatch ${current[cat.id] === c.hex ? 'is-on' : ''}"
@@ -734,10 +766,10 @@ export function initUi() {
                     </button>
                   `).join('')}
                 </div>
-              </div>
+              </fieldset>
             `).join('')}
             <div class="outfit-hint ds-note">Изменения применяются сразу и сохраняются автоматически.</div>
-            <button id="outfit-back" class="ds-button">← Назад в меню</button>
+            ${button({ id: 'outfit-back', icon: 'arrow-left', label: 'Назад в меню' })}
           </div>
           <div class="outfit-right">
             <div class="outfit-preview-wrap">
@@ -745,7 +777,7 @@ export function initUi() {
             </div>
           </div>
         </div>
-      </div>`;
+      </sl-card>`;
 
     overlay.querySelectorAll('.outfit-swatch').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -803,12 +835,12 @@ export function initUi() {
       badge,
       biome: G.biomeMenuMarkup ? G.biomeMenuMarkup() : '',
       actions: [
-        button({ id: 'mm-start', variant: 'primary', icon: '▶', label: 'Начать заезд' }),
-        button({ id: 'mm-shop', icon: '🛒', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
-        button({ id: 'mm-outfit', icon: '🧥', label: 'Экипировка' }),
+        button({ id: 'mm-start', variant: 'primary', icon: 'play-fill', label: 'Начать заезд' }),
+        button({ id: 'mm-shop', icon: 'cart3', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
+        button({ id: 'mm-outfit', icon: 'backpack', label: 'Экипировка' }),
         button({
           id: 'mm-settings',
-          icon: '⚙',
+          icon: 'gear',
           label: 'Настройки',
           trail: G.graphicsLabel,
           trailOn: G.graphics.preset === 'sharp'
@@ -817,8 +849,8 @@ export function initUi() {
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
       footer: `bajaj GO · Voxel Traffic & Jump Simulator · Game by a fan · ${builtAt}`,
       tools: [
-        iconButton({ id: 'mm-cam-settings', icon: '🎥', title: 'Настройки камеры от первого лица (FOV, высота)' }),
-        iconButton({ id: 'mm-fs-btn', icon: '⛶', title: 'Полный экран' })
+        iconButton({ id: 'mm-cam-settings', icon: 'camera-video', title: 'Настройки камеры от первого лица (FOV, высота)' }),
+        iconButton({ id: 'mm-fs-btn', icon: 'arrows-fullscreen', title: 'Полный экран' })
       ].join('')
     });
 
@@ -876,21 +908,17 @@ export function initUi() {
       const missing = shortfall(b.price, G.bankPoints);
 
       let side = '';
-      if (owned) {
-        side = '<b class="shop-row-owned">В гараже</b>';
-      } else if (b.price === 0) {
-        side = '<b class="shop-row-price">Бесплатно</b>';
-      } else if (missing <= 0) {
-        side = `<b class="shop-row-price">${rubles(b.price)}</b>`;
-      } else {
-        side = `<b class="shop-row-missing">не хватает ${rubles(missing)}</b>`;
-      }
-      const mark = selected ? '<em class="shop-row-badge">✓ Выбран</em>' : '';
+      if (owned) side = tag('В гараже', 'good');
+      else if (b.price === 0) side = tag('Бесплатно');
+      else if (missing <= 0) side = tag(rubles(b.price), 'warm');
+      else side = tag(`не хватает ${rubles(missing)}`, 'warn');
+      const mark = selected ? tag('Выбран', 'good') : '';
+      const face = previewing ? 'variant="primary"' : 'variant="neutral" outline';
 
-      return `<button type="button" class="shop-row${previewing ? ' shop-row-on' : ''}" data-preview="${b.id}"${previewing ? ' aria-current="true"' : ''}>
+      return `<li><sl-button ${face} class="shop-row" data-preview="${b.id}"${previewing ? ' aria-current="true"' : ''}>
         <span class="shop-row-main"><b>${b.name}</b><small>${b.typeLabel}</small></span>
-        <span class="shop-row-side">${side}${mark}</span>
-      </button>`;
+        <span slot="suffix" class="shop-row-side">${side}${mark}</span>
+      </sl-button></li>`;
     }).join('');
 
     /* ---------- правая колонка: характеристики и действие ---------- */
@@ -911,7 +939,7 @@ export function initUi() {
     let missingLine = '';
     let statusLine = '';
     if (previewSelected) {
-      actionBtn = button({ variant: 'primary', label: '✓ ВЫБРАН', disabled: true, data: { state: 'selected' } });
+      actionBtn = button({ variant: 'primary', icon: 'check-lg', label: 'ВЫБРАН', disabled: true, data: { state: 'selected' } });
       statusLine = `Выбран для заезда · тюнинг ${previewEff.installedCount}/${G.tuningCatalog.length}`;
     } else if (previewOwned) {
       actionBtn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { state: 'select', select: previewBike.id } });
@@ -956,14 +984,13 @@ export function initUi() {
       </div>
       <div class="shop-grid">
         <div class="shop-list-col">
-          <div class="shop-col-title">Список мотоциклов</div>
-          <div class="shop-list">${rows}</div>
+          <h3 class="shop-col-title">Список мотоциклов</h3>
+          <ul class="shop-list">${rows}</ul>
         </div>
         <div class="shop-side">
           <div class="shop-preview-wrap">
             <div id="shop-preview" class="shop-preview" role="img" aria-label="3D-модель ${previewBike.name}"></div>
-            <span class="shop-preview-tag">Просмотр</span>
-            <div class="shop-preview-bar"></div>
+            <sl-badge class="shop-preview-tag" variant="neutral">Просмотр</sl-badge>
           </div>
           <div class="shop-model">
             <b>${previewBike.name}</b>
@@ -984,7 +1011,7 @@ export function initUi() {
           ${paint}
         </div>
       </div>
-      <div class="shop-foot">${button({ id: 'shop-back', label: '← НАЗАД В ГЛАВНОЕ МЕНЮ' })}</div>
+      <div class="shop-foot">${button({ id: 'shop-back', icon: 'arrow-left', label: 'НАЗАД В ГЛАВНОЕ МЕНЮ' })}</div>
     `, { className: 'shop-panel' });
 
     // Клик по строке только меняет витрину: selectedBikeId не трогаем.
@@ -1145,14 +1172,14 @@ export function initUi() {
     overlay.className = 'mode-crash';
 
     overlay.innerHTML = panel(`
-        ${heading('АВАРИЯ', 'ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ')}
+        ${heading('АВАРИЯ', 'ЗАЕЗД ОКОНЧЕН · МОМЕНТ СТОЛКНОВЕНИЯ', 'exclamation-triangle-fill')}
         ${stats([
           { label: 'Пройденная дистанция', value: runDistance(G.distance) },
           { label: 'Перелетено машин', value: `${G.totalCarsJumpedRun} шт. (+${rubles(G.totalJumpBonusRun)})`, tone: 'signal' },
           { label: 'Заработано за заезд', value: `+${rubles(earned)}`, tone: 'gold' },
           { label: 'Баланс в банке', value: rubles(G.bankPoints) }
         ])}
-        ${button({ id: 'crash-restart', variant: 'primary', icon: '▶', label: 'ИГРАТЬ СНОВА' })}
+        ${button({ id: 'crash-restart', variant: 'primary', icon: 'play-fill', label: 'ИГРАТЬ СНОВА' })}
         ${button({ id: 'crash-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}
     `, { tone: 'danger' });
 

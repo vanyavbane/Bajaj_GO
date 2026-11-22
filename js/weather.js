@@ -271,7 +271,7 @@ export function initWeather() {
     updateFlash(dt);
     applyRoadWetness();
 
-    if (G.setRainSound) G.setRainSound(state.rain * 0.11);
+    if (G.setRainSound) G.setRainSound(state.rain * 0.055);
   }
   G.updateWeather = updateWeather;
 }

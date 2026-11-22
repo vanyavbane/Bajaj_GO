@@ -53,21 +53,20 @@ type CarriageInput = {
   way?: RoadWay;
 };
 
-/** Съезд — две попутные полосы. Ширина не берётся у биома: лента одна и та же на любой дороге. */
+/** Съезд — одна попутная полоса. Ширина не берётся у биома: лента одна и та же на любой дороге. */
 export const EXIT_LANE_WIDTH = 4.75;
 
 export function exitCarriage(id: LaneLayout['id']): CarriageLayout {
-  const offsets = [-EXIT_LANE_WIDTH * 0.5, EXIT_LANE_WIDTH * 0.5];
   return {
     id,
-    count: 2,
+    count: 1,
     oncomingCount: 0,
     biomeOncoming: 0,
     way: 'one-way',
     laneWidth: EXIT_LANE_WIDTH,
-    width: EXIT_LANE_WIDTH * 2,
-    offsets,
-    speeds: [60, 70],
+    width: EXIT_LANE_WIDTH,
+    offsets: [0],
+    speeds: [65],
     startLane: 0,
   };
 }

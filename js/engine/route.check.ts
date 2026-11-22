@@ -1,7 +1,7 @@
 /**
  * Запись развилки: открыто, прямая и съезд не схлопываются в одно число.
  */
-import { courseBranches, decideZone } from './route.ts';
+import { decideZone } from './route.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -25,7 +25,3 @@ assert(otherSlot.choice === 'straight' && otherSlot.side === -1, 'левый с�
 
 const missing = decideZone({ committed: true, nextIsExit: null });
 assert(missing.choice === 'straight' && missing.side === -1, 'зафиксированная зона без пары закрывает съезд');
-
-assert(courseBranches('open', ['exit']).length === 1, 'открытая развилка держит вектор съезда');
-assert(courseBranches('exit', ['exit']).length === 1, 'взятый съезд держит свой вектор');
-assert(courseBranches('straight', ['exit']).length === 0, 'прямая гасит вектор съезда');

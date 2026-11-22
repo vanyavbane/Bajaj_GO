@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" class="sl-theme-dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -12,29 +12,27 @@
 
 <!-- ИГРОВОЙ ИНТЕРФЕЙС -->
 <div id="hud" hidden>
-  <!-- Верхняя строка: таймер заказа и пауза -->
-  <div id="hud-top">
-    <button id="btn-pause" class="ds-icon-button" title="Пауза (Esc / P)" aria-label="Пауза">⏸</button>
+  <header id="hud-top">
+    <button type="button" id="btn-pause" class="ds-icon-button" title="Пауза (Esc / P)" aria-label="Пауза"><sl-icon name="pause-fill"></sl-icon></button>
 
-    <!-- ТАЙМЕР АКТИВНОГО ЗАКАЗА -->
-    <div id="order-hud" hidden>
-      <div class="order-title" id="order-title">🍔 ЗАКАЗ</div>
-      <div class="order-row">
+    <section id="order-hud" aria-label="Активный заказ" hidden>
+      <div class="order-title"><sl-icon name="basket"></sl-icon><span id="order-title">ЗАКАЗ</span></div>
+      <p class="order-row">
         <span class="t" id="order-time">2:00</span>
         <span id="order-dist">— м</span>
         <span id="order-reward">~0 ₽</span>
-      </div>
-    </div>
-  </div>
+      </p>
+    </section>
+  </header>
 
   <!-- Лента сообщений и статусные плашки -->
   <div id="hud-feedzone">
     <div id="status-badges">
       <div class="badge build" id="badge-build"></div>
-      <div class="badge" id="badge-tod">☀ ДЕНЬ</div>
-      <div class="badge cam" id="badge-cam">🎥 КОКПИТ (T/C)</div>
-      <div class="badge x2" id="badge-oncoming" hidden>⚠ ВСТРЕЧКА ×2 РУБЛЕЙ</div>
-      <div class="badge beam" id="badge-beam" hidden>💡 ДАЛЬНИЙ СВЕТ</div>
+      <div class="badge" id="badge-tod"><sl-icon name="sun"></sl-icon><span>ДЕНЬ</span></div>
+      <div class="badge cam" id="badge-cam"><sl-icon name="camera-video"></sl-icon><span>КОКПИТ (T/C)</span></div>
+      <div class="badge x2" id="badge-oncoming" hidden><sl-icon name="exclamation-triangle-fill"></sl-icon>ВСТРЕЧКА ×2 РУБЛЕЙ</div>
+      <div class="badge beam" id="badge-beam" hidden><sl-icon name="lightbulb-fill"></sl-icon>ДАЛЬНИЙ СВЕТ</div>
     </div>
 
     <!-- ВЫБОР ПУТИ НА РАЗВИЛКЕ -->
@@ -43,12 +41,12 @@
       <div class="split-row">
         <div class="split-opt left">
           <span class="split-key">ПРЯМО</span>
-          <span class="split-ico">🌲</span>
+          <sl-icon class="split-ico" name="tree"></sl-icon>
           <span class="split-name">Лес</span>
         </div>
         <div class="split-opt right">
           <span class="split-key">СЪЕЗД</span>
-          <span class="split-ico">🏔️</span>
+          <sl-icon class="split-ico" name="geo-alt"></sl-icon>
           <span class="split-name">Горы</span>
         </div>
       </div>
@@ -58,14 +56,14 @@
     <!-- УВЕДОМЛЕНИЯ: ЛЕВЫЙ ВЕРХНИЙ УГОЛ, СТЕК С ОГРАНИЧЕНИЕМ ВЫСОТЫ -->
     <div id="notice-stack" aria-live="polite">
       <div id="biome-banner">
-        <span class="biome-ico">🏙️</span>
+        <sl-icon class="biome-ico" name="buildings"></sl-icon>
         <span class="biome-copy">
           <b class="biome-name">ГОРОД</b>
           <small class="biome-sub">МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ</small>
         </span>
       </div>
       <div id="exit-hint">
-        <span id="exit-hint-ico">🍔</span>
+        <sl-icon id="exit-hint-ico" name="basket"></sl-icon>
         <span class="exit-copy">
           <b id="exit-hint-text">РЕСТОРАН · СПРАВА</b>
           <small id="exit-hint-how">Сбрось ниже 50 км/ч и заезжай в коробку</small>
@@ -73,41 +71,39 @@
       </div>
       <!-- ИНДИКАТОРЫ ПРЫЖКА С ТРАМПЛИНА -->
       <div id="jump-live" hidden>
-        <div class="jl-title">🚀 ПОЛЁТ НАД ПОТОКОМ</div>
+        <div class="jl-title"><sl-icon name="rocket-takeoff"></sl-icon> ПОЛЁТ НАД ПОТОКОМ</div>
         <div class="jl-stats" id="jump-live-text">Машин: 0 · Бонус: +0 ₽</div>
-        <div id="slowmo-badge" hidden>⏱ SLOW-MO</div>
+        <div id="slowmo-badge" hidden><sl-icon name="hourglass-split"></sl-icon> SLOW-MO</div>
       </div>
       <div id="event-feed"></div>
     </div>
 
-    <div id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></div>
-    <div id="eco-toast"></div>
+    <p id="hint">СМОТРИ НА ДОРОГУ<small id="hint-sub">Скорость, пробег и рубли выведены на приборную панель · T / C — сменить камеру</small></p>
+    <div id="eco-toast" role="status"></div>
   </div>
 
-  <div id="bottom">
+  <p id="bottom">
     <b>W / ↑ / ПРОБЕЛ</b> — ГАЗ &nbsp;·&nbsp; <b>S / ↓</b> — ТОРМОЗ &nbsp;·&nbsp; <b>A / D / ← / →</b> — ПОВОРОТ<br>
     <b>F</b> — ДАЛЬНИЙ СВЕТ &nbsp;·&nbsp; <b>T / C / V</b> — КАМЕРА
-  </div>
+  </p>
 
-  <!-- ЭКОНОМИКА: ТОПЛИВО, ИЗНОС, БАЛАНС -->
-  <div id="eco-hud">
+  <aside id="eco-hud" aria-label="Состояние мотоцикла">
     <div id="biome-chip" title="Текущая локация">
-      <span class="chip-ico">🏙️</span>
+      <sl-icon class="chip-ico" name="buildings"></sl-icon>
       <span class="chip-name">Город</span>
     </div>
-    <div class="eco-row"><span>⛽ ТОПЛИВО</span><b id="eco-fuel-val">100%</b></div>
-    <div class="eco-bar"><i id="eco-fuel-bar"></i></div>
+    <div class="eco-row"><span><sl-icon name="fuel-pump"></sl-icon> ТОПЛИВО</span><b id="eco-fuel-val">100%</b></div>
+    <div class="eco-bar" role="meter" aria-label="Топливо" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="eco-fuel-bar"></i></div>
     <div class="eco-wear">
-      <div><span id="wear-pads-val">🛑 100%</span><div class="wbar"><i id="wear-pads-bar"></i></div></div>
-      <div><span id="wear-oil-val">🛢 100%</span><div class="wbar"><i id="wear-oil-bar"></i></div></div>
-      <div><span id="wear-plugs-val">⚡ 100%</span><div class="wbar"><i id="wear-plugs-bar"></i></div></div>
+      <div><span><sl-icon name="stop-circle"></sl-icon> <span id="wear-pads-val">100%</span></span><div class="wbar" role="meter" aria-label="Колодки" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="wear-pads-bar"></i></div></div>
+      <div><span><sl-icon name="droplet"></sl-icon> <span id="wear-oil-val">100%</span></span><div class="wbar" role="meter" aria-label="Масло" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="wear-oil-bar"></i></div></div>
+      <div><span><sl-icon name="lightning-charge"></sl-icon> <span id="wear-plugs-val">100%</span></span><div class="wbar" role="meter" aria-label="Свечи" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="wear-plugs-bar"></i></div></div>
     </div>
-    <div class="eco-bank"><span>БАЛАНС</span><b id="eco-bank">0 ₽</b></div>
-  </div>
+    <p class="eco-bank"><span>БАЛАНС</span><b id="eco-bank">0 ₽</b></p>
+  </aside>
 </div>
 
-<!-- СПИДОМЕТР ТРЕТЬЕГО ЛИЦА (ЛЕВЫЙ НИЖНИЙ УГОЛ) -->
-<div id="tp-hud" hidden>
+<aside id="tp-hud" aria-label="Спидометр" hidden>
   <div class="tp-speed-row">
     <div><span class="tp-speed-val" id="tp-speed">0</span><span class="tp-speed-unit">КМ/Ч</span></div>
     <span class="tp-gear" id="tp-gear">N</span>
@@ -123,7 +119,7 @@
     </div>
   </div>
   <div class="tp-extra" id="tp-extra"></div>
-</div>
+</aside>
 
 <div id="slowmo-vignette"></div>
 <div id="lightning-flash"></div>
@@ -135,37 +131,36 @@
   </div>
 </div>
 
-<div id="controls" hidden>
-  <button class="ctrl ds-icon-button" data-key="left" title="Влево">←</button>
-  <button class="ctrl ds-icon-button" data-key="brake" title="Тормоз">▼</button>
-  <button class="ctrl ds-icon-button" data-key="gas" title="Газ">▲</button>
-  <button class="ctrl ds-icon-button" data-key="right" title="Вправо">→</button>
-  <button class="ctrl ds-icon-button" id="btn-flash" title="Дальний свет (F)">💡</button>
-  <button class="ctrl ds-icon-button" id="btn-camera" title="Камера (T / C / V)">🎥</button>
-</div>
+<nav id="controls" aria-label="Управление" hidden>
+  <button type="button" class="ctrl ds-icon-button" data-key="left" title="Влево" aria-label="Влево"><sl-icon name="arrow-left"></sl-icon></button>
+  <button type="button" class="ctrl ds-icon-button" data-key="brake" title="Тормоз" aria-label="Тормоз"><sl-icon name="arrow-down"></sl-icon></button>
+  <button type="button" class="ctrl ds-icon-button" data-key="gas" title="Газ" aria-label="Газ"><sl-icon name="arrow-up"></sl-icon></button>
+  <button type="button" class="ctrl ds-icon-button" data-key="right" title="Вправо" aria-label="Вправо"><sl-icon name="arrow-right"></sl-icon></button>
+  <button type="button" class="ctrl ds-icon-button" id="btn-flash" title="Дальний свет (F)" aria-label="Дальний свет"><sl-icon name="lightbulb-fill"></sl-icon></button>
+  <button type="button" class="ctrl ds-icon-button" id="btn-camera" title="Камера (T / C / V)" aria-label="Камера"><sl-icon name="camera-video"></sl-icon></button>
+</nav>
 
 <!-- УПРАВЛЕНИЕ НАКЛОНОМ: ПРОЗРАЧНЫЕ ЗОНЫ ГАЗА/ТОРМОЗА И СИГНАЛ -->
 <div id="tilt-overlay" hidden>
   <div class="tilt-zone tilt-zone-gas" id="tilt-zone-gas">
-    <span class="tilt-zone-hint">▲ ГАЗ</span>
+    <span class="tilt-zone-hint"><sl-icon name="arrow-up"></sl-icon> ГАЗ</span>
   </div>
   <div class="tilt-zone tilt-zone-brake" id="tilt-zone-brake">
-    <span class="tilt-zone-hint">▼ ТОРМОЗ</span>
+    <span class="tilt-zone-hint"><sl-icon name="arrow-down"></sl-icon> ТОРМОЗ</span>
   </div>
   <button type="button" id="btn-flash-tilt" class="tilt-flash-btn" title="Дальний свет (сигнал)" aria-label="Дальний свет">
-    <span class="tilt-flash-icon">💡</span>
+    <span class="tilt-flash-icon"><sl-icon name="lightbulb-fill"></sl-icon></span>
   </button>
-  <button type="button" id="btn-camera-tilt" class="ctrl ds-icon-button tilt-camera-btn" title="Камера (1-е лицо ↔ 3-е лицо)" aria-label="Переключить камеру">🎥</button>
+  <button type="button" id="btn-camera-tilt" class="ctrl ds-icon-button tilt-camera-btn" title="Камера (1-е лицо ↔ 3-е лицо)" aria-label="Переключить камеру"><sl-icon name="camera-video"></sl-icon></button>
 </div>
 
-<!-- ОВЕРЛЕЙ МЕНЮ, МАГАЗИНА И АВАРИИ -->
-<div id="overlay" class="mode-main"></div>
+<main id="overlay" class="mode-main"></main>
 <div id="run-veil"></div>
 
-<div id="fatal">
+<section id="fatal" role="alert">
   <h2>Не удалось инициализировать WebGL</h2>
   <p>Откройте страницу в современном браузере с поддержкой аппаратного ускорения.</p>
-</div>
+</section>
 
 <script src="./AdManager/manifest.js"></script>
 <script type="module" src="./js/main.js"></script>

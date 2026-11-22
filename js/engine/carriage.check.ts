@@ -19,7 +19,7 @@ const city = laneLayoutOf(cityDef);
 const clock = exitClock();
 const half = city.width * 0.5;
 
-assert(EXIT_LANE_HALF === EXIT_LANE_WIDTH, 'полуширина съезда и ширина его полосы — одно число');
+assert(EXIT_LANE_HALF * 2 === EXIT_LANE_WIDTH, 'съезд шириной в одну полосу');
 
 function frameAt(
   distance: number,
@@ -52,7 +52,7 @@ assert(Math.abs(openRoad.axis) < 1e-6, 'ось разметки прямой —
 assert(covers(open, openRoad.axis), 'ось прямой внутри её кромок');
 
 const openRider = riderCarriage(openRoad, open, 'exit');
-assert(openRider.way === 'one-way' && openRider.lanes.count === 2, 'байк на ленте едет по двум попутным полосам');
+assert(openRider.way === 'one-way' && openRider.lanes.count === 1, 'байк на ленте едет по одной попутной полосе');
 assert(Math.abs(openRider.axis - (ribbon ?? 0)) < 1e-6, 'ось байка на ленте — её середина');
 assert(openRoad.lanes.count === city.count, 'сиденье байка не меняет полосы дороги');
 
@@ -75,9 +75,9 @@ const earlyRibbon = exitRibbonCenter(earlySeal.local);
 const midRibbon = exitRibbonCenter(midReturn.local);
 assert(earlyRibbon != null && midRibbon != null && Math.abs(midRibbon - earlyRibbon) < 0.5, 'въезд остаётся на своей линии');
 assert(midReturn.local.leftInner - midReturn.local.leftOuter < half * 2 - 1, 'старая дорога на въезде уже уже');
-const grown = riderCarriage(early, earlySeal, 'exit', city);
-assert(grown.lanes.count === city.count && grown.way === 'two-way', 'взятый въезд носит полосы новой дороги');
-assert(grown.scale < 1, 'полосы новой дороги растут вместе с шириной ленты');
+const grown = riderCarriage(early, earlySeal, 'exit');
+assert(grown.lanes.count === 1 && grown.way === 'one-way', 'взятый въезд остаётся одной полосой в одну сторону');
+assert(grown.scale === 1, 'единственная полоса съезда лежит на его оси');
 assert(exitRibbonCenter(lateSeal.local) == null && late.phase === 'road', 'к концу закрытия въезд уже новая дорога');
 assert(late.lanes.count === city.count && late.way === 'two-way', 'полосы кадра читает переданный биом');
 assert(Math.abs(late.half - EXIT_LANE_HALF) < 1e-6 && late.axis > half, 'новая дорога стоит на линии въезда и на его ширине');
@@ -144,7 +144,7 @@ const side = sideRibbon(openRoad, open);
 if (!side) throw new Error('отделённая лента — отдельная проезжая часть');
 assert(Math.abs(side.axis - openRider.axis) < 1e-6, 'ось ленты совпадает с её проезжей частью');
 const sideMarks = laneMarks(side);
-assert(sideMarks.length === 1 && Math.abs(sideMarks[0].lat - side.axis) < 1e-6, 'штрих ленты стоит на её оси, не на оси шоссе');
+assert(sideMarks.length === 0, 'у одной полосы съезда штриха между рядами нет');
 const returningSide = sideRibbon(early, earlySeal);
 if (!returningSide) throw new Error('пока въезд не пришёл, он ещё отдельная проезжая часть');
 assert(solidMarks(returningSide).length === 0, 'у боковой ленты двойной сплошной нет');

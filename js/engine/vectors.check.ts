@@ -92,6 +92,28 @@ assert(secondRide.x > roadNow.x - 2, 'второй съезд не возвра�
 const back = turnToward(0, -1, 0, 1, 1);
 assert(back.fz <= 0.001, 'курс не переворачивается, даже если ветка смотрит назад');
 
+const leaveField = createVectorField();
+const leaveExit: VectorSpawn = { key: 'leave', nose: 0, yaw: EXIT_RIGHT.yaw, ownsFrom: 0, born: 10 };
+const onTheEdge = leaveField.frame([leaveExit], 2, straight, 80);
+assert(Math.abs(onTheEdge.x - 10) < 1, 'путь съезда начинается на кромке дороги');
+const leftTheRoad = leaveField.frame([leaveExit], 80, straight, 80);
+assert(leftTheRoad.x > onTheEdge.x + 4, 'с кромки путь уходит вправо');
+const leaveEdges = branchEdges(10, 6);
+const leaveLat = exitRibbonMid(leaveEdges);
+const posed = leaveField.embed({
+  s: 40,
+  lat: leaveLat,
+  y: 0,
+  nose: 0,
+  edges: leaveEdges,
+  owned: [],
+  branches: [leaveExit],
+  origin: 0,
+  turn: 80,
+  ownedHere: false,
+}, straight);
+assert(posed.x > leaveEdges.leftInner + 1, 'съезд не возвращается с кромки на ось');
+
 const goreField = createVectorField();
 const goreExit: VectorSpawn = { key: 'gore', nose: 0, yaw: EXIT_RIGHT.yaw, ownsFrom: 10000 };
 const goreEdges = branchEdges(10, 22);

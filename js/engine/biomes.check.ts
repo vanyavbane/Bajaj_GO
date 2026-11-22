@@ -166,7 +166,7 @@ const straightEnd = sampleRoad({
   endWeight: 1,
 });
 assert(Math.abs(laneMeters(2, 1, straightEnd, false) - 2) < 1e-6, 'прямой ход оставляет полосы на прямой');
-const nose = branchEdges(10, 4);
+const nose = branchEdges(10, 1.5);
 assert(nose.rightInner <= 10.01 && nose.rightOuter > nose.rightInner, 'на подходе съезд ещё соединён с правой кромкой');
 assert(nose.rightOuter - nose.rightInner > 2, 'соединённый съезд уже можно занять');
 
@@ -186,7 +186,7 @@ assert(Math.abs(exitRibbonMid(taken) - homeLine) < 0.5, 'к концу закр�
 assert(taken.leftInner - taken.leftOuter < 0.2, 'к концу закрытия старая дорога сошла');
 
 const stillOpen = roadAt(afterSeal, 0);
-assert(stillOpen.rightOuter - stillOpen.rightInner > 9, 'до выбора съезд впереди не обрывается');
+assert(stillOpen.rightOuter - stillOpen.rightInner > 4, 'до выбора съезд впереди не обрывается');
 const settled = roadAt(afterSeal, 1);
 assert(
   Math.abs((settled.leftInner - settled.leftOuter) * 0.5 - EXIT_LANE_HALF) < 0.05,
@@ -210,7 +210,7 @@ assert(Math.abs(laneMeters(0, 1, wide, false) - wideMid) < 1e-6, 'нулевая
 assert(Math.abs(narrow.local.leftInner - narrow.local.leftOuter - 16) < 1e-6, 'после въезда ширина — ширина новой дороги');
 assert(Math.abs(wide.local.leftInner - wide.local.leftOuter - 28) < 1e-6, 'более широкая новая дорога не берёт ширину старой');
 assert(onExitRibbon(32, openRibbon) && !onExitRibbon(0, openRibbon), 'байк на асфальте съезда узнаётся и при открытом клине');
-const joined = branchEdges(10, 4);
+const joined = branchEdges(10, 1.5);
 const joinedLimits = logicalRoadLimits(joined, 1, false);
 assert(joinedLimits.max > joined.leftInner, 'пока съезд приклеен, правая стена стоит за ним, а не на кромке прямой');
 const splitRoad = branchEdges(10, FORK_SPREAD);
@@ -219,12 +219,11 @@ const openChoice = logicalRoadLimits(splitRoad, 1, false, true);
 const riding = logicalRoadLimits(splitRoad, 1, true);
 const plainLimits = logicalRoadLimits(branchEdges(EXIT_LANE_HALF, 0), 1, false);
 assert(blocked.max < splitRoad.leftInner, 'после отказа с прямой на съезд уже не перестроиться');
-assert(openChoice.max > splitRoad.rightInner, 'пока съезд можно взять, правая стена стоит за ним');
+assert(openChoice.max < splitRoad.rightInner && openChoice.max <= splitRoad.leftInner, 'открытый клин не пускает байка между дорогой и съездом');
 assert(!reachedExit(splitRoad.leftInner, splitRoad), 'кромка прямой ещё не ход на съезд');
 assert(reachedExit(splitRoad.leftInner + 2, splitRoad), 'уход правее прямой — это съезд');
-assert(exitEntryPull(splitRoad.leftInner + 2, splitRoad) === 16, 'в глубине клина довоз 16 м/с');
-assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) < 16, 'у кромки ленты довоз спадает');
-assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) > 0, 'спад начинается ещё в клине');
+assert(exitEntryPull(splitRoad.leftInner + 2, splitRoad) === 0, 'открытый клин байка не перевозит');
+assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) === 0, 'через пустоту довоз не идёт');
 assert(exitEntryPull(splitRoad.rightInner + 1, splitRoad) === 0, 'на ленте догонять уже нечего');
 assert(exitEntryPull(0, splitRoad) === 0, 'с прямой в клин не вытягивает');
 assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');
@@ -253,17 +252,16 @@ assert(cityLanes.length === city.count, 'у города полоса на ка�
 assert(cityLanes.every((lane) => (lane.direction === 'against') === (lane.side === 'left')), 'встречные полосы города — его левая сторона');
 assert(cityLanes.every((lane) => (lane.direction === 'with') === (lane.side === 'right')), 'попутные полосы города — его правая сторона');
 const exitLanes = lanesOf(exitCarriage(city.id));
-assert(exitLanes[0]?.side === 'left' && exitLanes[0]?.direction === 'with', 'левая полоса съезда едет вперёд');
-assert(exitLanes[1]?.side === 'right' && exitLanes[1]?.direction === 'with', 'правая полоса съезда едет вперёд');
+assert(exitLanes.length === 1 && exitLanes[0]?.direction === 'with', 'съезд — одна полоса вперёд');
 assert(directionEdge(exitLanes) == null, 'у съезда нет границы встречного хода');
-assert(outerLane(exitLanes, 'right', 'with')?.offset === exitLanes[1]?.offset, 'крайняя правая полоса съезда — та, что справа');
+assert(outerLane(exitLanes, 'right', 'with')?.offset === exitLanes[0]?.offset, 'единственная полоса съезда едет вперёд');
 const forward = lanesOf(oneWay);
 assert(forward.every((lane) => lane.direction === 'with'), 'односторонняя не оставляет встречного направления');
 assert(forward[0]?.side === 'left' && forward[forward.length - 1]?.side === 'right', 'стороны односторонней дороги остаются');
 const restored = lanesOf(back);
 assert(restored[0]?.direction === 'against' && restored[0]?.side === 'left', 'возврат двусторонней снова ставит левую полосу навстречу');
 assert(defaultRunOffset(cityLanes) === cityLanes.find((lane) => lane.direction === 'with')?.offset, 'попутная по умолчанию — ближайшая к оси, не встречная');
-assert(defaultRunOffset(exitLanes) === exitLanes[1]?.offset, 'на съезде попутная по умолчанию — крайняя правая');
+assert(defaultRunOffset(exitLanes) === 0, 'на съезде попутная полоса — его единственная');
 assert(nearestLaneOffset(cityLanes, -100, 'with') === defaultRunOffset(cityLanes), 'поиск попутной не сажает байка на встречную');
 assert(besideWithLane(cityLanes, 2)?.index === 3 && besideWithLane(cityLanes, 3)?.index === 2, 'попутная уступает соседу своего направления');
 assert(besideWithLane(cityLanes, 0) == null, 'встречная от дальнего света не перестраивается');

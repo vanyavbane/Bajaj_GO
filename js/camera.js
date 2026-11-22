@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { button, heading, panel, slider } from '@bajajgo/design';
+import { button, callout, heading, panel, slider } from '@bajajgo/design';
 import { bikePaint, isQuteBody, isYuraType } from './engine/vehicle.js';
 import { grouped, rubles, runDistance } from './engine/money.js';
 import { G } from './state.js';
@@ -90,7 +90,8 @@ export function initCamera() {
     if (G.started && !G.ended) {
       tpHud.hidden = !effectiveThirdPerson;
       if (badgeCam) {
-        badgeCam.textContent = effectiveThirdPerson ? '🎥 3-Е ЛИЦО (T/C)' : '🎥 КОКПИТ (T/C)';
+        const camLabel = badgeCam.querySelector('span');
+        if (camLabel) camLabel.textContent = effectiveThirdPerson ? '3-Е ЛИЦО (T/C)' : 'КОКПИТ (T/C)';
       }
       if (hintSub) {
         hintSub.textContent = effectiveThirdPerson
@@ -642,10 +643,7 @@ export function initCamera() {
         ${heading('КАМЕРА · ПЕРВОЕ ЛИЦО', `ПРОФИЛЬ: ${b.name} · НАСТРОЙКИ ТОЛЬКО ДЛЯ КОКПИТА`)}
         <div class="cam-settings-body">
           <div class="cam-settings-col">
-            <div class="cam-profile-line">
-              Профиль камеры хранится отдельно для каждого мотоцикла и восстанавливается при его выборе.
-              Вид от третьего лица фиксированный.
-            </div>
+            ${callout('Профиль камеры хранится отдельно для каждого мотоцикла и восстанавливается при его выборе. Вид от третьего лица фиксированный.')}
             ${slider({
               id: 'cam-fov',
               valueId: 'cam-fov-val',
@@ -669,13 +667,13 @@ export function initCamera() {
               hint: `${CAM_HEIGHT_MIN.toFixed(2)} м — ниже · +${CAM_HEIGHT_MAX.toFixed(2)} м — выше`
             })}
             <div class="cam-status" id="cam-status"></div>
-            ${button({ id: 'cam-apply', variant: 'primary', icon: '✓', label: 'ПРИМЕНИТЬ' })}
-            ${button({ id: 'cam-reset', icon: '↺', label: 'СБРОСИТЬ ПО УМОЛЧАНИЮ' })}
-            ${button({ id: 'cam-back', label: '← НАЗАД' })}
+            ${button({ id: 'cam-apply', variant: 'primary', icon: 'check-lg', label: 'ПРИМЕНИТЬ' })}
+            ${button({ id: 'cam-reset', icon: 'arrow-counterclockwise', label: 'СБРОСИТЬ ПО УМОЛЧАНИЮ' })}
+            ${button({ id: 'cam-back', icon: 'arrow-left', label: 'НАЗАД' })}
           </div>
           <div class="cam-settings-col cam-preview-col">
             <div class="cam-preview-wrap">
-              <div class="cam-preview-tag">LIVE · КОКПИТ</div>
+              <sl-badge class="cam-preview-tag" variant="primary">LIVE · КОКПИТ</sl-badge>
               <div id="cam-preview"></div>
               <div class="cam-preview-note">Предпросмотр обновляется сразу при движении ползунков</div>
             </div>
@@ -689,14 +687,14 @@ export function initCamera() {
     const heightEl = /** @type {HTMLInputElement} */ ($('cam-height'));
     const statusEl = $('cam-status');
 
-    fovEl.addEventListener('input', () => {
+    fovEl.addEventListener('sl-input', () => {
       draftCamFov = clamp(Number(fovEl.value), CAM_FOV_MIN, CAM_FOV_MAX);
       $('cam-fov-val').textContent = String(Math.round(draftCamFov));
       statusEl.textContent = '';
       statusEl.className = 'cam-status';
     });
 
-    heightEl.addEventListener('input', () => {
+    heightEl.addEventListener('sl-input', () => {
       draftCamHeight = clamp(Number(heightEl.value), CAM_HEIGHT_MIN, CAM_HEIGHT_MAX);
       $('cam-height-val').textContent = draftCamHeight.toFixed(2);
       statusEl.textContent = '';

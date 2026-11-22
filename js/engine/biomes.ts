@@ -223,7 +223,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'city',
     name: 'ГОРОД',
-    icon: '🏙️',
+    icon: 'buildings',
     sub: 'МНОГОЭТАЖКИ · ВЫВЕСКИ · ПЕШЕХОДЫ',
     short: 'Город',
     accent: 0x4fc3f7,
@@ -250,7 +250,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'field',
     name: 'ПОЛЯ',
-    icon: '🌾',
+    icon: 'flower1',
     sub: 'ПШЕНИЦА · ВЕТРЯКИ · АМБАРЫ',
     short: 'Поля',
     accent: 0xffb300,
@@ -277,7 +277,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'forest',
     name: 'ЛЕС',
-    icon: '🌲',
+    icon: 'tree',
     sub: 'ЕЛИ · ВАЛУНЫ · ЛЕСНАЯ ДОРОГА',
     short: 'Лес',
     accent: 0x66bb6a,
@@ -304,7 +304,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'mountain',
     name: 'ГОРЫ',
-    icon: '🏔️',
+    icon: 'geo-alt',
     sub: 'СЕРПАНТИН · СКАЛЫ · ПЕРЕВАЛ',
     short: 'Горы',
     accent: 0xb0bec5,
@@ -335,7 +335,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'mkad',
     name: 'МКАД',
-    icon: '🛣️',
+    icon: 'signpost-split',
     sub: '8 ПОЛОС · ЭСТАКАДЫ · РАЗВЯЗКИ',
     short: 'МКАД',
     accent: 0xff7043,
@@ -363,7 +363,7 @@ export const BIOMES: readonly BiomeDef[] = [
   defineBiome({
     id: 'embankment',
     name: 'НАБЕРЕЖНАЯ',
-    icon: '🌉',
+    icon: 'water',
     sub: 'НЕВА · КЛАССИЦИЗМ · ПАРАПЕТ И ФОНАРИ',
     short: 'Набережная',
     accent: 0x7fb3d5,

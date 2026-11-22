@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { balance, button, callout, card, heading, listItem, panel, rows, stats, tag } from '@bajajgo/design';
+import { balance, button, callout, card, heading, iconPaths, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { accidentArrival } from './engine/carriage.js';
 import { lanesOf, nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
@@ -32,17 +32,17 @@ export function initEconomy() {
   const WEAR_LIMITS = { pads: 60000, oil: 40000, plugs: 100000 };
   const WEAR_CAP = 3;
   const WEAR_LABELS = { pads: 'Колодки', oil: 'Масло', plugs: 'Свечи' };
-  const WEAR_ICONS = { pads: '🛑', oil: '🛢', plugs: '⚡' };
+  const WEAR_ICONS = { pads: 'stop-circle', oil: 'droplet', plugs: 'lightning-charge' };
   const SERVICE_BASE_PRICE = { pads: 400, oil: 600, plugs: 500 };
 
   const RESTAURANTS = [
-    { name: "McDonald's", badge: 'MCD', emoji: '🍔', color: '#ffcc00' },
-    { name: 'Вкусно — и точка', badge: 'ВК', emoji: '🍔', color: '#ffcc00' },
-    { name: 'KFC', badge: 'KFC', emoji: '🍗', color: '#e4002b' },
-    { name: 'Burger King', badge: 'BK', emoji: '🍔', color: '#d62300' },
-    { name: 'Суши Wok', badge: 'WOK', emoji: '🍣', color: '#ff6b00' },
-    { name: 'Додо Пицца', badge: 'ДОДО', emoji: '🍕', color: '#ff5a00' },
-    { name: 'Пицца Хат', badge: 'PH', emoji: '🍕', color: '#e4002b' }
+    { name: "McDonald's", badge: 'MCD', icon: 'basket', color: '#ffcc00' },
+    { name: 'Вкусно — и точка', badge: 'ВК', icon: 'basket2', color: '#ffcc00' },
+    { name: 'KFC', badge: 'KFC', icon: 'egg-fried', color: '#e4002b' },
+    { name: 'Burger King', badge: 'BK', icon: 'basket', color: '#d62300' },
+    { name: 'Суши Wok', badge: 'WOK', icon: 'cup-hot', color: '#ff6b00' },
+    { name: 'Додо Пицца', badge: 'ДОДО', icon: 'cake2', color: '#ff5a00' },
+    { name: 'Пицца Хат', badge: 'PH', icon: 'cake', color: '#e4002b' }
   ];
 
   // Каждый ресторан — отдельная остановка со своим типом rest_0…rest_6.
@@ -250,10 +250,10 @@ export function initEconomy() {
   /* ---------- Маркерные зоны съездов (GTA-стиль) ---------- */
   // Зелёный — еда/заказы, жёлтый — сервис (АЗС, СТО, тюнинг)
   const EXIT_MARKER_COLORS = { food: 0x3ce07d, service: 0xffd24a };
-  const EXIT_HINT_ICONS = { fuel: '⛽', sto: '🔧', tuning: '⚙️' };
+  const EXIT_HINT_ICONS = { fuel: 'fuel-pump', sto: 'wrench', tuning: 'tools' };
   const EXIT_HINT_LABELS = { fuel: 'АЗС', sto: 'СТО', tuning: 'ТЮНИНГ' };
   for (let i = 0; i < RESTAURANTS.length; i++) {
-    EXIT_HINT_ICONS['rest_' + i] = RESTAURANTS[i].emoji;
+    EXIT_HINT_ICONS['rest_' + i] = RESTAURANTS[i].icon;
     EXIT_HINT_LABELS['rest_' + i] = RESTAURANTS[i].name;
   }
   const EXIT_HINT_RANGE = 160;
@@ -319,6 +319,17 @@ export function initEconomy() {
     });
   }
 
+  function paintIcon(ctx, name, cx, cy, size, fill) {
+    const paths = iconPaths(name);
+    if (!paths.length) return;
+    ctx.save();
+    ctx.translate(cx - size / 2, cy - size / 2);
+    ctx.scale(size / 16, size / 16);
+    ctx.fillStyle = fill;
+    for (const d of paths) ctx.fill(new Path2D(d));
+    ctx.restore();
+  }
+
   function buildExitIconTexture(type) {
     const isFood = isRestaurantExit(type);
     const meta = EXIT_META[type];
@@ -338,10 +349,7 @@ export function initEconomy() {
       ctx.arc(w / 2, h / 2, 88, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '900 104px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji",system-ui,Arial';
-      ctx.fillText(glyph, w / 2, h / 2 + 6);
+      paintIcon(ctx, glyph, w / 2, h / 2, 96, '#f4f7fb');
     });
   }
 
@@ -479,7 +487,7 @@ export function initEconomy() {
     const key = `${exit.type}|${title}|${slow ? 1 : 0}|${Math.round(G.speed)}`;
     if (key === exitHintKey) return;
     exitHintKey = key;
-    $('exit-hint-ico').textContent = EXIT_HINT_ICONS[exit.type];
+    $('exit-hint-ico').setAttribute('name', EXIT_HINT_ICONS[exit.type]);
     $('exit-hint-text').textContent = title;
     $('exit-hint-how').textContent = how;
     $('exit-hint').className = 'show' + (isRestaurantExit(exit.type) ? '' : ' service') + (slow ? ' slow' : ' fast');
@@ -809,7 +817,7 @@ function exitLane(s, side) {
   G.closeOverlayToGame = closeOverlayToGame;
 
   function exitMenuBackButton() {
-    return button({ id: 'poi-close', label: '← ПРОДОЛЖИТЬ ПУТЬ' });
+    return button({ id: 'poi-close', icon: 'arrow-left', label: 'ПРОДОЛЖИТЬ ПУТЬ' });
   }
 
   function bindExitClose() {
@@ -843,7 +851,7 @@ function exitLane(s, side) {
     }
 
     openModal(panel(`
-        ${heading(`${r.emoji} ${r.name.toUpperCase()}`, 'СЪЕЗД · ДОСТАВКА ЕДЫ')}
+        ${heading(r.name.toUpperCase(), 'СЪЕЗД · ДОСТАВКА ЕДЫ', r.icon)}
         ${callout(`<b>${r.badge}</b> · ${note}`)}
         ${button({
           id: 'rest-order',
@@ -860,7 +868,7 @@ function exitLane(s, side) {
         if (activeOrder) return;
         createOrder(r.name);
         closeOverlayToGame();
-        showEcoToast(`🍔 Заказ принят: ${r.name} · ${meters(activeOrder.remainingM)} · ${formatClock(activeOrder.timeLimit)}`);
+        showEcoToast(`Заказ принят: ${r.name} · ${meters(activeOrder.remainingM)} · ${formatClock(activeOrder.timeLimit)}`);
       });
     }
     bindExitClose();
@@ -915,7 +923,7 @@ function exitLane(s, side) {
     deliveryMarker.visible = false;
     G.saveGarage();
     saveEco();
-    showEcoToast(`✅ Заказ «${name}» доставлен · +${rubles(reward)} на баланс`);
+    showEcoToast(`Заказ «${name}» доставлен · +${rubles(reward)} на баланс`);
   }
 
   /* ---------- АЗС ---------- */
@@ -939,7 +947,7 @@ function exitLane(s, side) {
     const canPay = G.bankPoints >= REFUEL_PRICE;
 
     openModal(panel(`
-        ${heading('⛽ АЗС', 'СЪЕЗД · ЗАПРАВКА')}
+        ${heading('АЗС', 'СЪЕЗД · ЗАПРАВКА', 'fuel-pump')}
         ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${opts.message ? callout(opts.message) : ''}
         ${callout(`${opts.viaTow ? 'Эвакуатор доставил вас на ближайшую АЗС.<br>' : ''}Бак: <b>${pct}%</b> · запас хода ≈ <b>${meters(G.fuelM)}</b>.<br>Полного бака хватает на ${meters(FUEL_RANGE_M)}.`)}
@@ -960,7 +968,7 @@ function exitLane(s, side) {
       G.limpMode = false;
       G.saveGarage();
       saveEco();
-      renderFuelMenu({ message: '✅ Бак заправлен полностью. Можно ехать дальше!' });
+      renderFuelMenu({ message: 'Бак заправлен полностью. Можно ехать дальше!' });
     });
 
     $('poi-close').addEventListener('click', () => {
@@ -969,13 +977,13 @@ function exitLane(s, side) {
         saveEco();
         spawnEmergencyFuelExit();
         closeOverlayToGame();
-        showEcoToast('⛽ Топлива нет: максимум 5 км/ч. Доедьте до АЗС', true);
+        showEcoToast('Топлива нет: максимум 5 км/ч. Доедьте до АЗС', true);
       } else if (G.fuelM <= 0 && opts.viaTow) {
         G.limpMode = true;
         saveEco();
         spawnEmergencyFuelExit();
         closeOverlayToGame();
-        showEcoToast('⛽ Бак пуст: максимум 5 км/ч. Ближайшая АЗС отмечена на трассе', true);
+        showEcoToast('Бак пуст: максимум 5 км/ч. Ближайшая АЗС отмечена на трассе', true);
       } else {
         closeOverlayToGame();
       }
@@ -989,13 +997,13 @@ function exitLane(s, side) {
     const canPay = G.bankPoints >= TOW_PRICE;
 
     openModal(panel(`
-        ${heading('⛽ БЕНЗИН ЗАКОНЧИЛСЯ', 'МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
+        ${heading('БЕНЗИН ЗАКОНЧИЛСЯ', 'МОТОЦИКЛ ЗАГЛОХ · ВЫБЕРИТЕ ДЕЙСТВИЕ', 'fuel-pump')}
         ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${callout(`Можно вызвать эвакуатор до ближайшей АЗС за <b>${TOW_PRICE} ₽</b> (заправка на месте — ещё ${REFUEL_PRICE} ₽) или отказаться и ехать своим ходом с ограничением <b>${G.LIMP_MAX_SPEED} км/ч</b>.`)}
         ${button({
           id: 'fuel-tow',
           variant: 'primary',
-          icon: '🚐',
+          icon: 'truck-front',
           label: `ЭВАКУАТОР ДО АЗС — ${TOW_PRICE} ₽`,
           disabled: !canPay
         })}
@@ -1022,7 +1030,7 @@ function exitLane(s, side) {
       saveEco();
       spawnEmergencyFuelExit();
       closeOverlayToGame();
-      showEcoToast(`⛽ Режим «своим ходом»: максимум ${G.LIMP_MAX_SPEED} км/ч до АЗС`, true);
+      showEcoToast(`Режим «своим ходом»: максимум ${G.LIMP_MAX_SPEED} км/ч до АЗС`, true);
     });
   }
 
@@ -1048,7 +1056,7 @@ function exitLane(s, side) {
     }).join('');
 
     openModal(panel(`
-        ${heading('🔧 СТО', 'СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ')}
+        ${heading('СТО', 'СЪЕЗД · РЕМОНТ И ОБСЛУЖИВАНИЕ', 'wrench')}
         ${balance('БАЛАНС', `${rubles(G.bankPoints)} · ${bike.name}`)}
         ${message ? callout(message) : ''}
         ${callout('Изношенные детали ухудшают торможение, динамику и максимальную скорость. После замены ресурс сбрасывается на 100%.')}
@@ -1067,7 +1075,7 @@ function exitLane(s, side) {
         wearM[part] = 0;
         G.saveGarage();
         saveEco();
-        renderServiceMenu(`✅ ${WEAR_LABELS[part]}: деталь заменена, ресурс восстановлен.`);
+        renderServiceMenu(`${WEAR_LABELS[part]}: деталь заменена, ресурс восстановлен.`);
       });
     });
     bindExitClose();
@@ -1083,12 +1091,12 @@ function exitLane(s, side) {
       const installed = G.hasUpgradeInstalled(bike.id, upg.id);
       const owned = G.hasUpgradeOwned(bike.id, upg.id);
       const status = installed
-        ? tag('✓ Установлено', 'good')
+        ? tag('Установлено', 'good')
         : owned
           ? tag('Куплено')
           : tag(rubles(price), 'warm');
       const actionBtn = installed
-        ? button({ variant: 'compact', label: 'УСТАНОВЛЕНО ✓', data: { 'toggle-upg': upg.id } })
+        ? button({ variant: 'compact', icon: 'check-lg', label: 'УСТАНОВЛЕНО', data: { 'toggle-upg': upg.id } })
         : owned
           ? button({ variant: 'compact', label: 'УСТАНОВИТЬ', data: { 'toggle-upg': upg.id } })
           : button({ variant: 'compact', label: 'КУПИТЬ', data: { 'buy-upg': upg.id } });
@@ -1103,7 +1111,7 @@ function exitLane(s, side) {
     }).join('');
 
     openModal(panel(`
-        ${heading('🔧 ТЮНИНГ', 'СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА')}
+        ${heading('ТЮНИНГ', 'СЪЕЗД · ДОВОДКА ТЕКУЩЕГО МОТОЦИКЛА', 'tools')}
         ${balance('БАЛАНС', `${rubles(G.bankPoints)} · ${bike.name} · макс. ${eff.maxSpeed} км/ч`)}
         ${message ? callout(message, statusType === 'err' ? 'err' : 'ok') : ''}
         ${rows(cardsHtml)}
@@ -1119,12 +1127,12 @@ function exitLane(s, side) {
         const bought = G.purchaseUpgrade(bike, upg);
         if (!bought.ok) {
           G.pushFeed(`Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'bad');
-          renderExitTuning(`⚠ Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'err');
+          renderExitTuning(`Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'err');
           return;
         }
         G.syncVehicleAndCameraVisibility(true);
         G.pushFeed(`«${upg.shortName}» установлено`, 'upgrade');
-        renderExitTuning(`✓ «${upg.shortName}» куплено и установлено!`, 'ok');
+        renderExitTuning(`«${upg.shortName}» куплено и установлено!`, 'ok');
       });
     });
 
@@ -1137,7 +1145,7 @@ function exitLane(s, side) {
         if (!toggled.ok) return;
         G.syncVehicleAndCameraVisibility(true);
         const msg = toggled.installed
-          ? `✓ Деталь «${upg.shortName}» установлена`
+          ? `Деталь «${upg.shortName}» установлена`
           : `Деталь «${upg.shortName}» снята (остаётся в гараже)`;
         G.pushFeed(
           toggled.installed ? `«${upg.shortName}» установлено` : `«${upg.shortName}» снято`,
@@ -1163,13 +1171,13 @@ function exitLane(s, side) {
     const canPay = G.bankPoints >= MEDKIT_PRICE;
 
     openModal(panel(`
-        ${heading('💥 ДТП', 'У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ')}
+        ${heading('ДТП', 'У ВАС АКТИВНЫЙ ЗАКАЗ · ВЫБЕРИТЕ ДЕЙСТВИЕ', 'exclamation-triangle-fill')}
         ${balance('БАЛАНС', rubles(G.bankPoints))}
         ${callout(`Скорая помощь и лекарства стоят <b>${MEDKIT_PRICE} ₽</b>. После оплаты заезд продолжается, заказ «${activeOrder.restaurant}» сохраняется.`)}
         ${button({
           id: 'acc-med',
           variant: 'primary',
-          icon: '🚑',
+          icon: 'hospital',
           label: `СКОРАЯ + ЛЕКАРСТВА — ${MEDKIT_PRICE} ₽`,
           disabled: !canPay
         })}
@@ -1210,7 +1218,7 @@ function exitLane(s, side) {
       G.speed = 0;
       saveEco();
       closeOverlayToGame();
-      showEcoToast(`🚑 Лекарства куплены (−${rubles(MEDKIT_PRICE)}). Заказ сохранён`, false);
+      showEcoToast(`Лекарства куплены (−${rubles(MEDKIT_PRICE)}). Заказ сохранён`, false);
     });
 
     $('acc-end').addEventListener('click', () => {
@@ -1236,7 +1244,7 @@ function exitLane(s, side) {
       : 'нет';
 
     overlay.innerHTML = panel(`
-        ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ')}
+        ${heading('ПАУЗА', 'ЗАЕЗД ПРИОСТАНОВЛЕН · ТАЙМЕРЫ СТОЯТ', 'pause-fill')}
         ${stats([
           { label: 'Пробег', value: runDistance(G.distance) },
           { label: 'Локация', value: G.biomePauseValue ? G.biomePauseValue() : '—' },
@@ -1245,8 +1253,8 @@ function exitLane(s, side) {
           { label: 'Топливо', value: `${Math.round(fuelPercent())}%` },
           { label: 'Заказ', value: orderValue }
         ])}
-        ${button({ id: 'pause-settings', icon: '⚙', label: 'НАСТРОЙКИ' })}
-        ${button({ id: 'pause-resume', variant: 'primary', icon: '▶', label: 'ПРОДОЛЖИТЬ' })}
+        ${button({ id: 'pause-settings', icon: 'gear', label: 'НАСТРОЙКИ' })}
+        ${button({ id: 'pause-resume', variant: 'primary', icon: 'play-fill', label: 'ПРОДОЛЖИТЬ' })}
         ${button({ id: 'pause-menu', label: 'В ГЛАВНОЕ МЕНЮ' })}
     `, { size: 'narrow' });
 
@@ -1374,15 +1382,19 @@ function exitLane(s, side) {
     const fuelBar = $('eco-fuel-bar');
     fuelBar.style.width = fuelPct.toFixed(1) + '%';
     fuelBar.className = fuelPct < 12 ? 'low' : (fuelPct < 32 ? 'mid' : '');
+    const fuelMeter = fuelBar.parentElement;
+    if (fuelMeter) fuelMeter.setAttribute('aria-valuenow', String(Math.round(fuelPct)));
 
     for (const p of ['pads', 'oil', 'plugs']) {
       const left = getWearLeftPct(p);
       const val = $('wear-' + p + '-val');
       const bar = $('wear-' + p + '-bar');
-      if (val) val.textContent = `${WEAR_ICONS[p]} ${Math.round(left)}%`;
+      if (val) val.textContent = `${Math.round(left)}%`;
       if (bar) {
         bar.style.width = Math.max(2, left).toFixed(0) + '%';
         bar.className = left < 20 ? 'low' : (left < 45 ? 'mid' : '');
+        const meter = bar.parentElement;
+        if (meter) meter.setAttribute('aria-valuenow', String(Math.round(left)));
       }
     }
 
@@ -1392,7 +1404,7 @@ function exitLane(s, side) {
     if (activeOrder) {
       orderHud.hidden = false;
       orderHud.classList.toggle('late', activeOrder.timeLeft <= 0);
-      $('order-title').textContent = `🍔 ЗАКАЗ · ${activeOrder.restaurant}`;
+      $('order-title').textContent = `ЗАКАЗ · ${activeOrder.restaurant}`;
       $('order-time').textContent = activeOrder.timeLeft >= 0
         ? formatClock(activeOrder.timeLeft)
         : '−' + formatClock(-activeOrder.timeLeft);

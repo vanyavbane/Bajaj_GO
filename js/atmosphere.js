@@ -140,19 +140,22 @@ export function initAtmosphere() {
       G.todCycleTime = (G.todCycleTime + dt * 0.0085) % 1;
     }
 
-    let pA, pB, t, label;
+    let pA, pB, t, label, mark;
     if (G.todCycleTime < 0.4) {
       pA = todPalettes.day; pB = todPalettes.sunset;
       t = smoothstep(0.25, 0.4, G.todCycleTime);
-      label = t < 0.5 ? '☀ ДЕНЬ' : '🌇 ЗАКАТ';
+      mark = t < 0.5 ? 'sun' : 'sunset';
+      label = t < 0.5 ? 'ДЕНЬ' : 'ЗАКАТ';
     } else if (G.todCycleTime < 0.7) {
       pA = todPalettes.sunset; pB = todPalettes.night;
       t = smoothstep(0.4, 0.55, G.todCycleTime);
-      label = t < 0.5 ? '🌇 ЗАКАТ' : '🌙 НОЧЬ';
+      mark = t < 0.5 ? 'sunset' : 'moon';
+      label = t < 0.5 ? 'ЗАКАТ' : 'НОЧЬ';
     } else {
       pA = todPalettes.night; pB = todPalettes.day;
       t = smoothstep(0.82, 0.98, G.todCycleTime);
-      label = t < 0.5 ? '🌙 НОЧЬ' : '☀ ДЕНЬ';
+      mark = t < 0.5 ? 'moon' : 'sun';
+      label = t < 0.5 ? 'НОЧЬ' : 'ДЕНЬ';
     }
 
     let inTunnel = false;
@@ -256,7 +259,12 @@ export function initAtmosphere() {
     }
 
     const badgeTod = $('badge-tod');
-    if (badgeTod) badgeTod.textContent = inTunnel ? '🚇 ТОННЕЛЬ' : label;
+    if (badgeTod) {
+      const ico = badgeTod.querySelector('sl-icon');
+      const text = badgeTod.querySelector('span');
+      if (ico) ico.setAttribute('name', inTunnel ? 'train-front' : mark);
+      if (text) text.textContent = inTunnel ? 'ТОННЕЛЬ' : label;
+    }
   }
   G.updateAtmosphereAndTimeOfDay = updateAtmosphereAndTimeOfDay;
 }

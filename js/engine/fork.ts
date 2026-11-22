@@ -184,11 +184,16 @@ export interface ExitPhase {
   open: number;
 }
 
+/** 0 на кромке дороги, полный разъезд к концу отхода. */
+function splitSpread(u: number): number {
+  return FORK_SPREAD * smooth01(u);
+}
+
 /** Фаза по блоку под этой меткой. До носа и после последнего блока съезда нет. */
 function exitPhase(d: number): ExitPhase {
   const span = spanAt(EXIT_PLAN, d);
   if (!span) return { kind: 'none', t: 0, open: 0 };
-  if (span.kind === 'split') return { kind: 'diverge', t: span.u, open: smooth01(span.u) };
+  if (span.kind === 'split') return { kind: 'diverge', t: span.u, open: splitSpread(span.u) / FORK_SPREAD };
   if (span.kind === 'fork') return { kind: 'run', t: 1, open: 1 };
   if (span.kind === 'seal') return { kind: 'end', t: smooth01(span.u), open: 1 };
   return { kind: 'settle', t: smooth01(span.u), open: 1 };
@@ -235,7 +240,7 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
   if (!block.built) return branchEdges(road, FORK_SPREAD);
-  if (block.kind === 'split') return branchEdges(road, FORK_SPREAD * smooth01(block.u));
+  if (block.kind === 'split') return branchEdges(road, splitSpread(block.u));
   if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'seal') {
     const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
@@ -671,7 +676,8 @@ export function pinchShell(shells: readonly (AsphaltSpan | null)[]): AsphaltSpan
 }
 
 const RELEASE_INSET = 2.6;
-const ATTACHED_GAP = 2.4;
+/** Щель уже видна: ленты больше не одно полотно, через неё не перестраиваются. */
+const ATTACHED_GAP = 0.4;
 const RIDEABLE = 2.4;
 /** Насколько раньше внутренней кромки точка уже считается лентой. Одна цифра и для сиденья, и для курса. */
 const RIBBON_ENTER = 0.35;
@@ -718,6 +724,7 @@ const EXIT_PULL_EASE = 8;
  * Последние метры до кромки скорость падает до нуля.
  */
 export function exitEntryPull(lateral: number, edges: AsphaltEdges): number {
+  if (exitGap(edges) >= ATTACHED_GAP) return 0;
   if (!reachedExit(lateral, edges) || onExitRibbon(lateral, edges)) return 0;
   const gap = edges.rightInner - lateral;
   if (!(gap > 0)) return 0;
@@ -765,7 +772,7 @@ function exitRiderShift(logical: number, edges: AsphaltEdges): number {
  * Пока разъезд меньше ширины полотна, съезд ещё приклеен к правой кромке:
  * на него можно перестроиться. Дальше между ними открывается клин.
  * При нулевом разъезде правая лента имеет нулевую ширину.
- * Съезд — отдельная лента шириной в 2 полосы.
+ * Съезд — отдельная лента в одну полосу.
  */
 export function branchEdges(half: number, spread: number, seam = FORK_SEAM): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
@@ -798,9 +805,30 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
 /**
  * Пределы руля в координатах полосы вокруг центра той дороги, по которой едут.
  * На съезде это его полуширина с тем же запасом, что у прямой дороги.
- * `enter` — съезд ещё можно взять. Тогда правая стена стоит за его внешней кромкой,
- * даже если между лентами уже есть клин. После отказа стена остаётся на прямой.
+ * `enter` — съезд ещё можно взять. Пока ленты ещё одно полотно, правая стена
+ * доходит до внешней кромки съезда. Открытый клин байк не пересекает.
  */
+export function stayOnAsphalt(edges: AsphaltEdges, lateral: number, stick: 'road' | 'exit' | 'near' = 'near'): number {
+  const roadLeft = edges.leftOuter + RIBBON_MARGIN;
+  const roadRight = Math.max(roadLeft, edges.leftInner - RIBBON_MARGIN);
+  const exitOpen = exitWidth(edges) > RIDEABLE && edges.rightOuter > edges.rightInner + RIBBON_MARGIN;
+  const exitLeft = edges.rightInner + RIBBON_MARGIN;
+  const exitRight = Math.max(exitLeft, edges.rightOuter - RIBBON_MARGIN);
+  const at = Number.isFinite(lateral) ? lateral : (roadLeft + roadRight) * 0.5;
+  const clampSpan = (value: number, left: number, right: number) => Math.min(Math.max(value, left), right);
+  const onRoad = (value: number) => clampSpan(value, roadLeft, roadRight);
+  const onExit = (value: number) => clampSpan(value, exitLeft, exitRight);
+  const joined = exitOpen && exitGap(edges) < ATTACHED_GAP;
+  if (joined) return clampSpan(at, roadLeft, Math.max(roadRight, exitRight));
+  if (!exitOpen || stick === 'road') return onRoad(at);
+  if (stick === 'exit') return onExit(at);
+  if (at >= edges.leftOuter && at <= edges.leftInner) return onRoad(at);
+  if (at >= edges.rightInner && at <= edges.rightOuter) return onExit(at);
+  const roadEdge = at < edges.leftOuter ? edges.leftOuter : edges.leftInner;
+  const exitEdge = at < edges.rightInner ? edges.rightInner : edges.rightOuter;
+  return Math.abs(at - roadEdge) <= Math.abs(at - exitEdge) ? onRoad(at) : onExit(at);
+}
+
 export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = false, enter = false): RoadLimits {
   const span = Math.max(scale, 0.05);
   const exitHalf = exitWidth(edge) * 0.5;
@@ -823,8 +851,9 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
     const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
     minEdge = (edge.leftOuter + RIBBON_MARGIN - roadMid) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN - roadMid) / span;
-    const reachable = (enter || exitGap(edge) <= 0.01) && exitWidth(edge) > RIDEABLE;
-    if (reachable) {
+    const gap = exitGap(edge);
+    const joined = gap < ATTACHED_GAP;
+    if (joined && (enter || gap <= 0.01) && exitWidth(edge) > RIDEABLE) {
       maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN - roadMid) / span);
     }
   }
@@ -836,8 +865,8 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   return { min: minEdge, max: maxEdge };
 }
 
-/** Ширина съезда: две полосы в одну сторону. */
-export const EXIT_LANE_HALF = 4.75;
+/** Полуширина съезда: одна полоса в одну сторону. */
+export const EXIT_LANE_HALF = 2.375;
 
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs: number, cityOuter: number, shoulder: ShoulderProfile): ShoulderLats {

@@ -861,11 +861,8 @@ export function initRoadSurface() {
 
     // Стрелки стоят на участке выбора, где обе ленты уже полной ширины.
     // Прямые — по центру дороги, съезд — по центру его ленты.
-    const decided = !!(G.splitState && G.splitState.chosen);
-    const tookExit = decided && G.splitState.chosenSide === 1;
-    const stayed = decided && G.splitState.chosenSide === 0;
-    accentLineMatL.opacity = !decided || stayed ? 0.9 : 0.22;
-    accentLineMatR.opacity = !decided || tookExit ? 0.9 : 0.22;
+    accentLineMatL.opacity = 0.9;
+    accentLineMatR.opacity = 0.9;
     const markS = [
       splitS + EXIT_DIVERGE + 36,
       splitS + EXIT_DIVERGE + EXIT_RUN * 0.62
@@ -875,7 +872,7 @@ export function initRoadSurface() {
       { mesh: arrowLeftB, s: markS[1] }
     ];
     for (const a of forward) {
-      a.mesh.visible = active && !tookExit;
+      a.mesh.visible = active;
       if (!a.mesh.visible) continue;
       const lat = branchCenter(a.s, 0);
       if (lat == null) {
@@ -889,7 +886,7 @@ export function initRoadSurface() {
       { mesh: arrowRightB, s: markS[1] }
     ];
     for (const a of exiting) {
-      const lat = active && !stayed ? branchCenter(a.s, 1) : null;
+      const lat = active ? branchCenter(a.s, 1) : null;
       a.mesh.visible = lat != null;
       if (lat == null) continue;
       placeAlongLane(a.mesh, a.s, lat, lat, 0.055);

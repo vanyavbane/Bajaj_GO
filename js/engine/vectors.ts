@@ -122,6 +122,8 @@ export interface VectorSpawn {
   yaw: number;
   /** С этой метки вектор входит в переданный путь. Дорога сама его не подхватывает. */
   ownsFrom: number;
+  /** Метры вправо от родителя, где съезд отрывается. Без числа путь начинается на оси. */
+  born?: number;
 }
 
 export interface SplineSample {
@@ -166,6 +168,7 @@ export interface LaneHold {
 interface PathRecord {
   nose: number;
   yaw: number;
+  born: number;
   samples: PathFrame[];
   frozen: FrozenYaw | null;
 }
@@ -208,9 +211,21 @@ export function createVectorField() {
   ): PathFrame {
     if (!(s > spawn.nose)) return baseAt(s);
     const id = `${spawn.key}@${from}`;
+    const born = Number.isFinite(spawn.born) ? (spawn.born ?? 0) : 0;
     let rec = cache.get(id);
-    if (!rec || rec.nose !== spawn.nose || rec.yaw !== spawn.yaw) {
-      rec = { nose: spawn.nose, yaw: spawn.yaw, samples: [baseAt(spawn.nose)], frozen: null };
+    if (!rec || rec.nose !== spawn.nose || rec.yaw !== spawn.yaw || rec.born !== born) {
+      const origin = baseAt(spawn.nose);
+      rec = {
+        nose: spawn.nose,
+        yaw: spawn.yaw,
+        born,
+        samples: [{
+          ...origin,
+          x: origin.x + origin.rx * born,
+          z: origin.z + origin.rz * born,
+        }],
+        frozen: null,
+      };
       cache.set(id, rec);
     }
     const need = Math.ceil((s - spawn.nose) / STEP);
@@ -351,10 +366,10 @@ export function createVectorField() {
     };
   }
 
-  /** Точка ленты съезда: внешний край отходит первым, потом вся лента. */
-  function ribbonPose(head: Heading, path: PathFrame, lat: number, outer: number): RoadEmbed {
-    const weight = head.peel * (head.separated > 0.75 ? 1 : Math.max(head.separated, outer));
-    return blendRibbon(head, path, lat, weight);
+  /** Вся лента съезда на одном курсе. Кромки не разъезжаются по разным углам. */
+  function ribbonPose(head: Heading, path: PathFrame, lat: number): RoadEmbed {
+    const across = head.separated > 0.75 ? 1 : head.separated;
+    return blendRibbon(head, path, lat, head.peel * across);
   }
 
   function place(head: Heading, lat: number): RoadEmbed {
@@ -374,16 +389,13 @@ export function createVectorField() {
       rightOuter: head.rightInner + head.width,
     };
     const onRight = !head.ownedHere && head.right != null && followsExit(lat, ribbonEdge);
-    if (onRight && head.right) {
-      const outer = Math.max(0, Math.min(1, (lat - head.rightInner) / Math.max(head.width, 0.5)));
-      return ribbonPose(head, head.right, lat, outer);
-    }
+    if (onRight && head.right) return ribbonPose(head, head.right, lat);
     const gap = head.rightInner - head.leftInner;
     const open = Math.max(0, Math.min(1, head.width / 4));
     if (!head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < exitCourseStart(ribbonEdge)) {
       const u = (lat - head.leftInner) / gap;
       const main = onParent(head, head.leftInner);
-      const exitEdge = ribbonPose(head, head.right, head.rightInner, 0);
+      const exitEdge = ribbonPose(head, head.right, head.rightInner);
       const stay = onParent(head, lat);
       const chordX = main.x + (exitEdge.x - main.x) * u;
       const chordZ = main.z + (exitEdge.z - main.z) * u;

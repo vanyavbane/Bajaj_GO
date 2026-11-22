@@ -23,6 +23,7 @@
   ],
   "dependencies": {
     "@bajajgo/design": "1.0.0",
+    "@shoelace-style/shoelace": "^2.20.1",
     "three": "0.160.0"
   },
   "devDependencies": {

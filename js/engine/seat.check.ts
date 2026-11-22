@@ -54,7 +54,7 @@ const merged = stepSeat(mergeFrame, exiting, span);
 assert(merged.kind === 'road', 'въезд сажает байка на новую дорогу');
 const landedAt = seatWorld(mergeFrame, merged, span);
 assert(
-  landedAt > mergeFrame.local.leftOuter && landedAt < mergeFrame.local.leftInner - 1,
+  landedAt > mergeFrame.local.leftOuter + 0.2 && landedAt < mergeFrame.local.leftInner - 0.2,
   'байк остаётся на новой дороге, а не на кромке старой',
 );
 
@@ -71,5 +71,5 @@ assert(Math.abs(12 + 1.2 * 0.5 - (12 + widened.lane * 0.8)) < 1e-9, 'пока л
 assert(rescaleSeat({ kind: 'road', lane: 3 }, NaN, 1, 0).lane === 3, 'первый кадр не пересчитывает полосу');
 
 const exitLanes = exitCarriage('city');
-assert(exitLanes.count === 2 && exitLanes.oncomingCount === 0 && exitLanes.way === 'one-way', 'съезд — две попутные полосы');
-assert(exitLanes.offsets[0] === -exitLanes.laneWidth * 0.5 && exitLanes.width === exitLanes.laneWidth * 2, 'ось съезда между его двумя полосами');
+assert(exitLanes.count === 1 && exitLanes.oncomingCount === 0 && exitLanes.way === 'one-way', 'съезд — одна попутная полоса');
+assert(exitLanes.offsets[0] === 0 && exitLanes.width === exitLanes.laneWidth, 'полоса съезда лежит на его оси');

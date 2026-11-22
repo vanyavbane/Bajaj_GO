@@ -6,7 +6,6 @@
  */
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
-import type { RouteChoice } from './route.ts';
 import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, lanesGoing, lanesOf, nearestLaneOffset, type CarriageLayout, type Lane, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
@@ -89,11 +88,9 @@ export interface LaneMark {
  * Пока она склеена с шоссе, штрихов у неё нет: это ещё не отдельная дорога.
  * Когда съезд уже пришёл в дорогу, отдельной ленты нет.
  */
-export function sideRibbon(road: LiveCarriage, frame: RoadFrame, layout?: LaneLayout): LiveCarriage | null {
+export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage | null {
   if (road.phase !== 'ribbon' || !exitLaneOpen(frame.local)) return null;
-  const ribbon = riderCarriage(road, frame, 'exit', layout);
-  if (!layout && ribbon.way !== 'one-way') return null;
-  return ribbon;
+  return riderCarriage(road, frame, 'exit');
 }
 
 /** Дороги в точке. main есть всегда. exit — боковая лента, пока она ещё не пришла в дорогу. */
@@ -102,16 +99,11 @@ export interface DriveRoads {
   exit: LiveCarriage | null;
 }
 
-/** Прямая убирает съезд из списка дорог. Пока выбор открыт или взят, лента — вторая дорога. */
-export function roadsAt(
-  main: LiveCarriage,
-  frame: RoadFrame,
-  choice: RouteChoice,
-  layout?: LaneLayout,
-): DriveRoads {
+/** Съезд остаётся второй дорогой, пока у него есть лента. Решение её из списка не вычёркивает. */
+export function roadsAt(main: LiveCarriage, frame: RoadFrame): DriveRoads {
   return {
     main,
-    exit: choice === 'straight' ? null : sideRibbon(main, frame, layout),
+    exit: sideRibbon(main, frame),
   };
 }
 
@@ -330,13 +322,12 @@ export function riderCarriage(
   road: LiveCarriage,
   frame: RoadFrame,
   seat: SeatKind,
-  layout?: LaneLayout,
 ): LiveCarriage {
   if (seat !== 'exit') return road;
   const ribbon = exitRibbonCenter(frame.local);
   if (ribbon == null) return road;
   const half = Math.max(0, exitWidth(frame.local) * 0.5);
-  const lanes = layout ? carriageLanes(layout, 'two-way') : exitCarriage(road.lanes.id);
+  const lanes = exitCarriage(road.lanes.id);
   return {
     phase: 'ribbon',
     lanes,

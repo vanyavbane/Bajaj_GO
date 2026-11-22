@@ -94,11 +94,9 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
     return { kind: 'road', lane: (world - frame.origin) / scale };
   }
   let lane = (world - (frame.origin + ribbon)) / scale;
-  if (onRibbon && seat.kind !== 'exit') {
-    const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
-    const limit = Math.max(0, (halfW - 0.7) / Math.max(scale, 0.05));
-    if (lane < -limit) lane = -limit;
-    if (lane > limit) lane = limit;
-  }
+  const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
+  const limit = Math.max(0, (halfW - 0.7) / Math.max(scale, 0.05));
+  if (lane < -limit) lane = -limit;
+  if (lane > limit) lane = limit;
   return { kind: 'exit', lane };
 }
