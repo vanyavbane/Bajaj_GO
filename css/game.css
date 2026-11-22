@@ -1140,7 +1140,7 @@ button{font-family:var(--ds-font)}
 .outfit-preview-wrap{
   position:relative;flex:1;min-height:360px;
   border-radius:16px;overflow:hidden;
-  background:radial-gradient(ellipse at 50% 28%, rgba(120,160,210,.28), rgba(20,30,45,.18) 62%), #162131;
+  background:radial-gradient(ellipse at 50% 30%, rgba(150,185,225,.34), rgba(28,42,60,.22) 60%), #1a2636;
   border:1px solid rgba(255,255,255,.1);
 }
 .outfit-preview-canvas{width:100%;height:100%;display:block;touch-action:none}
