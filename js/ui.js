@@ -639,18 +639,18 @@ export function initUi() {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 30);
-    camera.position.set(0, 1.02, 4.2);
-    camera.lookAt(0, 0.95, 0);
+    camera.position.set(0, 0.1, 4.5);
+    camera.lookAt(0, 0.05, 0);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.25));
-    const key = new THREE.DirectionalLight(0xffffff, 1.45);
-    key.position.set(2.2, 3.4, 2.8);
+    scene.add(new THREE.HemisphereLight(0xf4f8ff, 0x4a6078, 1.45));
+    const key = new THREE.DirectionalLight(0xffffff, 1.8);
+    key.position.set(2.4, 3.6, 3.0);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x9ecbff, 0.55);
-    fill.position.set(-2.6, 1.8, 1.8);
+    const fill = new THREE.DirectionalLight(0xb9d7ff, 0.75);
+    fill.position.set(-2.8, 2.0, 2.2);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.35);
-    rim.position.set(-1.5, 2.2, -2.5);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.65);
+    rim.position.set(-1.8, 2.4, -2.8);
     scene.add(rim);
 
     const root = new THREE.Group();
@@ -668,8 +668,8 @@ export function initUi() {
     root.add(rider);
 
     const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(0.62, 48),
-      new THREE.MeshBasicMaterial({ color: 0x243244, transparent: true, opacity: 0.55 })
+      new THREE.CircleGeometry(0.72, 48),
+      new THREE.MeshBasicMaterial({ color: 0x8098b8, transparent: true, opacity: 0.28 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -size.y / 2 + 0.01;
