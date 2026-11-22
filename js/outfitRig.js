@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { G } from './state.js';
 
 /**
  * Детализированная модель райдера: шлем, куртка, руки, ноги, ботинки.
@@ -6,27 +7,16 @@ import * as THREE from 'three';
  * Возвращает { group, update, joints }.
  */
 export function buildDetailedRider(mode = 'stand') {
-  const p = (typeof window !== 'undefined' && window.G && window.G.outfitParts) || {};
-  const mats = (p.helmetMat && p.jacketMat && p.pantsMat && p.bootsMat) ? p : (window.G ? (window.G.outfitParts = {
-    helmetMat: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.32, metalness: 0.18 }),
-    visorMat: new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.72, envMapIntensity: 1.2 }),
-    jacketMat: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.72, metalness: 0.06 }),
-    stripeMat: new THREE.MeshStandardMaterial({ color: 0xd9363e, roughness: 0.45, metalness: 0.15 }),
-    pantsMat: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.78, metalness: 0.05 }),
-    bootsMat: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.62, metalness: 0.08 }),
-    gloveMat: new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.85, metalness: 0.04 }),
-    soleMat: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.95, metalness: 0.02 }),
-    skinMat: new THREE.MeshStandardMaterial({ color: 0xc49a7c, roughness: 0.8, metalness: 0.02 }),
-  }) : {});
-  const helmetMat = mats.helmetMat || new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.32, metalness: 0.18 });
-  const visorMat = mats.visorMat || new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.72, envMapIntensity: 1.2 });
-  const jacketMat = mats.jacketMat || new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.72, metalness: 0.06 });
-  const stripeMat = mats.stripeMat || new THREE.MeshStandardMaterial({ color: 0xd9363e, roughness: 0.45, metalness: 0.15 });
-  const pantsMat = mats.pantsMat || new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.78, metalness: 0.05 });
-  const bootsMat = mats.bootsMat || new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.62, metalness: 0.08 });
-  const gloveMat = mats.gloveMat || new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.85, metalness: 0.04 });
-  const soleMat = mats.soleMat || new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.95, metalness: 0.02 });
-  const skinMat = mats.skinMat || new THREE.MeshStandardMaterial({ color: 0xc49a7c, roughness: 0.8, metalness: 0.02 });
+  const outfitParts = G.outfitParts || (G.outfitParts = {});
+  const helmetMat = outfitParts.helmetMat || (outfitParts.helmetMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.32, metalness: 0.18 }));
+  const visorMat = outfitParts.visorMat || (outfitParts.visorMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.72, envMapIntensity: 1.2 }));
+  const jacketMat = outfitParts.jacketMat || (outfitParts.jacketMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.72, metalness: 0.06 }));
+  const stripeMat = outfitParts.stripeMat || (outfitParts.stripeMat = new THREE.MeshStandardMaterial({ color: 0xd9363e, roughness: 0.45, metalness: 0.15 }));
+  const pantsMat = outfitParts.pantsMat || (outfitParts.pantsMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.78, metalness: 0.05 }));
+  const bootsMat = outfitParts.bootsMat || (outfitParts.bootsMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.62, metalness: 0.08 }));
+  const gloveMat = outfitParts.gloveMat || (outfitParts.gloveMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.85, metalness: 0.04 }));
+  const soleMat = outfitParts.soleMat || (outfitParts.soleMat = new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.95, metalness: 0.02 }));
+  const skinMat = outfitParts.skinMat || (outfitParts.skinMat = new THREE.MeshStandardMaterial({ color: 0xc49a7c, roughness: 0.8, metalness: 0.02 }));
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x15181d, roughness: 0.85, metalness: 0.1 });
   const padMat = new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.6, metalness: 0.25 });
   const chromeMat = new THREE.MeshStandardMaterial({ color: 0xb8c0c8, roughness: 0.22, metalness: 0.9, envMapIntensity: 1.2 });
