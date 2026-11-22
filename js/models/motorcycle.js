@@ -82,16 +82,29 @@ function buildWheelStyle(radius, width, opts) {
     }
     if (opts.disc) {
       cl(group, G.M.chrome, radius * 0.74, radius * 0.74, 0.022, side * (face + 0.018), 0, 0, 'x', 16);
+      // Внутренний носитель диска и кнопки.
+      cl(group, G.M.metalDark, radius * 0.46, radius * 0.46, 0.03, side * (face + 0.012), 0, 0, 'x', 12);
       if (opts.perf) {
         for (let i = 0; i < 6; i += 1) {
           const a = (i / 6) * Math.PI * 2;
           bx(group, G.M.metalDark, 0.05, 0.05, 0.03, side * (face + 0.032), Math.cos(a) * radius * 0.53, Math.sin(a) * radius * 0.53);
         }
       }
+      for (let i = 0; i < 5; i += 1) {
+        const a = (i / 5) * Math.PI * 2 + 0.3;
+        cl(group, G.M.chrome, 0.018, 0.018, 0.034, side * (face + 0.03), Math.cos(a) * radius * 0.29, Math.sin(a) * radius * 0.29, 'x', 6);
+      }
+      // Наружный хром-обод тормозного диска.
+      torus(group, G.M.chrome, radius * 0.72, 0.008, side * (face + 0.026), 0, 0, 'x');
     }
     if (opts.drum) {
       cl(group, G.M.metalDark, radius * 0.42, radius * 0.42, 0.05, side * face, 0, 0, 'x', 12);
       cl(group, G.M.chrome, radius * 0.16, radius * 0.16, 0.065, side * (face + 0.03), 0, 0, 'x', 8);
+      // Рёбра тормозного барабана.
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2;
+        bx(group, G.M.metalDark, 0.018, 0.02, 0.05, side * (face + 0.02), Math.cos(a) * radius * 0.42, Math.sin(a) * radius * 0.42, 0, 0, 0);
+      }
     }
   }
   return group;
@@ -113,6 +126,9 @@ function buildFrame(v, spec) {
       const ring = torus(v, shockMat, 0.045, 0.011, side * 0.25, 0.42 + i * 0.1, 0.38 + i * 0.025, 'y');
       ring.rotation.x = -0.22;
     }
+    // Пыльник и кронштейн амортизатора.
+    cl(v, G.M.rubber, 0.036, 0.036, 0.12, side * 0.25, 0.72, 0.52, 'y', 8).rotation.x = -0.22;
+    bx(v, G.M.metalDark, 0.05, 0.03, 0.06, side * 0.25, 0.82, 0.55);
   }
   bx(v, tube, 0.36, 0.055, 0.07, 0, 0.92, -1.06);
   bx(v, tube, 0.42, 0.05, 0.07, 0, 0.63, -0.28);
@@ -176,6 +192,9 @@ function buildEngine(v, spec) {
   bx(v, G.M.mattePlastic, 0.17, 0.19, 0.3, -0.29, 0.62, -0.25);
   bx(v, G.M.metalDark, 0.14, 0.13, 0.18, -0.2, 0.62, -0.42);
   bx(v, G.M.chrome, 0.15, 0.11, 0.02, -0.2, 0.62, -0.52);
+  // Трос газа и крышка карбюратора.
+  cl(v, G.M.metalDark, 0.012, 0.012, 0.2, -0.14, 0.72, -0.38, 'y', 6);
+  cl(v, G.M.chrome, 0.03, 0.03, 0.025, -0.2, 0.69, -0.42, 'y', 8);
 
   // Выхлоп.
   const pipeMat = spec.darkExhaust ? G.M.metalDark : G.M.chrome;
@@ -200,6 +219,9 @@ function buildEngine(v, spec) {
   for (const side of [-1, 1]) {
     bx(v, G.tankMat, 0.06, 0.22, 0.34, side * 0.3, 0.66, -0.02, 0, 0, 0, true);
     bx(v, G.M.metalDark, 0.02, 0.06, 0.16, side * 0.335, 0.7, -0.04);
+    // Хром-молдинг и логотип на боковой панели.
+    bx(v, G.M.chrome, 0.012, 0.018, 0.26, side * 0.338, 0.735, -0.02);
+    bx(v, G.accentMat, 0.012, 0.035, 0.07, side * 0.339, 0.66, -0.08);
     if (spec.sideVents) {
       bx(v, G.M.mattePlastic, 0.025, 0.1, 0.02, side * 0.336, 0.66, -0.14);
       bx(v, G.M.mattePlastic, 0.025, 0.1, 0.02, side * 0.336, 0.66, -0.06);
@@ -253,8 +275,14 @@ function buildFork(v, spec, fenderGroup) {
 
   // Тормозные суппорты не вращаются вместе с колесом.
   bx(v, spec.caliperGold ? G.M.goldMetal : G.M.filterRed, 0.06, 0.12, 0.12, 0.135, 0.41, zAxle + 0.12);
+  bx(v, G.M.metalDark, 0.02, 0.05, 0.06, 0.135, 0.375, zAxle + 0.12); // колодка
+  cl(v, G.M.chrome, 0.012, 0.012, 0.03, 0.168, 0.455, zAxle + 0.12, 'x', 6); // штуцер
   bx(v, spec.caliperGold ? G.M.goldMetal : G.M.metalDark, 0.055, 0.1, 0.1, -0.135, 0.41, zAxle + 0.12);
+  bx(v, G.M.metalDark, 0.02, 0.05, 0.06, -0.135, 0.375, zAxle + 0.12);
+  cl(v, G.M.chrome, 0.012, 0.012, 0.03, -0.168, 0.455, zAxle + 0.12, 'x', 6);
+  // Задний суппорт.
   bx(v, G.M.metalDark, 0.055, 0.1, 0.1, 0.135, 0.42, 0.56);
+  bx(v, G.M.filterRed, 0.05, 0.08, 0.08, 0.135, 0.40, 0.585);
 }
 
 function buildHeadlight(v, spec, zAxle) {
@@ -263,9 +291,17 @@ function buildHeadlight(v, spec, zAxle) {
     const big = kind === 'cruiser';
     const r = big ? 0.16 : 0.135;
     cl(v, G.M.chrome, r, r * 0.9, big ? 0.2 : 0.16, 0, 0.93, zAxle - 0.04, 'z', 16, true);
-    cl(v, G.M.headlightMat, r * 0.86, r * 0.86, 0.03, 0, 0.93, zAxle - 0.14, 'z', 16);
+    // Внутренний отражатель и лампа.
+    cl(v, G.M.goldMetal, r * 0.78, r * 0.7, 0.02, 0, 0.93, zAxle - 0.10, 'z', 14);
+    cl(v, G.M.headlightMat, r * 0.42, r * 0.42, 0.035, 0, 0.93, zAxle - 0.125, 'z', 10);
+    // Стекло.
+    cl(v, G.M.glass, r * 0.86, r * 0.86, 0.03, 0, 0.93, zAxle - 0.14, 'z', 16);
     torus(v, G.M.chrome, r * 0.9, 0.012, 0, 0.93, zAxle - 0.15, 'z');
+    // DRL-кольцо и козырёк.
+    torus(v, G.M.drlMat, r * 0.8, 0.007, 0, 0.93, zAxle - 0.155, 'z');
     bx(v, G.M.chrome, big ? 0.3 : 0.24, 0.035, 0.16, 0, big ? 1.11 : 1.05, zAxle - 0.06, 0.28);
+    // Крепление к вилке.
+    bx(v, G.M.metalDark, 0.05, 0.08, 0.12, 0, 0.93, zAxle + 0.08, 0.1);
   } else if (kind === 'claw' || kind === 'led') {
     const sport = kind === 'led' && spec.sportFairing;
     for (const side of [-1, 1]) {
@@ -361,7 +397,10 @@ function buildTank(tp, spec) {
   // Логотип на баке.
   for (const side of [-1, 1]) {
     bx(tp, G.accentMat, 0.015, 0.045, 0.14, side * (w / 2 + 0.05), y + 0.04, z - 0.1);
+    bx(tp, G.M.chrome, 0.012, 0.02, 0.1, side * (w / 2 + 0.062), y + 0.085, z + 0.08); // хром-молдинг
   }
+  // Ободок крышки бака.
+  cl(tp, G.M.chrome, 0.075, 0.075, 0.012, 0, y + h / 2 + 0.075, z - 0.18, 'y', 14);
 }
 
 function buildSeatTail(tp, spec) {
@@ -403,8 +442,10 @@ function buildSeatTail(tp, spec) {
     bx(tp, G.tankMat, 0.3, 0.09, 0.56, 0, 0.68, 0.72, -0.08, 0, 0, true);
     bx(tp, G.tankMat, 0.28, 0.08, 0.4, 0, 0.62, 0.94, -0.28);
     bx(tp, G.M.chrome, 0.04, 0.022, 0.5, 0, 0.735, 0.74, -0.08);
+    bx(tp, G.M.chrome, 0.03, 0.02, 0.3, 0, 0.665, 0.96, -0.28);
   } else {
     bx(tp, G.tankMat, 0.3, 0.09, 0.46, 0, 0.72, 0.7, -0.06, 0, 0, true);
+    bx(tp, G.M.chrome, 0.035, 0.02, 0.4, 0, 0.775, 0.7, -0.06);
   }
 
   if (tailKind === 'flat') {
@@ -439,16 +480,21 @@ function buildSeatTail(tp, spec) {
 
   // Номер и подсветка.
   bx(tp, G.getPlateMat(spec.id), 0.2, 0.1, 0.018, 0, 0.75, 1.04, -0.18);
+  bx(tp, G.M.chrome, 0.22, 0.02, 0.03, 0, 0.805, 1.04, -0.18); // рамка номера
   bx(tp, G.M.drlMat, 0.035, 0.016, 0.02, 0.08, 0.81, 1.03);
   bx(tp, G.M.drlMat, 0.035, 0.016, 0.02, -0.08, 0.81, 1.03);
 
   for (const side of [-1, 1]) {
     bx(tp, G.M.chrome, 0.015, 0.015, 0.16, side * 0.287, 0.94, 0.92);
+    bx(tp, G.M.chrome, 0.02, 0.02, 0.03, side * 0.305, 0.91, 0.95); // ножка поворотника
     bx(tp, G.M.amberMat, 0.055, 0.05, 0.06, side * 0.305, 0.94, 0.98);
+    // Задний катафот в бампере.
+    bx(tp, G.M.filterRed, 0.05, 0.03, 0.02, side * 0.24, 0.62, 1.02);
   }
 
   // Брызговик.
   bx(tp, G.M.rubber, 0.24, 0.16, 0.05, 0, 0.52, 0.94);
+  bx(tp, G.M.chrome, 0.25, 0.02, 0.055, 0, 0.6, 0.94); // накладка брызговика
 }
 
 function buildBars(tp, spec) {
@@ -493,7 +539,12 @@ function buildBars(tp, spec) {
   if (spec.roundDash) {
     bx(tp, G.M.mattePlastic, 0.18, 0.11, 0.1, 0, 1.12, -1.12);
     cl(tp, G.M.chrome, 0.07, 0.07, 0.03, 0, 1.14, -1.06, 'z', 12);
-    if (spec.twinGauges) cl(tp, G.M.chrome, 0.05, 0.05, 0.025, 0.14, 1.12, -1.08, 'z', 10);
+    cl(tp, G.M.mattePlastic, 0.062, 0.062, 0.034, 0, 1.14, -1.06, 'z', 12);
+    cl(tp, G.M.goldMetal, 0.008, 0.008, 0.05, 0.02, 1.155, -1.06, 'z', 6);
+    if (spec.twinGauges) {
+      cl(tp, G.M.chrome, 0.05, 0.05, 0.025, 0.14, 1.12, -1.08, 'z', 10);
+      cl(tp, G.M.mattePlastic, 0.044, 0.044, 0.028, 0.14, 1.12, -1.08, 'z', 10);
+    }
   }
 }
 
@@ -587,10 +638,32 @@ export function buildMotorcycle() {
   fRim.rotation.z = Math.PI / 2;
   G.frontWheelGroup.add(fTire, fRim);
   for (const side of [-1, 1]) {
-    const wall = new THREE.Mesh(cylinder(0.305, 0.305, 0.028, 16), G.M.rubberDark);
+    const wall = new THREE.Mesh(cylinder(0.305, 0.305, 0.03, 16), G.M.rubberDark);
     wall.rotation.z = Math.PI / 2;
     wall.position.x = side * 0.072;
     G.frontWheelGroup.add(wall);
+    // Хром-губа боковины.
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.295, 0.008, 6, 20), G.M.chrome);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.x = side * 0.088;
+    G.frontWheelGroup.add(lip);
+  }
+  // Центральная протекторная лента и кольцевая канавка.
+  const fTread = new THREE.Mesh(cylinder(0.335, 0.335, 0.1, 16), G.M.rubberDark);
+  fTread.rotation.z = Math.PI / 2;
+  G.frontWheelGroup.add(fTread);
+  for (const gx of [-0.03, 0.03]) {
+    const fGroove = new THREE.Mesh(new THREE.TorusGeometry(0.337, 0.005, 4, 20), G.M.metalDark);
+    fGroove.rotation.y = Math.PI / 2;
+    fGroove.position.x = gx;
+    G.frontWheelGroup.add(fGroove);
+  }
+  for (let i = 0; i < 24; i += 1) {
+    const a = (i / 24) * Math.PI * 2;
+    const block = new THREE.Mesh(box(0.085, 0.012, 0.03), G.M.rubberDark);
+    block.position.set(0, Math.cos(a) * 0.335, Math.sin(a) * 0.335);
+    block.rotation.x = a;
+    G.frontWheelGroup.add(block);
   }
   G.bikeChassisGroup.add(G.frontWheelGroup);
 
@@ -603,10 +676,30 @@ export function buildMotorcycle() {
   rRim.rotation.z = Math.PI / 2;
   G.rearWheelGroup.add(rTire, rRim);
   for (const side of [-1, 1]) {
-    const wall = new THREE.Mesh(cylinder(0.315, 0.315, 0.032, 16), G.M.rubberDark);
+    const wall = new THREE.Mesh(cylinder(0.315, 0.315, 0.036, 16), G.M.rubberDark);
     wall.rotation.z = Math.PI / 2;
     wall.position.x = side * 0.1;
     G.rearWheelGroup.add(wall);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.305, 0.008, 6, 20), G.M.chrome);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.x = side * 0.118;
+    G.rearWheelGroup.add(lip);
+  }
+  const rTread = new THREE.Mesh(cylinder(0.345, 0.345, 0.13, 16), G.M.rubberDark);
+  rTread.rotation.z = Math.PI / 2;
+  G.rearWheelGroup.add(rTread);
+  for (const gx of [-0.045, 0.045]) {
+    const rGroove = new THREE.Mesh(new THREE.TorusGeometry(0.347, 0.005, 4, 20), G.M.metalDark);
+    rGroove.rotation.y = Math.PI / 2;
+    rGroove.position.x = gx;
+    G.rearWheelGroup.add(rGroove);
+  }
+  for (let i = 0; i < 28; i += 1) {
+    const a = (i / 28) * Math.PI * 2;
+    const block = new THREE.Mesh(box(0.11, 0.012, 0.03), G.M.rubberDark);
+    block.position.set(0, Math.cos(a) * 0.345, Math.sin(a) * 0.345);
+    block.rotation.x = a;
+    G.rearWheelGroup.add(block);
   }
   G.bikeChassisGroup.add(G.rearWheelGroup);
 
