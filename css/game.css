@@ -1151,7 +1151,8 @@ button{font-family:var(--ds-font)}
 }
 @media (max-width: 820px){
   #overlay.mode-outfit{padding:10px}
-  .outfit-body{grid-template-columns:1fr;grid-template-rows:auto minmax(300px, 45vh)}
-  .outfit-left{border-right:none;border-bottom:1px solid rgba(255,255,255,.08)}
-  .outfit-preview-wrap{min-height:280px}
+  .outfit-body{grid-template-columns:1fr;grid-template-rows:minmax(280px, 42vh) auto}
+  .outfit-right{order:-1;border-bottom:1px solid rgba(255,255,255,.08)}
+  .outfit-left{order:2;border-right:none;border-bottom:none}
+  .outfit-preview-wrap{min-height:260px}
 }

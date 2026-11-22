@@ -554,6 +554,16 @@ export function initUi() {
     if (!outfitPreview) return;
     if (outfitPreview.raf) cancelAnimationFrame(outfitPreview.raf);
     if (outfitPreview.resize) window.removeEventListener('resize', outfitPreview.resize);
+    if (outfitPreview.ro) outfitPreview.ro.disconnect();
+    if (outfitPreview.scene) {
+      const shared = new Set(Object.values(G.outfitParts || {}));
+      outfitPreview.scene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        if (obj.geometry) obj.geometry.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) { if (m && !shared.has(m)) m.dispose(); }
+      });
+    }
     if (outfitPreview.renderer) {
       outfitPreview.renderer.dispose();
       const c = outfitPreview.renderer.domElement;
@@ -562,56 +572,110 @@ export function initUi() {
     outfitPreview = null;
   }
 
-  function cloneShared(src) {
-    const dst = src.clone(false);
-    if (dst.isMesh) {
-      dst.geometry = src.geometry;
-      dst.material = src.material;
+  function buildStandingRider() {
+    const p = G.outfitParts || {};
+    const helmetMat = p.helmetMat || new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const visorMat = p.visorMat || new THREE.MeshStandardMaterial({ color: 0x1a2230, transparent: true, opacity: 0.72 });
+    const jacketMat = p.jacketMat || new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const stripeMat = p.stripeMat || new THREE.MeshStandardMaterial({ color: 0xd9363e });
+    const pantsMat = p.pantsMat || new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const bootsMat = p.bootsMat || new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const gloveMat = p.gloveMat || new THREE.MeshStandardMaterial({ color: 0x1a1d22 });
+    const soleMat = p.soleMat || new THREE.MeshStandardMaterial({ color: 0x0b0d10 });
+    const skinMat = p.skinMat || new THREE.MeshStandardMaterial({ color: 0xc49a7c });
+
+    const g = new THREE.Group();
+    const add = (mat, geo, x, y, z, rx = 0, ry = 0, rz = 0) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, rz);
+      g.add(m);
+      return m;
+    };
+    const cap = (mat, r, len, x, y, z, rx = 0, ry = 0, rz = 0) =>
+      add(mat, new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 8), x, y, z, rx, ry, rz);
+
+    // Шлем
+    const helmet = new THREE.Group();
+    helmet.position.set(0, 1.72, 0);
+    g.add(helmet);
+    helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.235, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), helmetMat));
+    helmet.add(new THREE.Mesh(new THREE.SphereGeometry(0.232, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.26), helmetMat));
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.196, 0.022, 8, 20), helmetMat);
+    rim.rotation.x = Math.PI / 2; rim.position.y = -0.13; helmet.add(rim);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.12), visorMat);
+    visor.position.set(0, -0.01, -0.19); visor.rotation.x = -0.12; helmet.add(visor);
+    const chin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.14), helmetMat);
+    chin.position.set(0, -0.15, -0.12); chin.rotation.x = 0.22; helmet.add(chin);
+
+    // Шея, куртка, полоса
+    cap(skinMat, 0.07, 0.04, 0, 1.53, -0.02, 0);
+    add(jacketMat, new THREE.BoxGeometry(0.46, 0.56, 0.3), 0, 1.28, 0);
+    add(jacketMat, new THREE.BoxGeometry(0.54, 0.14, 0.32), 0, 1.46, -0.01); // плечи
+    add(jacketMat, new THREE.BoxGeometry(0.24, 0.09, 0.24), 0, 1.54, -0.02); // воротник
+    add(stripeMat, new THREE.BoxGeometry(0.5, 0.085, 0.33), 0, 1.31, 0); // полоса
+    add(jacketMat, new THREE.BoxGeometry(0.4, 0.12, 0.28), 0, 1.04, 0.01); // пояс
+
+    for (const side of [-1, 1]) {
+      // Руки вниз по швам
+      cap(jacketMat, 0.075, 0.28, side * 0.34, 1.27, 0, 0, 0, 0, side * 0.08);
+      cap(jacketMat, 0.065, 0.26, side * 0.38, 0.93, 0.02, 0.08, 0, 0, side * 0.04);
+      add(gloveMat, new THREE.BoxGeometry(0.11, 0.1, 0.16), side * 0.4, 0.74, 0.05, 0.08);
+
+      // Ноги прямо
+      cap(pantsMat, 0.095, 0.3, side * 0.13, 0.79, 0, 0);
+      cap(pantsMat, 0.082, 0.32, side * 0.13, 0.42, 0, 0);
+      add(bootsMat, new THREE.BoxGeometry(0.16, 0.16, 0.28), side * 0.13, 0.16, 0.03, 0);
+      add(soleMat, new THREE.BoxGeometry(0.17, 0.05, 0.3), side * 0.13, 0.07, 0.04, 0);
     }
-    for (const child of src.children) dst.add(cloneShared(child));
-    return dst;
+    return g;
   }
 
   function startOutfitPreview(canvas) {
     disposeOutfitPreview();
-    if (!canvas || !G.bikeThirdPersonRider) return;
+    if (!canvas) return;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 30);
-    camera.position.set(0.02, 1.18, 2.7);
-    camera.lookAt(0, 1.08, 0.05);
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 30);
+    camera.position.set(0, 1.02, 4.2);
+    camera.lookAt(0, 0.95, 0);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 1.15));
-    const key = new THREE.DirectionalLight(0xffffff, 1.35);
-    key.position.set(2.2, 3.2, 2.5);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.25));
+    const key = new THREE.DirectionalLight(0xffffff, 1.45);
+    key.position.set(2.2, 3.4, 2.8);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.45);
-    fill.position.set(-2.4, 1.4, 1.2);
+    const fill = new THREE.DirectionalLight(0x9ecbff, 0.55);
+    fill.position.set(-2.6, 1.8, 1.8);
     scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.35);
+    rim.position.set(-1.5, 2.2, -2.5);
+    scene.add(rim);
 
     const root = new THREE.Group();
     scene.add(root);
-    const rider = cloneShared(G.bikeThirdPersonRider);
-    // Rider was built in bike-local coords; center it for preview.
+    const rider = buildStandingRider();
     const box = new THREE.Box3().setFromObject(rider);
     const center = new THREE.Vector3();
     const size = new THREE.Vector3();
     box.getCenter(center);
     box.getSize(size);
-    rider.position.sub(center);
-    rider.position.y += size.y * 0.02;
+    rider.position.x -= center.x;
+    rider.position.z -= center.z;
+    rider.position.y -= box.min.y;
+    rider.position.y -= size.y / 2;
     root.add(rider);
+
     const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(0.72, 48),
-      new THREE.MeshBasicMaterial({ color: 0x1a2330, transparent: true, opacity: 0.55 })
+      new THREE.CircleGeometry(0.62, 48),
+      new THREE.MeshBasicMaterial({ color: 0x243244, transparent: true, opacity: 0.55 })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -size.y / 2 - 0.02;
+    ground.position.y = -size.y / 2 + 0.01;
     root.add(ground);
 
-    const state = { renderer, scene, camera, root, raf: 0, resize: null };
+    const state = { renderer, scene, camera, root, raf: 0, resize: null, ro: null };
     const resize = () => {
       const w = Math.max(1, canvas.clientWidth || 320);
       const h = Math.max(1, canvas.clientHeight || 420);
@@ -621,19 +685,24 @@ export function initUi() {
     };
     state.resize = resize;
     window.addEventListener('resize', resize);
+    if (typeof ResizeObserver !== 'undefined') {
+      state.ro = new ResizeObserver(resize);
+      state.ro.observe(canvas);
+    }
     resize();
+    requestAnimationFrame(resize);
 
     let dragging = false;
     let lastX = 0;
-    let rotY = 0;
-    let velY = 0.0045;
+    let rotY = 0.35;
+    let velY = 0.006;
     const onDown = (e) => { dragging = true; lastX = e.clientX; canvas.setPointerCapture?.(e.pointerId); };
     const onMove = (e) => {
       if (!dragging) return;
       const dx = e.clientX - lastX;
       lastX = e.clientX;
       rotY += dx * 0.008;
-      velY = dx * 0.00025;
+      velY = dx * 0.0003;
     };
     const onUp = () => { dragging = false; };
     canvas.addEventListener('pointerdown', onDown);
@@ -645,7 +714,7 @@ export function initUi() {
       if (!outfitPreview || outfitPreview !== state) return;
       if (!dragging) rotY += velY;
       velY *= dragging ? 0 : 0.985;
-      if (!dragging && Math.abs(velY) < 0.0025) velY = 0.0025 * Math.sign(velY || 1);
+      if (!dragging && Math.abs(velY) < 0.0035) velY = 0.0035 * Math.sign(velY || 1);
       root.rotation.y = rotY;
       renderer.render(scene, camera);
       state.raf = requestAnimationFrame(tick);
