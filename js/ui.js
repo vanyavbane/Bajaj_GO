@@ -1,8 +1,10 @@
+import * as THREE from 'three';
 import { button, callout, check, choiceGrid, currency, field, heading, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabBody, tabs } from '@bajajgo/design';
 import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
+import { OUTFIT_COLORS, OUTFIT_DEFAULT, applyOutfit, loadOutfit, normalizeOutfit, resetOutfit, saveOutfit } from './outfit.js';
 
 function buildStamp() {
   const iso = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : '';
@@ -546,11 +548,193 @@ export function initUi() {
   /* Совместимость: старый вызов экрана «Графика» открывает вкладку графики. */
   G.renderGraphics = (from) => renderSettings('graphics', from === 'pause' ? 'pause' : 'menu');
 
+  let outfitPreview = null;
+
+  function disposeOutfitPreview() {
+    if (!outfitPreview) return;
+    if (outfitPreview.raf) cancelAnimationFrame(outfitPreview.raf);
+    if (outfitPreview.resize) window.removeEventListener('resize', outfitPreview.resize);
+    if (outfitPreview.renderer) {
+      outfitPreview.renderer.dispose();
+      const c = outfitPreview.renderer.domElement;
+      if (c && c.parentNode) c.parentNode.removeChild(c);
+    }
+    outfitPreview = null;
+  }
+
+  function cloneShared(src) {
+    const dst = src.clone(false);
+    if (dst.isMesh) {
+      dst.geometry = src.geometry;
+      dst.material = src.material;
+    }
+    for (const child of src.children) dst.add(cloneShared(child));
+    return dst;
+  }
+
+  function startOutfitPreview(canvas) {
+    disposeOutfitPreview();
+    if (!canvas || !G.bikeThirdPersonRider) return;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 30);
+    camera.position.set(0.02, 1.18, 2.7);
+    camera.lookAt(0, 1.08, 0.05);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 1.15));
+    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    key.position.set(2.2, 3.2, 2.5);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.45);
+    fill.position.set(-2.4, 1.4, 1.2);
+    scene.add(fill);
+
+    const root = new THREE.Group();
+    scene.add(root);
+    const rider = cloneShared(G.bikeThirdPersonRider);
+    // Rider was built in bike-local coords; center it for preview.
+    const box = new THREE.Box3().setFromObject(rider);
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+    rider.position.sub(center);
+    rider.position.y += size.y * 0.02;
+    root.add(rider);
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(0.72, 48),
+      new THREE.MeshBasicMaterial({ color: 0x1a2330, transparent: true, opacity: 0.55 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -size.y / 2 - 0.02;
+    root.add(ground);
+
+    const state = { renderer, scene, camera, root, raf: 0, resize: null };
+    const resize = () => {
+      const w = Math.max(1, canvas.clientWidth || 320);
+      const h = Math.max(1, canvas.clientHeight || 420);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    state.resize = resize;
+    window.addEventListener('resize', resize);
+    resize();
+
+    let dragging = false;
+    let lastX = 0;
+    let rotY = 0;
+    let velY = 0.0045;
+    const onDown = (e) => { dragging = true; lastX = e.clientX; canvas.setPointerCapture?.(e.pointerId); };
+    const onMove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      rotY += dx * 0.008;
+      velY = dx * 0.00025;
+    };
+    const onUp = () => { dragging = false; };
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointerleave', onUp);
+
+    const tick = () => {
+      if (!outfitPreview || outfitPreview !== state) return;
+      if (!dragging) rotY += velY;
+      velY *= dragging ? 0 : 0.985;
+      if (!dragging && Math.abs(velY) < 0.0025) velY = 0.0025 * Math.sign(velY || 1);
+      root.rotation.y = rotY;
+      renderer.render(scene, camera);
+      state.raf = requestAnimationFrame(tick);
+    };
+    tick();
+    outfitPreview = state;
+  }
+
+  function renderOutfit() {
+    disposeOutfitPreview();
+    G.currentScreen = 'outfit';
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-outfit';
+    const current = normalizeOutfit(G.outfit || loadOutfit());
+    const cats = [
+      { id: 'helmet', label: 'Шлем' },
+      { id: 'jacket', label: 'Куртка' },
+      { id: 'pants',  label: 'Штаны' },
+      { id: 'boots',  label: 'Ботинки' },
+    ];
+
+    overlay.innerHTML = `
+      <div class="outfit-shell ds-panel">
+        <div class="outfit-head">
+          <div>
+            <div class="ds-kicker">КАСТОМИЗАЦИЯ</div>
+            <h2 class="ds-title">Экипировка</h2>
+          </div>
+          <div class="outfit-head-actions">
+            <button id="outfit-reset" class="ds-button ds-button--compact">Сбросить</button>
+            <button id="outfit-close" class="ds-icon-button" title="Закрыть" aria-label="Закрыть">✕</button>
+          </div>
+        </div>
+        <div class="outfit-body">
+          <div class="outfit-left">
+            ${cats.map(cat => `
+              <div class="outfit-cat" data-cat="${cat.id}">
+                <div class="outfit-cat-title">${cat.label}</div>
+                <div class="outfit-swatches">
+                  ${OUTFIT_COLORS.map(c => `
+                    <button class="outfit-swatch ${current[cat.id] === c.hex ? 'is-on' : ''}"
+                      data-part="${cat.id}" data-color="${c.hex}" title="${c.name}" aria-label="${c.name}">
+                      <span style="background:${c.hex}"></span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+            <div class="outfit-hint ds-note">Изменения применяются сразу и сохраняются автоматически.</div>
+            <button id="outfit-back" class="ds-button">← Назад в меню</button>
+          </div>
+          <div class="outfit-right">
+            <div class="outfit-preview-wrap">
+              <canvas id="outfit-preview-canvas" class="outfit-preview-canvas"></canvas>
+              <div class="outfit-preview-label">Предпросмотр</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    overlay.querySelectorAll('.outfit-swatch').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const part = btn.getAttribute('data-part');
+        const color = btn.getAttribute('data-color');
+        if (!part || !color) return;
+        const next = { ...(G.outfit || loadOutfit()), [part]: color };
+        saveOutfit(next);
+        applyOutfit(next);
+        overlay.querySelectorAll(`.outfit-swatch[data-part="${part}"]`).forEach(b => b.classList.toggle('is-on', b === btn));
+      });
+    });
+
+    $('outfit-close').addEventListener('click', () => { disposeOutfitPreview(); renderMainMenu(); });
+    $('outfit-back').addEventListener('click', () => { disposeOutfitPreview(); renderMainMenu(); });
+    $('outfit-reset').addEventListener('click', () => {
+      resetOutfit();
+      renderOutfit();
+    });
+
+    startOutfitPreview($('outfit-preview-canvas'));
+  }
+
   function renderMainMenu() {
     // Пробег заезда дописывается в счётчик выбранного мотоцикла и на выходе
     // в меню, и в аварии: оба пути ведут сюда.
     if (G.creditRunMileage) G.creditRunMileage();
     if (G.closeShopPreview) G.closeShopPreview();
+    disposeOutfitPreview();
     G.currentScreen = 'main';
     G.started = false;
     G.ended = false;
@@ -581,6 +765,7 @@ export function initUi() {
       actions: [
         button({ id: 'mm-start', variant: 'primary', icon: '▶', label: 'Начать заезд' }),
         button({ id: 'mm-shop', icon: '🛒', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
+        button({ id: 'mm-outfit', icon: '🧥', label: 'Экипировка' }),
         button({
           id: 'mm-settings',
           icon: '⚙',
@@ -601,6 +786,7 @@ export function initUi() {
 
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
+    $('mm-outfit').addEventListener('click', renderOutfit);
     $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
     $('mm-cam-settings').addEventListener('click', () => {
       G.renderCameraSettings(renderMainMenu);

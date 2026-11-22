@@ -18,6 +18,7 @@ import { initInput } from './input.js';
 import { initLighting } from './lighting.js';
 import { initLoop } from './loop.js';
 import { initMileage } from './mileage.js';
+import { initOutfit } from './outfit.js';
 import { initPedestrians } from './pedestrians.js';
 import { initPostFx } from './postfx.js';
 import { initRepair } from './repair.js';
@@ -59,6 +60,7 @@ initPedestrians();
 
 initTraffic();
 initBike();
+initOutfit();
 initShopPreview();
 initCamera();
 initPostFx();

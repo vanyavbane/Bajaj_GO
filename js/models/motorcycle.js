@@ -680,18 +680,81 @@ export function buildMotorcycle() {
   }
 
   /* ---------- гонщик ---------- */
-  const jacketMat = new THREE.MeshStandardMaterial({ color: 0x182232, roughness: 0.7 });
   const riderGroup = new THREE.Group();
   {
-    const torso = bx(riderGroup, jacketMat, 0.52, 0.64, 0.32, 0, 1.38, 0.05, -0.34, 0, 0, true);
-    torso.castShadow = true;
-    bx(riderGroup, G.accentMat, 0.54, 0.12, 0.34, 0, 1.42, 0.06, -0.34);
-    bx(riderGroup, G.tankMat, 0.36, 0.38, 0.4, 0, 1.78, -0.14, 0, 0, 0, true);
-    bx(riderGroup, G.M.glass, 0.38, 0.16, 0.22, 0, 1.79, -0.26);
+    const outfitParts = G.outfitParts || (G.outfitParts = {});
+    const helmetMat = outfitParts.helmetMat || (outfitParts.helmetMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.32, metalness: 0.18 }));
+    const visorMat = outfitParts.visorMat || (outfitParts.visorMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.72, envMapIntensity: 1.2 }));
+    const jacketMat = outfitParts.jacketMat || (outfitParts.jacketMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.72, metalness: 0.06 }));
+    const stripeMat = outfitParts.stripeMat || (outfitParts.stripeMat = new THREE.MeshStandardMaterial({ color: 0xd9363e, roughness: 0.45, metalness: 0.15 }));
+    const pantsMat = outfitParts.pantsMat || (outfitParts.pantsMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.78, metalness: 0.05 }));
+    const bootsMat = outfitParts.bootsMat || (outfitParts.bootsMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.62, metalness: 0.08 }));
+    const gloveMat = outfitParts.gloveMat || (outfitParts.gloveMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.85, metalness: 0.04 }));
+    const soleMat = outfitParts.soleMat || (outfitParts.soleMat = new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.95, metalness: 0.02 }));
+    const skinMat = outfitParts.skinMat || (outfitParts.skinMat = new THREE.MeshStandardMaterial({ color: 0xc49a7c, roughness: 0.8, metalness: 0.02 }));
+
+    const addMesh = (mat, geo, x, y, z, rx = 0, ry = 0, rz = 0, cast = true) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, rz);
+      if (cast) m.castShadow = true;
+      riderGroup.add(m);
+      return m;
+    };
+    const cap = (mat, r, len, x, y, z, rx = 0, ry = 0, rz = 0, cast = true) =>
+      addMesh(mat, new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 8), x, y, z, rx, ry, rz, cast);
+
+    // --- Шлем: скруглённый купол + визор + нижняя кромка ---
+    const helmet = new THREE.Group();
+    helmet.position.set(0, 1.79, -0.16);
+    helmet.rotation.x = -0.08;
+    riderGroup.add(helmet);
+    const domeGeo = new THREE.SphereGeometry(0.235, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62);
+    const dome = new THREE.Mesh(domeGeo, helmetMat);
+    dome.castShadow = true;
+    helmet.add(dome);
+    const shellGeo = new THREE.SphereGeometry(0.232, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.26);
+    const shell = new THREE.Mesh(shellGeo, helmetMat);
+    shell.castShadow = true;
+    helmet.add(shell);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.196, 0.022, 8, 20, Math.PI * 2), helmetMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = -0.13;
+    rim.castShadow = true;
+    helmet.add(rim);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.12), visorMat);
+    visor.position.set(0, -0.01, -0.19);
+    visor.rotation.x = -0.12;
+    helmet.add(visor);
+    const chin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.14), helmetMat);
+    chin.position.set(0, -0.15, -0.12);
+    chin.rotation.x = 0.22;
+    chin.castShadow = true;
+    helmet.add(chin);
+
+    // --- Куртка: корпус, плечи, воротник, манжеты, полоса ---
+    const torso = addMesh(jacketMat, new THREE.BoxGeometry(0.46, 0.56, 0.3), 0, 1.39, 0.03, -0.34);
+    torso.scale.set(1, 1, 1);
+    addMesh(jacketMat, new THREE.BoxGeometry(0.54, 0.14, 0.32), 0, 1.56, -0.03, -0.34); // плечи
+    addMesh(jacketMat, new THREE.BoxGeometry(0.24, 0.09, 0.24), 0, 1.64, -0.09, -0.34); // воротник
+    addMesh(stripeMat, new THREE.BoxGeometry(0.5, 0.085, 0.33), 0, 1.42, 0.03, -0.34); // полоса
+    addMesh(jacketMat, new THREE.BoxGeometry(0.4, 0.12, 0.28), 0, 1.17, 0.1, -0.34); // пояс
+
     for (const side of [-1, 1]) {
-      bx(riderGroup, jacketMat, 0.16, 0.16, 0.62, side * 0.34, 1.36, -0.34, 0.22, -side * 0.15, 0);
-      bx(riderGroup, G.M.mattePlastic, 0.18, 0.56, 0.22, side * 0.28, 0.72, 0.02, 0.35);
+      // Рука: плечо + предплечье + перчатка
+      cap(jacketMat, 0.075, 0.22, side * 0.33, 1.42, -0.12, 0.55, -side * 0.12, side * 0.18);
+      cap(jacketMat, 0.065, 0.24, side * 0.38, 1.28, -0.34, 1.05, -side * 0.08, side * 0.12);
+      addMesh(gloveMat, new THREE.BoxGeometry(0.11, 0.1, 0.16), side * 0.41, 1.2, -0.5, 0.95, 0, side * 0.08);
+
+      // Нога: бедро + голень + ботинок с подошвой
+      cap(pantsMat, 0.095, 0.24, side * 0.17, 0.97, 0.05, 0.32, 0, 0);
+      cap(pantsMat, 0.082, 0.24, side * 0.22, 0.72, 0.14, -0.08, 0, side * 0.05);
+      addMesh(bootsMat, new THREE.BoxGeometry(0.16, 0.16, 0.28), side * 0.24, 0.56, 0.1, 0);
+      addMesh(soleMat, new THREE.BoxGeometry(0.17, 0.05, 0.3), side * 0.24, 0.49, 0.11, 0);
     }
+
+    // Шея (небольшая, чтобы шлем не висел)
+    cap(skinMat, 0.07, 0.04, 0, 1.66, -0.08, -0.2, 0, 0, false);
   }
   G.bikeThirdPersonBody.add(riderGroup);
   G.bikeThirdPersonRider = riderGroup;
