@@ -1137,15 +1137,22 @@ sl-card.ach-shell::part(body){display:flex;flex-direction:column;flex:1;min-heig
 }
 
 /* Location editor */
-.le-panel{position:fixed;top:12px;right:12px;width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:1200;background:rgba(16,22,32,.94);color:#e8eef6;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);font:12px/1.35 system-ui,sans-serif;backdrop-filter:blur(6px)}
-.le-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.1);position:sticky;top:0;background:rgba(16,22,32,.96);z-index:1}
-.le-head b{font-size:13px}
-.le-x{background:none;border:0;color:#fff;font-size:20px;cursor:pointer;line-height:1;padding:0 2px}
+.le-root{position:fixed;inset:0;z-index:1200;pointer-events:none;font:12px/1.35 system-ui,sans-serif;color:#e8eef6}
+.le-ui{pointer-events:auto;background:rgba(16,22,32,.92);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.le-topbar{position:absolute;top:10px;left:10px;right:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-radius:12px}
+.le-topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.le-topbar-left b{font-size:14px;white-space:nowrap}
+.le-hint-inline{opacity:.7;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.le-topbar-right{display:flex;gap:8px}
+.le-sidebar{position:absolute;top:64px;right:10px;bottom:10px;width:min(380px,calc(100vw - 20px));overflow:auto;border-radius:12px}
 .le-sec{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
+.le-sec-title{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.75;margin-bottom:8px}
+.le-locs{display:flex;flex-wrap:wrap;gap:6px}
+.le-loc{font-size:11px;padding:5px 8px}
 .le-adds,.le-actions{display:flex;flex-wrap:wrap;gap:6px}
-.le-panel button{background:#243247;color:#e8eef6;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 8px;cursor:pointer;font:inherit}
-.le-panel button:hover{background:#2e405a}
-.le-panel button.danger{background:#4a2430;border-color:#7a3b4a}
+.le-root button,.le-ui button{background:#243247;color:#e8eef6;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 8px;cursor:pointer;font:inherit}
+.le-root button:hover,.le-ui button:hover{background:#2e405a}
+.le-root button.danger,.le-ui button.danger{background:#4a2430;border-color:#7a3b4a}
 .le-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
 .le-item{display:flex;justify-content:space-between;gap:8px;text-align:left;width:100%}
 .le-item small{opacity:.65;font-size:11px}
@@ -1159,3 +1166,4 @@ sl-card.ach-shell::part(body){display:flex;flex-direction:column;flex:1;min-heig
 .le-num span{opacity:.75}
 .le-num input{width:100%;background:#182233;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 6px;font:inherit}
 .le-empty,.le-hint{opacity:.72}
+@media (max-width: 700px){.le-sidebar{top:auto;left:10px;right:10px;bottom:10px;width:auto;max-height:45vh}.le-hint-inline{display:none}}

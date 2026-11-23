@@ -387,6 +387,15 @@ export function initLoop() {
     // чтобы оверлей успевал скрыться вместе с открытием меню.
     if (G.updateTilt) G.updateTilt(now);
 
+    // Редактор локаций: отдельный интерфейс, своя камера, симуляция не тикает.
+    if (G.locationEditorActive) {
+      if (G.setRainSound) G.setRainSound(0);
+      if (G.updateLocationEditor) G.updateLocationEditor(realDt, now);
+      const ecam = G.editorCamera || G.camera;
+      G.renderer.render(G.scene, ecam);
+      return;
+    }
+
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {
       if (G.setRainSound) G.setRainSound(0);
@@ -436,6 +445,11 @@ export function initLoop() {
   addEventListener('resize', () => {
     G.camera.aspect = innerWidth / innerHeight;
     G.camera.updateProjectionMatrix();
+    if (G.editorCamera && G.editorCamera.isPerspectiveCamera) {
+      G.editorCamera.aspect = innerWidth / innerHeight;
+      G.editorCamera.updateProjectionMatrix();
+    }
+    if (G.onEditorResize) G.onEditorResize(innerWidth, innerHeight);
     G.renderer.setSize(innerWidth, innerHeight);
     if (G.applyPostFxSize) G.applyPostFxSize();
   });

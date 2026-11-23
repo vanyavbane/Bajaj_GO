@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { G } from './state.js';
 
 const KEY = 'bajajgo.locationEditor.v1';
-
 const TYPES = [
   { id: 'box', label: 'Куб' },
   { id: 'cylinder', label: 'Цилиндр' },
@@ -12,19 +11,12 @@ const TYPES = [
 ];
 
 function uid() { return 'le_' + Math.random().toString(36).slice(2, 10); }
-
 function clamp(v, a, b) { v = Number(v); return Number.isFinite(v) ? Math.max(a, Math.min(b, v)) : a; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
 
 function defaultItem(type, pos) {
-  return {
-    id: uid(),
-    type,
-    x: pos.x, y: pos.y, z: pos.z,
-    ry: 0,
-    sx: 1, sy: 1, sz: 1,
-    color: '#7aa8c7',
-    label: ''
-  };
+  return { id: uid(), type, x: pos.x, y: pos.y, z: pos.z, ry: 0, sx: 1, sy: 1, sz: 1, color: '#7aa8c7', label: '' };
 }
 
 function makeMesh(item) {
@@ -67,12 +59,26 @@ export function initLocationEditor() {
   const group = new THREE.Group();
   group.name = 'location-editor';
   G.scene.add(group);
+  const byId = new Map();
 
-  const byId = new Map(); // id -> {item, obj}
+  // Editor camera / state
+  const editorCam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 4000);
+  editorCam.position.set(0, 180, 0);
+  editorCam.lookAt(0, 0, 0);
+  G.editorCamera = editorCam;
 
-  function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
-  }
+  let active = false;
+  let rootEl = null;
+  let camTarget = new THREE.Vector3(0, 0, 0);
+  let camHeight = 180;
+  let camYaw = 0;      // radians, around Y
+  let camPitch = -1.25; // looking down
+  let camDist = 0.01;  // for perspective top-down use height offset
+  let dragging = false;
+  let dragLast = null;
+  let keys = {};
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {} }
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
@@ -102,7 +108,7 @@ export function initLocationEditor() {
       byId.set(item.id, { item, obj });
     }
     syncSelectionVisual();
-    renderPanel();
+    renderUI();
   }
 
   function syncSelectionVisual() {
@@ -118,21 +124,12 @@ export function initLocationEditor() {
   }
 
   function selected() { return items.find(i => i.id === selectedId) || null; }
-
-  function select(id) {
-    selectedId = id;
-    syncSelectionVisual();
-    renderPanel();
-  }
+  function select(id) { selectedId = id; syncSelectionVisual(); renderUI(); }
 
   function addObject(type) {
-    const pos = { x: 0, y: 0, z: 0 };
-    if (G.bikeRoot) pos.x = G.bikeRoot.position.x, pos.y = G.bikeRoot.position.y, pos.z = G.bikeRoot.position.z;
-    // Немного впереди по курсу
-    const yaw = G.bikeRoot ? G.bikeRoot.rotation.y : 0;
-    pos.x += Math.sin(yaw) * 8;
-    pos.z += Math.cos(yaw) * 8;
-    const item = defaultItem(type, pos);
+    const p = camTarget.clone();
+    p.y = Math.max(0, p.y);
+    const item = defaultItem(type, { x: p.x, y: p.y, z: p.z });
     items.push(item);
     const obj = makeMesh(item);
     applyTransform(obj, item);
@@ -140,34 +137,24 @@ export function initLocationEditor() {
     group.add(obj);
     byId.set(item.id, { item, obj });
     selectedId = item.id;
-    save();
-    syncSelectionVisual();
-    renderPanel();
+    save(); syncSelectionVisual(); renderUI();
   }
 
   function updateSelected(patch) {
-    const item = selected();
-    if (!item) return;
+    const item = selected(); if (!item) return;
     Object.assign(item, patch);
     const entry = byId.get(item.id);
     if (entry) {
-      // color/type changes may require rebuild of mesh
-      if (patch.type && patch.type !== entry.obj.userData.type) { /* not used */ }
       if (patch.color !== undefined) {
-        entry.obj.traverse?.(n => {
-          if (n.isMesh && n.material && n.material.color) n.material.color.set(item.color);
-          if (n.userData?.isSign && n.userData.boardMat) n.userData.boardMat.color.set(item.color);
-        });
+        entry.obj.traverse?.(n => { if (n.isMesh && n.material && n.material.color) n.material.color.set(item.color); });
       }
       applyTransform(entry.obj, item);
     }
-    save();
-    renderPanel();
+    save(); renderUI();
   }
 
   function deleteSelected() {
-    const id = selectedId;
-    if (!id) return;
+    const id = selectedId; if (!id) return;
     const idx = items.findIndex(i => i.id === id);
     if (idx >= 0) items.splice(idx, 1);
     const entry = byId.get(id);
@@ -177,14 +164,11 @@ export function initLocationEditor() {
       byId.delete(id);
     }
     selectedId = items[idx]?.id || items[idx - 1]?.id || null;
-    save();
-    syncSelectionVisual();
-    renderPanel();
+    save(); syncSelectionVisual(); renderUI();
   }
 
   function duplicateSelected() {
-    const item = selected();
-    if (!item) return;
+    const item = selected(); if (!item) return;
     const copy = { ...item, id: uid(), x: item.x + 1.5, z: item.z + 1.5, label: item.label ? item.label + ' copy' : '' };
     items.push(copy);
     const obj = makeMesh(copy);
@@ -193,90 +177,7 @@ export function initLocationEditor() {
     group.add(obj);
     byId.set(copy.id, { item: copy, obj });
     selectedId = copy.id;
-    save();
-    syncSelectionVisual();
-    renderPanel();
-  }
-
-  // --- UI panel ---
-  let panelEl = null;
-
-  function closePanel() {
-    if (panelEl) { panelEl.remove(); panelEl = null; }
-  }
-
-  function renderPanel() {
-    if (!panelEl) return;
-    const sel = selected();
-    const listHtml = items.map(it => {
-      const on = it.id === selectedId;
-      return `<button class="le-item ${on ? 'is-on' : ''}" data-sel="${it.id}">${it.type}${it.label ? ' · ' + escapeHtml(it.label) : ''} <small>${it.x.toFixed(1)},${it.y.toFixed(1)},${it.z.toFixed(1)}</small></button>`;
-    }).join('');
-
-    const selHtml = sel ? `
-      <div class="le-sec">
-        <div class="le-row"><label>Тип</label><b>${sel.type}</b></div>
-        <div class="le-row"><label>Метка</label><input data-k="label" value="${escapeAttr(sel.label || '')}" maxlength="60"></div>
-        <div class="le-row"><label>Цвет</label><input data-k="color" type="color" value="${escapeAttr(sel.color || '#7aa8c7')}"></div>
-        <div class="le-grid">
-          ${numInput('X','x',sel.x,0.5)}${numInput('Y','y',sel.y,0.5)}${numInput('Z','z',sel.z,0.5)}
-          ${numInput('RotY','ry',sel.ry,0.1)}${numInput('SX','sx',sel.sx,0.1)}${numInput('SY','sy',sel.sy,0.1)}${numInput('SZ','sz',sel.sz,0.1)}
-        </div>
-        <div class="le-actions">
-          <button data-act="dup">Дублировать</button>
-          <button data-act="del" class="danger">Удалить</button>
-        </div>
-      </div>` : `<div class="le-sec le-empty">Нет выбранного объекта</div>`;
-
-    panelEl.innerHTML = `
-      <div class="le-head">
-        <b>Редактор локаций</b>
-        <button data-act="close" class="le-x">×</button>
-      </div>
-      <div class="le-sec">
-        <div class="le-adds">${TYPES.map(t => `<button data-add="${t.id}">+ ${t.label}</button>`).join('')}</div>
-      </div>
-      <div class="le-sec le-list">${listHtml || '<div class="le-empty">Объектов пока нет</div>'}</div>
-      ${selHtml}
-      <div class="le-sec le-actions">
-        <button data-act="export">Экспорт JSON</button>
-        <button data-act="import">Импорт JSON</button>
-        <button data-act="clear" class="danger">Очистить всё</button>
-      </div>
-      <div class="le-sec le-hint">Объекты сохраняются в localStorage и появляются в сцене.</div>
-    `;
-
-    bindPanel();
-  }
-
-  function numInput(label, k, v, step) {
-    return `<label class="le-num"><span>${label}</span><input data-k="${k}" type="number" step="${step}" value="${Number(v).toFixed(3)}"></label>`;
-  }
-
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function escapeAttr(s) { return escapeHtml(s); }
-
-  function bindPanel() {
-    if (!panelEl) return;
-    panelEl.querySelectorAll('[data-add]').forEach(btn => btn.addEventListener('click', () => addObject(btn.getAttribute('data-add'))));
-    panelEl.querySelectorAll('[data-sel]').forEach(btn => btn.addEventListener('click', () => select(btn.getAttribute('data-sel'))));
-    panelEl.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', () => {
-      const act = btn.getAttribute('data-act');
-      if (act === 'close') closePanel();
-      else if (act === 'del') deleteSelected();
-      else if (act === 'dup') duplicateSelected();
-      else if (act === 'clear') { if (confirm('Удалить все объекты редактора?')) { items = []; selectedId = null; rebuild(); save(); } }
-      else if (act === 'export') exportJson();
-      else if (act === 'import') importJson();
-    }));
-    panelEl.querySelectorAll('input[data-k]').forEach(inp => {
-      inp.addEventListener('change', () => {
-        const k = inp.getAttribute('data-k');
-        if (!k) return;
-        if (k === 'label' || k === 'color') updateSelected({ [k]: inp.value });
-        else updateSelected({ [k]: Number(inp.value) });
-      });
-    });
+    save(); syncSelectionVisual(); renderUI();
   }
 
   function exportJson() {
@@ -291,14 +192,11 @@ export function initLocationEditor() {
 
   function importJson() {
     const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
+    input.type = 'file'; input.accept = '.json,application/json';
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
+      const file = input.files?.[0]; if (!file) return;
       try {
-        const text = await file.text();
-        const raw = JSON.parse(text);
+        const raw = JSON.parse(await file.text());
         if (!Array.isArray(raw)) throw new Error('JSON должен быть массивом');
         items = raw.filter(x => x && typeof x === 'object').map(x => ({
           id: String(x.id || uid()),
@@ -310,25 +208,270 @@ export function initLocationEditor() {
           label: typeof x.label === 'string' ? x.label.slice(0, 60) : ''
         }));
         selectedId = items[0]?.id || null;
-        rebuild();
-        save();
+        rebuild(); save();
       } catch (e) { alert('Ошибка импорта: ' + (e?.message || e)); }
     };
     input.click();
   }
 
-  function openPanel() {
-    if (panelEl) { renderPanel(); return; }
-    panelEl = document.createElement('div');
-    panelEl.className = 'le-panel';
-    document.body.appendChild(panelEl);
-    renderPanel();
+  // --- Biome/location helpers ---
+  function findBiomeS(biomeId) {
+    const biomes = G.BIOMES || [];
+    const idx = biomes.findIndex(b => b.id === biomeId);
+    if (idx < 0) return G.playerS || 0;
+    // Scan forward from near player for a spot where this biome dominates
+    const start = Math.max(0, (G.playerS || 0) - 200);
+    for (let s = start; s < start + 12000; s += 40) {
+      if (G.biomeWeightsAtS) {
+        const w = G.biomeWeightsAtS(s);
+        let dom = 0, best = -1;
+        for (let i = 0; i < w.length; i++) if (w[i] > best) { best = w[i]; dom = i; }
+        if (dom === idx && best > 0.55) return s;
+      }
+    }
+    return G.playerS || 0;
+  }
+
+  function teleportToS(s) {
+    const pose = G.embedRoad ? G.embedRoad(s, 0) : null;
+    const x = pose ? pose.x : 0;
+    const z = pose ? pose.z : s;
+    camTarget.set(x, 0, z);
+  }
+
+  function teleportToBiome(id) {
+    teleportToS(findBiomeS(id));
+    renderUI();
+  }
+
+  function teleportToPlayer() {
+    if (G.bikeRoot) camTarget.set(G.bikeRoot.position.x, 0, G.bikeRoot.position.z);
+    else teleportToS(G.playerS || 0);
+    renderUI();
+  }
+
+  // --- Camera ---
+  function updateEditorCam() {
+    const h = clamp(camHeight, 20, 900);
+    camHeight = h;
+    const back = Math.cos(camPitch) * h * 0.35;
+    const up = Math.sin(-camPitch) * h;
+    const x = camTarget.x + Math.sin(camYaw) * back;
+    const z = camTarget.z + Math.cos(camYaw) * back;
+    editorCam.position.set(x, Math.max(15, up), z);
+    editorCam.lookAt(camTarget.x, 0, camTarget.z);
+  }
+
+  function onWheel(e) {
+    if (!active) return;
+    e.preventDefault();
+    camHeight = clamp(camHeight * (e.deltaY > 0 ? 1.08 : 0.92), 20, 900);
+  }
+
+  function onPointerDown(e) {
+    if (!active) return;
+    if (e.target.closest('.le-ui')) return;
+    dragging = true; dragLast = { x: e.clientX, y: e.clientY };
+  }
+  function onPointerMove(e) {
+    if (!dragging || !dragLast) return;
+    const dx = e.clientX - dragLast.x;
+    const dy = e.clientY - dragLast.y;
+    dragLast = { x: e.clientX, y: e.clientY };
+    const panScale = camHeight * 0.0022;
+    // pan in camera-local XZ
+    const cos = Math.cos(camYaw), sin = Math.sin(camYaw);
+    camTarget.x -= (dx * cos - dy * sin) * panScale;
+    camTarget.z -= (dx * sin + dy * cos) * panScale;
+  }
+  function onPointerUp() { dragging = false; dragLast = null; }
+  function onKeyDown(e) { keys[e.code] = true; }
+  function onKeyUp(e) { keys[e.code] = false; }
+
+  let editorS = G.playerS || 0;
+  function nearestSForPoint(x, z) {
+    // Грубый поиск ближайшего S вокруг editorS, затем уточнение.
+    let bestS = editorS, bestD = Infinity;
+    for (let s = editorS - 1200; s <= editorS + 1200; s += 80) {
+      const p = G.embedRoad ? G.embedRoad(s, 0) : null;
+      if (!p) continue;
+      const d = (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z);
+      if (d < bestD) { bestD = d; bestS = s; }
+    }
+    for (let s = bestS - 120; s <= bestS + 120; s += 10) {
+      const p = G.embedRoad ? G.embedRoad(s, 0) : null;
+      if (!p) continue;
+      const d = (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z);
+      if (d < bestD) { bestD = d; bestS = s; }
+    }
+    return bestS;
+  }
+
+  G.updateLocationEditor = (dt) => {
+    if (!active) return;
+    const speed = (camHeight * 0.8) * dt;
+    const cos = Math.cos(camYaw), sin = Math.sin(camYaw);
+    let mx = 0, mz = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) mz -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) mz += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+    if (mx || mz) {
+      camTarget.x += (mx * cos - mz * sin) * speed;
+      camTarget.z += (mx * sin + mz * cos) * speed;
+    }
+    if (keys['KeyQ']) camYaw -= dt * 1.2;
+    if (keys['KeyE']) camYaw += dt * 1.2;
+    if (keys['KeyR']) camHeight = clamp(camHeight - speed * 40, 20, 900);
+    if (keys['KeyF']) camHeight = clamp(camHeight + speed * 40, 20, 900);
+
+    editorS = nearestSForPoint(camTarget.x, camTarget.z);
+    const savedS = G.playerS;
+    G.playerS = editorS;
+    if (G.updateBiome) G.updateBiome(dt);
+    if (G.updateRoadSurface) G.updateRoadSurface(editorS);
+    if (G.updateAtmosphereAndTimeOfDay) G.updateAtmosphereAndTimeOfDay(0, editorS);
+    if (G.updateRoadside) G.updateRoadside();
+    if (G.updateMegaStructures) G.updateMegaStructures(dt);
+    if (G.updateForest) G.updateForest();
+    if (G.updateMountain) G.updateMountain();
+    if (G.updateEmbankment) G.updateEmbankment(dt);
+    G.playerS = savedS;
+
+    updateEditorCam();
+  };
+
+  G.onEditorResize = (w, h) => {
+    editorCam.aspect = w / h;
+    editorCam.updateProjectionMatrix();
+  };
+
+  // --- UI ---
+  function closeEditor() {
+    active = false;
+    G.locationEditorActive = false;
+    dragging = false; dragLast = null; keys = {};
+    window.removeEventListener('wheel', onWheel);
+    window.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    if (rootEl) { rootEl.remove(); rootEl = null; }
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = '';
+  }
+
+  function numInput(label, k, v, step) {
+    return `<label class="le-num"><span>${label}</span><input data-k="${k}" type="number" step="${step}" value="${Number(v).toFixed(3)}"></label>`;
+  }
+
+  function renderUI() {
+    if (!rootEl) return;
+    const sel = selected();
+    const biomes = (G.BIOMES || []).map(b => `<button class="le-loc ${''}" data-loc="${escapeAttr(b.id)}">${escapeHtml(b.name || b.id)}</button>`).join('');
+    const listHtml = items.map(it => {
+      const on = it.id === selectedId;
+      return `<button class="le-item ${on ? 'is-on' : ''}" data-sel="${it.id}">${it.type}${it.label ? ' · ' + escapeHtml(it.label) : ''} <small>${Number(it.x).toFixed(1)},${Number(it.y).toFixed(1)},${Number(it.z).toFixed(1)}</small></button>`;
+    }).join('');
+
+    const selHtml = sel ? `
+      <div class="le-sec">
+        <div class="le-sec-title">Выбранный объект</div>
+        <div class="le-row"><label>Тип</label><b>${sel.type}</b></div>
+        <div class="le-row"><label>Метка</label><input data-k="label" value="${escapeAttr(sel.label || '')}" maxlength="60"></div>
+        <div class="le-row"><label>Цвет</label><input data-k="color" type="color" value="${escapeAttr(sel.color || '#7aa8c7')}"></div>
+        <div class="le-grid">
+          ${numInput('X','x',sel.x,0.5)}${numInput('Y','y',sel.y,0.5)}${numInput('Z','z',sel.z,0.5)}
+          ${numInput('RotY','ry',sel.ry,0.1)}${numInput('SX','sx',sel.sx,0.1)}${numInput('SY','sy',sel.sy,0.1)}${numInput('SZ','sz',sel.sz,0.1)}
+        </div>
+        <div class="le-actions"><button data-act="dup">Дублировать</button><button data-act="del" class="danger">Удалить</button></div>
+      </div>` : `<div class="le-sec le-empty">Выберите объект в списке или добавьте новый.</div>`;
+
+    rootEl.innerHTML = `
+      <div class="le-ui le-topbar">
+        <div class="le-topbar-left">
+          <b>Редактор локаций</b>
+          <span class="le-hint-inline">ЛКМ-перетаскивание: панорама · Колесо: zoom · WASD/QE/RF: камера</span>
+        </div>
+        <div class="le-topbar-right">
+          <button data-act="to-player">К игроку</button>
+          <button data-act="close" class="danger">Закрыть</button>
+        </div>
+      </div>
+      <div class="le-ui le-sidebar">
+        <div class="le-sec">
+          <div class="le-sec-title">Локации</div>
+          <div class="le-locs">${biomes}</div>
+        </div>
+        <div class="le-sec">
+          <div class="le-sec-title">Добавить объект</div>
+          <div class="le-adds">${TYPES.map(t => `<button data-add="${t.id}">+ ${t.label}</button>`).join('')}</div>
+        </div>
+        <div class="le-sec">
+          <div class="le-sec-title">Объекты (${items.length})</div>
+          <div class="le-list">${listHtml || '<div class="le-empty">Объектов пока нет</div>'}</div>
+        </div>
+        ${selHtml}
+        <div class="le-sec le-actions">
+          <button data-act="export">Экспорт</button>
+          <button data-act="import">Импорт</button>
+          <button data-act="clear" class="danger">Очистить</button>
+        </div>
+      </div>
+    `;
+    bindUI();
+  }
+
+  function bindUI() {
+    if (!rootEl) return;
+    rootEl.querySelectorAll('[data-loc]').forEach(btn => btn.addEventListener('click', () => teleportToBiome(btn.getAttribute('data-loc'))));
+    rootEl.querySelectorAll('[data-add]').forEach(btn => btn.addEventListener('click', () => addObject(btn.getAttribute('data-add'))));
+    rootEl.querySelectorAll('[data-sel]').forEach(btn => btn.addEventListener('click', () => select(btn.getAttribute('data-sel'))));
+    rootEl.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', () => {
+      const act = btn.getAttribute('data-act');
+      if (act === 'close') closeEditor();
+      else if (act === 'to-player') teleportToPlayer();
+      else if (act === 'del') deleteSelected();
+      else if (act === 'dup') duplicateSelected();
+      else if (act === 'clear') { if (confirm('Удалить все объекты редактора?')) { items = []; selectedId = null; rebuild(); save(); } }
+      else if (act === 'export') exportJson();
+      else if (act === 'import') importJson();
+    }));
+    rootEl.querySelectorAll('input[data-k]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const k = inp.getAttribute('data-k');
+        if (!k) return;
+        if (k === 'label' || k === 'color') updateSelected({ [k]: inp.value });
+        else updateSelected({ [k]: Number(inp.value) });
+      });
+    });
+  }
+
+  function openEditor() {
+    if (active) { renderUI(); return; }
+    active = true;
+    G.locationEditorActive = true;
+    teleportToPlayer();
+    updateEditorCam();
+    rootEl = document.createElement('div');
+    rootEl.className = 'le-root';
+    document.body.appendChild(rootEl);
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = 'none';
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    renderUI();
   }
 
   load();
   rebuild();
 
-  G.openLocationEditor = () => openPanel();
-  G.closeLocationEditor = () => closePanel();
+  G.openLocationEditor = () => openEditor();
+  G.closeLocationEditor = () => closeEditor();
   G.getLocationEditorItems = () => items.map(i => ({ ...i }));
 }
