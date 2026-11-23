@@ -194,7 +194,8 @@ export function initUi() {
       ['lighting', 'Освещение'],
       ['camera', 'Вид камеры'],
       ['controls', 'Управление'],
-      ['sound', 'Звук']
+      ['sound', 'Звук'],
+      ['debug', 'Отладка']
     ];
 
     function settingsTabBody(tab) {
@@ -313,7 +314,7 @@ export function initUi() {
           ${note('Держите устройство перед собой, как при съёмке. Наклон влево/вправо — руление. Ось выбирается автоматически: в портрете — γ, в ландшафте — β; при повороте телефона калибровка обновляется сама.')}
         ` : ''}
       `;
-    } else {
+    } else if (tab === 'sound') {
       const muted = !!G.soundMuted;
       body = `
         ${inline('Звук', button({
@@ -326,18 +327,24 @@ export function initUi() {
           ? 'Беззвучный режим: прыжки, съезды, дождь, гром и очки не звучат.'
           : 'Игровые звуки включены. Беззвучный режим выключает их все сразу.')}
       `;
+    } else if (tab === 'debug') {
+      body = `
+        ${inline('Редактор локаций', button({ id: 'debug-open-loc-editor', variant: 'compact', icon: 'sliders', label: 'Открыть' }))}
+        ${note('Размещение и корректировка пользовательских объектов для отладки. Изменения сохраняются в localStorage.')}
+      `;
     }
     return body;
     }
 
     const settingsMarkup = () => panel(`
-        ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · УПРАВЛЕНИЕ · ЗВУК')}
+        ${heading('НАСТРОЙКИ', 'ГРАФИКА · ОСВЕЩЕНИЕ · КАМЕРА · УПРАВЛЕНИЕ · ЗВУК · ОТЛАДКА')}
         ${tabs(tabItems, tab, {
           graphics: settingsTabBody('graphics'),
           lighting: settingsTabBody('lighting'),
           camera: settingsTabBody('camera'),
           controls: settingsTabBody('controls'),
-          sound: settingsTabBody('sound')
+          sound: settingsTabBody('sound'),
+          debug: settingsTabBody('debug')
         })}
         ${button({ id: 'settings-back', icon: 'arrow-left', label: 'НАЗАД' })}
     `, { size: 'narrow' });
@@ -490,6 +497,17 @@ export function initUi() {
       soundMute.addEventListener('click', () => {
         if (G.setSoundMuted) G.setSoundMuted(!G.soundMuted);
         renderSettings('sound', from);
+      });
+    }
+
+    const openLocEditor = owned('debug-open-loc-editor');
+    if (openLocEditor) {
+      openLocEditor.addEventListener('click', () => {
+        if (G.openLocationEditor) {
+          if (G.leaveSettings) G.leaveSettings();
+          else { const ov = $('overlay'); if (ov) ov.style.display = 'none'; }
+          G.openLocationEditor({ from });
+        } else alert('Редактор локаций не загружен.');
       });
     }
 
