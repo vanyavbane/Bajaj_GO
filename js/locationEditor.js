@@ -1,43 +1,43 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { G } from './state.js';
 
 const KEY = 'bajajgo.locationEditor.v1';
 const TYPES = [
-  { id: 'box', label: 'РљСѓР±' },
-  { id: 'cylinder', label: 'Р¦РёР»РёРЅРґСЂ' },
-  { id: 'sphere', label: 'РЎС„РµСЂР°' },
-  { id: 'cone', label: 'РљРѕРЅСѓСЃ' },
-  { id: 'sign', label: 'Р—РЅР°Рє' },
+  { id: 'box', label: 'Куб' },
+  { id: 'cylinder', label: 'Цилиндр' },
+  { id: 'sphere', label: 'Сфера' },
+  { id: 'cone', label: 'Конус' },
+  { id: 'sign', label: 'Знак' },
 ];
 
 const CATALOG = [
-  { biome: 'РћР±С‰РµРµ', items: [
-    { id:'box', label:'РљСѓР±', color:'#7aa8c7' }, { id:'cylinder', label:'Р¦РёР»РёРЅРґСЂ', color:'#8b8f96' },
-    { id:'sphere', label:'РЎС„РµСЂР°', color:'#8cc3a8' }, { id:'cone', label:'РљРѕРЅСѓСЃ', color:'#d1b06a' }, { id:'sign', label:'Р—РЅР°Рє', color:'#2f7d4c' },
+  { biome: 'Общее', items: [
+    { id:'box', label:'Куб', color:'#7aa8c7' }, { id:'cylinder', label:'Цилиндр', color:'#8b8f96' },
+    { id:'sphere', label:'Сфера', color:'#8cc3a8' }, { id:'cone', label:'Конус', color:'#d1b06a' }, { id:'sign', label:'Знак', color:'#2f7d4c' },
   ]},
-  { biome: 'Р“РѕСЂРѕРґ', items: [
-    { id:'box', label:'Р”РѕРј/Р±Р»РѕРє', color:'#8f9399', sx:6, sy:10, sz:6 },
-    { id:'box', label:'РўСЂРѕС‚СѓР°СЂ/РїР»РёС‚Р°', color:'#9aa0a6', sx:4, sy:0.3, sz:4 },
-    { id:'cylinder', label:'Р¤РѕРЅР°СЂСЊ/СЃС‚РѕР»Р±', color:'#555b63', sx:0.4, sy:3.5, sz:0.4 },
+  { biome: 'Город', items: [
+    { id:'box', label:'Дом/блок', color:'#8f9399', sx:6, sy:10, sz:6 },
+    { id:'box', label:'Тротуар/плита', color:'#9aa0a6', sx:4, sy:0.3, sz:4 },
+    { id:'cylinder', label:'Фонарь/столб', color:'#555b63', sx:0.4, sy:3.5, sz:0.4 },
   ]},
-  { biome: 'Р›РµСЃ', items: [
-    { id:'cylinder', label:'РЎС‚РІРѕР»', color:'#6b4f2a', sx:0.5, sy:3, sz:0.5 },
-    { id:'sphere', label:'РљСЂРѕРЅР°', color:'#3f7a3f', sx:2.2, sy:2.2, sz:2.2 },
-    { id:'cone', label:'Р•Р»СЊ', color:'#2f6b3a', sx:1.8, sy:4, sz:1.8 },
+  { biome: 'Лес', items: [
+    { id:'cylinder', label:'Ствол', color:'#6b4f2a', sx:0.5, sy:3, sz:0.5 },
+    { id:'sphere', label:'Крона', color:'#3f7a3f', sx:2.2, sy:2.2, sz:2.2 },
+    { id:'cone', label:'Ель', color:'#2f6b3a', sx:1.8, sy:4, sz:1.8 },
   ]},
-  { biome: 'Р“РѕСЂС‹', items: [
-    { id:'cone', label:'РЎРєР°Р»Р°/РїРёРє', color:'#7b8088', sx:3, sy:4, sz:3 },
-    { id:'box', label:'Р‘Р°СЂСЊРµСЂ', color:'#8a8f96', sx:3, sy:0.8, sz:0.6 },
+  { biome: 'Горы', items: [
+    { id:'cone', label:'Скала/пик', color:'#7b8088', sx:3, sy:4, sz:3 },
+    { id:'box', label:'Барьер', color:'#8a8f96', sx:3, sy:0.8, sz:0.6 },
   ]},
-  { biome: 'РќР°Р±РµСЂРµР¶РЅР°СЏ', items: [
-    { id:'box', label:'Р¤Р°СЃР°Рґ', color:'#8fbfb2', sx:8, sy:12, sz:6 },
-    { id:'cylinder', label:'Р¤РѕРЅР°СЂСЊ', color:'#39424d', sx:0.35, sy:3, sz:0.35 },
-    { id:'box', label:'РџР°СЂР°РїРµС‚', color:'#7d8288', sx:4, sy:0.8, sz:0.5 },
+  { biome: 'Набережная', items: [
+    { id:'box', label:'Фасад', color:'#8fbfb2', sx:8, sy:12, sz:6 },
+    { id:'cylinder', label:'Фонарь', color:'#39424d', sx:0.35, sy:3, sz:0.35 },
+    { id:'box', label:'Парапет', color:'#7d8288', sx:4, sy:0.8, sz:0.5 },
   ]},
-  { biome: 'РњРљРђР”', items: [
-    { id:'box', label:'РЁСѓРјРѕРІРѕР№ СЌРєСЂР°РЅ', color:'#7f8790', sx:8, sy:3, sz:0.4 },
-    { id:'cylinder', label:'РњР°С‡С‚Р°', color:'#606873', sx:0.45, sy:4, sz:0.45 },
-    { id:'sign', label:'Р—РЅР°Рє/СѓРєР°Р·Р°С‚РµР»СЊ', color:'#1f6b3f' },
+  { biome: 'МКАД', items: [
+    { id:'box', label:'Шумовой экран', color:'#7f8790', sx:8, sy:3, sz:0.4 },
+    { id:'cylinder', label:'Мачта', color:'#606873', sx:0.45, sy:4, sz:0.45 },
+    { id:'sign', label:'Знак/указатель', color:'#1f6b3f' },
   ]},
 ];
 
@@ -206,7 +206,7 @@ export function initLocationEditor() {
       try {
         const parsed = JSON.parse(await file.text());
         const raw = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : null);
-        if (!raw) throw new Error('JSON РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РјР°СЃСЃРёРІРѕРј РёР»Рё {items:[...]}');
+        if (!raw) throw new Error('JSON должен быть массивом или {items:[...]}');
         items = raw.filter(x => x && typeof x === 'object').map(x => ({
           id: String(x.id || uid()), type: TYPES.some(t => t.id === x.type) ? x.type : 'box',
           x: Number(x.x) || 0, y: Number(x.y) || 0, z: Number(x.z) || 0,
@@ -216,7 +216,7 @@ export function initLocationEditor() {
           label: typeof x.label === 'string' ? x.label.slice(0, 60) : ''
         }));
         selectedId = items[0]?.id || null; rebuild(); save();
-      } catch (e) { alert('РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: ' + (e?.message || e)); }
+      } catch (e) { alert('Ошибка импорта: ' + (e?.message || e)); }
     };
     input.click();
   }
@@ -307,7 +307,7 @@ export function initLocationEditor() {
         }
         return;
       } else if (pick?.type === 'scene' && tool === 'select') {
-        if (confirm('РљР»РѕРЅРёСЂРѕРІР°С‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЃС†РµРЅС‹ РІ СЂРµРґР°РєС‚РѕСЂ РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ?')) cloneSceneObjectToEditor(pick.object, pick.hit.point);
+        if (confirm('Клонировать выбранный объект сцены в редактор для редактирования?')) cloneSceneObjectToEditor(pick.object, pick.hit.point);
         return;
       }
     }
@@ -407,7 +407,7 @@ export function initLocationEditor() {
     const biomes = (G.BIOMES || []).map(b => `<button class="le-loc" data-loc="${escapeAttr(b.id)}">${escapeHtml(b.name || b.id)}</button>`).join('');
     const listHtml = items.map(it => {
       const on = it.id === selectedId;
-      return `<button class="le-item ${on ? 'is-on' : ''}" data-sel="${it.id}">${escapeHtml(it.type)}${it.label ? ' В· ' + escapeHtml(it.label) : ''} <small>${Number(it.x).toFixed(1)},${Number(it.y).toFixed(1)},${Number(it.z).toFixed(1)}</small></button>`;
+      return `<button class="le-item ${on ? 'is-on' : ''}" data-sel="${it.id}">${escapeHtml(it.type)}${it.label ? ' · ' + escapeHtml(it.label) : ''} <small>${Number(it.x).toFixed(1)},${Number(it.y).toFixed(1)},${Number(it.z).toFixed(1)}</small></button>`;
     }).join('');
 
     const catalogHtml = CATALOG.map(cat => `
@@ -418,59 +418,59 @@ export function initLocationEditor() {
 
     const selHtml = sel ? `
       <div class="le-sec">
-        <div class="le-sec-title">Р’С‹Р±СЂР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚</div>
-        <div class="le-row"><label>РўРёРї</label><b>${escapeHtml(sel.type)}</b></div>
-        <div class="le-row"><label>РњРµС‚РєР°</label><input data-k="label" value="${escapeAttr(sel.label || '')}" maxlength="60"></div>
-        <div class="le-row"><label>Р¦РІРµС‚</label><input data-k="color" type="color" value="${escapeAttr(sel.color || '#7aa8c7')}"></div>
-        <div class="le-sec-title">РџРѕР·РёС†РёСЏ / РјР°СЃС€С‚Р°Р±</div>
+        <div class="le-sec-title">Выбранный объект</div>
+        <div class="le-row"><label>Тип</label><b>${escapeHtml(sel.type)}</b></div>
+        <div class="le-row"><label>Метка</label><input data-k="label" value="${escapeAttr(sel.label || '')}" maxlength="60"></div>
+        <div class="le-row"><label>Цвет</label><input data-k="color" type="color" value="${escapeAttr(sel.color || '#7aa8c7')}"></div>
+        <div class="le-sec-title">Позиция / масштаб</div>
         <div class="le-grid">
           ${numInput('X','x',sel.x,0.5)}${numInput('Y','y',sel.y,0.5)}${numInput('Z','z',sel.z,0.5)}
           ${numInput('SX','sx',sel.sx,0.1)}${numInput('SY','sy',sel.sy,0.1)}${numInput('SZ','sz',sel.sz,0.1)}
         </div>
-        <div class="le-sec-title">РџРѕРІРѕСЂРѕС‚ / РЅР°РєР»РѕРЅ (РіСЂР°РґСѓСЃС‹)</div>
+        <div class="le-sec-title">Поворот / наклон (градусы)</div>
         <div class="le-grid">
           ${numInput('RX','rxDeg',deg(sel.rx),1)}${numInput('RY','ryDeg',deg(sel.ry),1)}${numInput('RZ','rzDeg',deg(sel.rz),1)}
         </div>
-        <div class="le-actions"><button data-act="dup">Р”СѓР±Р»РёСЂРѕРІР°С‚СЊ</button><button data-act="del" class="danger">РЈРґР°Р»РёС‚СЊ</button></div>
-      </div>` : `<div class="le-sec le-empty">РќРµС‚ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РѕР±СЉРµРєС‚Р°. РљР»РёРє РїРѕ РѕР±СЉРµРєС‚Сѓ РІ СЃС†РµРЅРµ вЂ” РІС‹Р±СЂР°С‚СЊ; РєР»РёРє РїРѕ РѕР±СЉРµРєС‚Сѓ РёРіСЂС‹ вЂ” РїСЂРµРґР»РѕР¶РёС‚ РєР»РѕРЅРёСЂРѕРІР°С‚СЊ РІ СЂРµРґР°РєС‚РѕСЂ.</div>`;
+        <div class="le-actions"><button data-act="dup">Дублировать</button><button data-act="del" class="danger">Удалить</button></div>
+      </div>` : `<div class="le-sec le-empty">Нет выбранного объекта. Клик по объекту в сцене — выбрать; клик по объекту игры — предложит клонировать в редактор.</div>`;
 
     rootEl.innerHTML = `
       <div class="le-ui le-topbar">
         <div class="le-topbar-left">
-          <b>Р РµРґР°РєС‚РѕСЂ Р»РѕРєР°С†РёР№</b>
-          <span class="le-hint-inline">Р›РљРњ: РІС‹Р±СЂР°С‚СЊ/РїРµСЂРµРјРµСЃС‚РёС‚СЊ В· РџРµСЂРµС‚Р°СЃРєРёРІР°РЅРёРµ РїСѓСЃС‚РѕРіРѕ РјРµСЃС‚Р°: РїР°РЅРѕСЂР°РјР° В· РљРѕР»РµСЃРѕ: zoom В· R: РїРѕРІРѕСЂРѕС‚ Y +15В° В· WASD/QE: РєР°РјРµСЂР° В· C/F: РІС‹СЃРѕС‚Р°</span>
+          <b>Редактор локаций</b>
+          <span class="le-hint-inline">ЛКМ: выбрать/переместить · Перетаскивание пустого места: панорама · Колесо: zoom · R: поворот Y +15° · WASD/QE: камера · C/F: высота</span>
         </div>
         <div class="le-topbar-right">
-          <button data-act="to-player">Рљ РёРіСЂРѕРєСѓ</button>
-          <button data-act="export">Р­РєСЃРїРѕСЂС‚ JSON</button>
-          <button data-act="close" class="danger">Р—Р°РєСЂС‹С‚СЊ</button>
+          <button data-act="to-player">К игроку</button>
+          <button data-act="export">Экспорт JSON</button>
+          <button data-act="close" class="danger">Закрыть</button>
         </div>
       </div>
       <div class="le-ui le-sidebar">
         <div class="le-sec">
-          <div class="le-sec-title">РРЅСЃС‚СЂСѓРјРµРЅС‚С‹</div>
+          <div class="le-sec-title">Инструменты</div>
           <div class="le-tools">
-            ${['select','move','rotate','tilt'].map(t => `<button data-tool="${t}" class="${tool===t?'is-on':''}">${({select:'Р’С‹РґРµР»РёС‚СЊ',move:'РџРµСЂРµРјРµСЃС‚РёС‚СЊ',rotate:'РџРѕРІРµСЂРЅСѓС‚СЊ',tilt:'РќР°РєР»РѕРЅ'})[t]}</button>`).join('')}
+            ${['select','move','rotate','tilt'].map(t => `<button data-tool="${t}" class="${tool===t?'is-on':''}">${({select:'Выделить',move:'Переместить',rotate:'Повернуть',tilt:'Наклон'})[t]}</button>`).join('')}
           </div>
         </div>
         <div class="le-sec">
-          <div class="le-sec-title">Р›РѕРєР°С†РёРё</div>
+          <div class="le-sec-title">Локации</div>
           <div class="le-locs">${biomes}</div>
         </div>
         <div class="le-sec">
-          <div class="le-sec-title le-row-between"><span>РљР°С‚Р°Р»РѕРі РѕР±СЉРµРєС‚РѕРІ</span><button data-act="toggle-catalog">${catalogOpen?'РЎРєСЂС‹С‚СЊ':'РџРѕРєР°Р·Р°С‚СЊ'}</button></div>
-          ${catalogOpen ? `<div class="le-catalog">${catalogHtml}</div>` : `<div class="le-empty">РћР±СЉРµРєС‚С‹ РїРѕ РєР°С‚РµРіРѕСЂРёСЏРј Р±РёРѕРјРѕРІ вЂ” РґР»СЏ СЂСѓС‡РЅРѕРіРѕ РґРѕР±Р°РІР»РµРЅРёСЏ РЅР° РєР°СЂС‚Сѓ.</div>`}
+          <div class="le-sec-title le-row-between"><span>Каталог объектов</span><button data-act="toggle-catalog">${catalogOpen?'Скрыть':'Показать'}</button></div>
+          ${catalogOpen ? `<div class="le-catalog">${catalogHtml}</div>` : `<div class="le-empty">Объекты по категориям биомов — для ручного добавления на карту.</div>`}
         </div>
         <div class="le-sec">
-          <div class="le-sec-title">РћР±СЉРµРєС‚С‹ СЂРµРґР°РєС‚РѕСЂР° (${items.length})</div>
-          <div class="le-list">${listHtml || '<div class="le-empty">РџРѕРєР° РЅРµС‚ РѕР±СЉРµРєС‚РѕРІ</div>'}</div>
+          <div class="le-sec-title">Объекты редактора (${items.length})</div>
+          <div class="le-list">${listHtml || '<div class="le-empty">Пока нет объектов</div>'}</div>
         </div>
         ${selHtml}
         <div class="le-sec le-actions">
-          <button data-act="import">РРјРїРѕСЂС‚</button>
-          <button data-act="clear" class="danger">РћС‡РёСЃС‚РёС‚СЊ</button>
+          <button data-act="import">Импорт</button>
+          <button data-act="clear" class="danger">Очистить</button>
         </div>
-        <div class="le-sec le-hint">РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅСЏСЋС‚СЃСЏ РІ <code>localStorage</code> (<code>${KEY}</code>). Р§С‚РѕР±С‹ СЏ СѓРІРёРґРµР» РёР·РјРµРЅРµРЅРёСЏ, СЌРєСЃРїРѕСЂС‚РёСЂСѓР№ JSON Рё РїСЂРёС€Р»Рё С„Р°Р№Р»/СЃРѕРґРµСЂР¶РёРјРѕРµ.</div>
+        <div class="le-sec le-hint">Изменения сохраняются в <code>localStorage</code> (<code>${KEY}</code>). Чтобы я увидел изменения, экспортируй JSON и пришли файл/содержимое.</div>
       </div>
     `;
     bindUI();
@@ -493,7 +493,7 @@ export function initLocationEditor() {
       else if (act === 'to-player') teleportToPlayer();
       else if (act === 'del') deleteSelected();
       else if (act === 'dup') duplicateSelected();
-      else if (act === 'clear') { if (confirm('РЈРґР°Р»РёС‚СЊ РІСЃРµ РѕР±СЉРµРєС‚С‹ СЂРµРґР°РєС‚РѕСЂР°?')) { items = []; selectedId = null; rebuild(); save(); } }
+      else if (act === 'clear') { if (confirm('Удалить все объекты редактора?')) { items = []; selectedId = null; rebuild(); save(); } }
       else if (act === 'export') exportJson();
       else if (act === 'import') importJson();
       else if (act === 'toggle-catalog') { catalogOpen = !catalogOpen; renderUI(); }
