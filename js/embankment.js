@@ -96,9 +96,37 @@ export function initEmbankment() {
     }, 1, 1);
   }
 
+  function facadeWindowEmissiveTexture(wins) {
+    return G.createCanvasTexture(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, w, h);
+      const cols = 4, rows = wins;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cw = (w - 40) / cols;
+          const ch = (h - 70) / rows;
+          const x = 20 + c * cw + cw * 0.18;
+          const y = 34 + r * ch + ch * 0.16;
+          const ww = cw * 0.64;
+          const wh = ch * 0.62;
+          // Не все окна горят — детерминированный паттерн.
+          const lit = ((r * 7 + c * 13) % 5) !== 0;
+          if (!lit) continue;
+          ctx.fillStyle = '#ffd978';
+          ctx.fillRect(x + 2, y + 2, ww - 4, wh - 4);
+          // Тёплый отблеск в раме.
+          ctx.fillStyle = 'rgba(255,220,140,0.35)';
+          ctx.fillRect(x - 2, y - 2, ww + 4, wh + 4);
+        }
+      }
+    }, 1, 1);
+  }
+
   const texTurq = facadeTexture('#8fbfb2', '#e8f0ea', 5);
   const texBeige = facadeTexture('#d9c69c', '#f2e8d4', 5);
   const texYellow = facadeTexture('#e0d0a0', '#f6efdd', 4);
+  const winEmissive5 = facadeWindowEmissiveTexture(5);
+  const winEmissive4 = facadeWindowEmissiveTexture(4);
 
   const waterTex = G.createCanvasTexture(256, 256, (ctx, w, h) => {
     ctx.fillStyle = '#1d3a5c';
@@ -132,9 +160,9 @@ export function initEmbankment() {
   /* ---------- Материалы ---------- */
   const M = (color, extra) => new THREE.MeshLambertMaterial(Object.assign({ color, flatShading: true, transparent: true }, extra));
   const mats = {
-    turq: new THREE.MeshLambertMaterial({ map: texTurq, transparent: true }),
-    beige: new THREE.MeshLambertMaterial({ map: texBeige, transparent: true }),
-    yellow: new THREE.MeshLambertMaterial({ map: texYellow, transparent: true }),
+    turq: new THREE.MeshLambertMaterial({ map: texTurq, emissive: new THREE.Color(0xffc96b), emissiveMap: winEmissive5, emissiveIntensity: 0, transparent: true }),
+    beige: new THREE.MeshLambertMaterial({ map: texBeige, emissive: new THREE.Color(0xffc96b), emissiveMap: winEmissive5, emissiveIntensity: 0, transparent: true }),
+    yellow: new THREE.MeshLambertMaterial({ map: texYellow, emissive: new THREE.Color(0xffc96b), emissiveMap: winEmissive4, emissiveIntensity: 0, transparent: true }),
     granite: M(0x7d8288),
     graniteDark: M(0x5f646a),
     cobble: new THREE.MeshLambertMaterial({ map: cobbleTex, transparent: true }),
@@ -405,6 +433,12 @@ export function initEmbankment() {
     const w = EMBANKMENT_INDEX >= 0 ? (G.biomeWeightsAtS(G.playerS)[EMBANKMENT_INDEX] || 0) : 0;
     const op = smooth01((w - 0.02) / 0.4);
     for (const m of fadeMats) m.opacity = op;
+    const nightGlow = G.inTunnel ? 1 : (G.nightGlow || 0);
+    const winGlow = nightGlow * op;
+    mats.turq.emissiveIntensity = winGlow * 1.15;
+    mats.beige.emissiveIntensity = winGlow * 1.15;
+    mats.yellow.emissiveIntensity = winGlow * 1.15;
+    mats.lampGlow.emissiveIntensity = (0.25 + 0.9 * nightGlow) * op;
     const visible = op > 0.02;
     for (const pool of Object.values(pools)) pool.visible = visible && pool.count > 0;
     river.visible = visible;
