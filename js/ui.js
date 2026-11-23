@@ -1065,6 +1065,22 @@ export function initUi() {
     const previewEff = G.getBikeEffectiveStats(previewBike.id);
     const previewColor = bikePaint(previewBike, G.customColors);
     const previewMissing = shortfall(previewBike.price, G.bankPoints);
+    const previewLockReason = bikeLockReason(previewBike);
+
+    const pStats = G.getPlayerStats ? G.getPlayerStats() : {};
+    const courierLevel = Array.isArray(pStats.achievements)
+      ? (pStats.achievements.find(a => a.id === 'courier')?.level || 0)
+      : 0;
+    function bikeLockReason(bike) {
+      if (!bike) return '';
+      if (bike.id === 'dominar1000' && (Number(pStats.maxSpeedKmh) || 0) < 175) {
+        return 'Достигните 175 км/ч для разблокировки';
+      }
+      if (bike.id === 'qute_yura' && courierLevel < 4) {
+        return 'Достигните 4 уровня «Успешный курьер»';
+      }
+      return '';
+    }
 
     /* ---------- левая колонка: компактные строки ---------- */
 
@@ -1073,16 +1089,18 @@ export function initUi() {
       const selected = G.selectedBikeId === b.id;
       const previewing = b.id === previewBike.id;
       const missing = shortfall(b.price, G.bankPoints);
+      const lockReason = bikeLockReason(b);
 
       let side = '';
       if (owned) side = tag('В гараже', 'good');
+      else if (lockReason) side = tag('Закрыт', 'warn');
       else if (b.price === 0) side = tag('Бесплатно');
       else if (missing <= 0) side = tag(rubles(b.price), 'warm');
       else side = tag(`не хватает ${rubles(missing)}`, 'warn');
       const mark = selected ? tag('Выбран', 'good') : '';
       const face = previewing ? 'variant="primary"' : 'variant="neutral" outline';
 
-      return `<li><sl-button ${face} class="shop-row" data-preview="${b.id}"${previewing ? ' aria-current="true"' : ''}>
+      return `<li><sl-button ${face} class="shop-row${lockReason ? ' is-locked-bike' : ''}" data-preview="${b.id}"${previewing ? ' aria-current="true"' : ''}>
         <span class="shop-row-main"><b>${b.name}</b><small>${b.typeLabel}</small></span>
         <span slot="suffix" class="shop-row-side">${side}${mark}</span>
       </sl-button></li>`;
@@ -1111,9 +1129,14 @@ export function initUi() {
     } else if (previewOwned) {
       actionBtn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { state: 'select', select: previewBike.id } });
       statusLine = `В гараже · тюнинг ${previewEff.installedCount}/${G.tuningCatalog.length}`;
+    } else if (previewLockReason) {
+      actionBtn = button({ variant: 'primary', label: 'НЕДОСТУПЕН', disabled: true, data: { state: 'locked' } });
+      missingLine = `<div class="shop-missing">${previewLockReason}</div>`;
+      statusLine = previewLockReason;
     } else if (previewBike.price === 0) {
       actionBtn = button({ variant: 'primary', label: 'ВЫБРАТЬ', data: { state: 'select', buy: previewBike.id } });
-      statusLine = 'Стартовый мотоцикл · бесплатно';    } else if (previewMissing <= 0) {
+      statusLine = 'Стартовый мотоцикл · бесплатно';
+    } else if (previewMissing <= 0) {
       actionBtn = button({
         variant: 'primary',
         label: `КУПИТЬ ЗА ${rubles(previewBike.price)}`,
@@ -1194,6 +1217,8 @@ export function initUi() {
       btn.addEventListener('click', () => {
         const bike = G.bikeCatalog.find(x => x.id === btn.dataset.buy);
         if (!bike || G.ownedBikes.includes(bike.id) || G.bankPoints < bike.price) return;
+        const lock = bikeLockReason(bike);
+        if (lock) return;
         G.bankPoints -= bike.price;
         G.ownedBikes.push(bike.id);
         G.selectedBikeId = bike.id;
