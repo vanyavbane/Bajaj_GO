@@ -1143,17 +1143,19 @@ sl-card.ach-shell::part(body){display:flex;flex-direction:column;flex:1;min-heig
 .le-topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
 .le-topbar-left b{font-size:14px;white-space:nowrap}
 .le-hint-inline{opacity:.7;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.le-topbar-right{display:flex;gap:8px}
-.le-sidebar{position:absolute;top:64px;right:10px;bottom:10px;width:min(380px,calc(100vw - 20px));overflow:auto;border-radius:12px}
+.le-topbar-right{display:flex;gap:8px;flex-wrap:wrap}
+.le-sidebar{position:absolute;top:64px;right:10px;bottom:10px;width:min(390px,calc(100vw - 20px));overflow:auto;border-radius:12px}
 .le-sec{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
 .le-sec-title{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.75;margin-bottom:8px}
-.le-locs{display:flex;flex-wrap:wrap;gap:6px}
-.le-loc{font-size:11px;padding:5px 8px}
-.le-adds,.le-actions{display:flex;flex-wrap:wrap;gap:6px}
+.le-row-between{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.le-tools,.le-locs,.le-adds,.le-actions{display:flex;flex-wrap:wrap;gap:6px}
+.le-tool.is-on,.le-root button.is-on,.le-ui button.is-on{outline:2px solid #6fb3ff;background:#2a3d58}
+.le-catalog{display:flex;flex-direction:column;gap:10px;max-height:260px;overflow:auto;padding-right:2px}
+.le-cat-name{font-size:11px;opacity:.72;margin-bottom:6px}
 .le-root button,.le-ui button{background:#243247;color:#e8eef6;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 8px;cursor:pointer;font:inherit}
 .le-root button:hover,.le-ui button:hover{background:#2e405a}
 .le-root button.danger,.le-ui button.danger{background:#4a2430;border-color:#7a3b4a}
-.le-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.le-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
 .le-item{display:flex;justify-content:space-between;gap:8px;text-align:left;width:100%}
 .le-item small{opacity:.65;font-size:11px}
 .le-item.is-on{outline:2px solid #6fb3ff;background:#2a3d58}
@@ -1166,4 +1168,5 @@ sl-card.ach-shell::part(body){display:flex;flex-direction:column;flex:1;min-heig
 .le-num span{opacity:.75}
 .le-num input{width:100%;background:#182233;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 6px;font:inherit}
 .le-empty,.le-hint{opacity:.72}
-@media (max-width: 700px){.le-sidebar{top:auto;left:10px;right:10px;bottom:10px;width:auto;max-height:45vh}.le-hint-inline{display:none}}
+.le-hint code{font-size:11px;background:rgba(255,255,255,.08);padding:1px 4px;border-radius:4px}
+@media (max-width: 700px){.le-sidebar{top:auto;left:10px;right:10px;bottom:10px;width:auto;max-height:46vh}.le-hint-inline{display:none}}
