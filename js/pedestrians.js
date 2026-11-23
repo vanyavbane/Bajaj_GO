@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roadsJoined } from './engine/fork.js';
 import { keepInWindow } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -58,10 +59,20 @@ export function initPedestrians() {
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
       const side = ped.side < 0 ? -1 : 1;
       const fullEdges = G.roadEdgesAt(ped.s);
+      const roadEdge = side < 0
+        ? fullEdges.leftOuter
+        : (roadsJoined(fullEdges) ? fullEdges.rightOuter : fullEdges.leftInner);
+      const spanRight = side < 0 ? fullEdges.leftInner : roadEdge;
+      const roadEdges = {
+        leftOuter: fullEdges.leftOuter,
+        leftInner: spanRight,
+        rightInner: spanRight,
+        rightOuter: spanRight,
+      };
       const fullOrigin = G.drivenFrameAt(ped.s).origin;
-      const pose = G.besidePose({ edges: fullEdges, origin: fullOrigin }, { side, gap: 1.15 + jitter * cw, inset: 0 });
+      const pose = G.besidePose({ edges: roadEdges, origin: fullOrigin }, { side, gap: 1.15 + jitter * cw, inset: 0 });
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
-      G.placeBeside(ped.group, ped.s, side < 0 ? fullEdges.leftOuter : fullEdges.rightOuter, pose.lateral, 0.11, facingYaw);
+      G.placeBeside(ped.group, ped.s, roadEdge, pose.lateral, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);
       if (ped.walkSpeed !== 0) {
         const swing = Math.sin(now * 0.008 + ped.phase) * 0.45;

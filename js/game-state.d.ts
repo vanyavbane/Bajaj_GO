@@ -362,6 +362,7 @@ export interface GameState {
   biomeOffsetM: number;
   biomeWeightsAtS: (s: number) => number[];
   cityWeightAtS: (s: number) => number;
+  embankmentWeightAtS: (s: number) => number;
   mkadWeightAtS: (s: number) => number;
   roadWidthAtS: (s: number) => number;
   splitAmountAtS: (s: number) => number;
@@ -395,6 +396,7 @@ export interface GameState {
   LANE_SPEEDS: number[];
   laneAssistTarget: number | null;
   updateBiome: (dt: number) => void;
+  updateGround: (playerS: number) => void;
   resetBiomeRun: () => void;
   persistBiome: () => void;
   biomeMenuMarkup: () => string;

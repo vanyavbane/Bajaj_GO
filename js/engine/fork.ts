@@ -48,14 +48,12 @@ export interface AsphaltEdges {
 }
 
 export interface ShoulderProfile {
-  /** Номинальная кромка откоса на прямой, метры от оси. Лента считает свою кромку от асфальта. */
-  lip: number;
   berm: number;
   far: number;
   lipY: number;
   bermY: number;
   farY: number;
-  /** Бордюр и тротуар. На вес города отодвигает откос от асфальта. */
+  /** Бордюр и тротуар шоссе. Съезд эту полосу не резервирует. */
   cityEdge: number;
 }
 
@@ -383,6 +381,14 @@ function exitGap(edges: AsphaltEdges): number {
   return edges.rightInner - edges.leftInner;
 }
 
+/**
+ * Одно полотно с шоссе: руль доходит до внешней кромки, на съезд ещё можно перестроиться.
+ * Картинка этой кромки и есть край дороги. После щели это уже две дороги.
+ */
+export function roadsJoined(edges: AsphaltEdges): boolean {
+  return exitWidth(edges) > RIDEABLE && exitGap(edges) < ATTACHED_GAP;
+}
+
 export function exitWidth(edges: AsphaltEdges): number {
   return Math.max(0, edges.rightOuter - edges.rightInner);
 }
@@ -468,6 +474,44 @@ export function outerRibbon(edges: AsphaltEdges, side: -1 | 1): { edge: number; 
   const half = (best.right - best.left) * 0.5;
   const center = (best.left + best.right) * 0.5;
   return { edge: side < 0 ? best.left : best.right, center, half };
+}
+
+/** Ближняя кромка асфальта. На полотне — кромка этой ленты со стороны точки. */
+export function groundEdge(edges: AsphaltEdges, lat: number): number {
+  const spans = asphaltSpans(edges);
+  if (spans.length === 0) return 0;
+  for (const span of spans) {
+    if (lat >= span.left && lat <= span.right) {
+      const mid = (span.left + span.right) * 0.5;
+      return lat >= mid ? span.right : span.left;
+    }
+  }
+  let edge = spans[0].left;
+  let best = Infinity;
+  for (const span of spans) {
+    const leftD = Math.abs(lat - span.left);
+    const rightD = Math.abs(lat - span.right);
+    if (leftD < best) {
+      best = leftD;
+      edge = span.left;
+    }
+    if (rightD < best) {
+      best = rightD;
+      edge = span.right;
+    }
+  }
+  return edge;
+}
+
+/**
+ * Ровная полоса снаружи кромки под бордюр и тротуар.
+ * Она есть только у кромок шоссе. Снаружи съезда откос начинается от асфальта.
+ */
+export function vergeAt(edges: AsphaltEdges, edge: number, cityOuter: number): number {
+  if (!(cityOuter > 0) || !Number.isFinite(edge)) return 0;
+  const roadRight = roadsJoined(edges) ? edges.rightOuter : edges.leftInner;
+  const onHighway = Math.abs(edge - edges.leftOuter) < 0.35 || Math.abs(edge - roadRight) < 0.35;
+  return onHighway ? cityOuter : 0;
 }
 
 /**
@@ -772,7 +816,8 @@ function exitRiderShift(logical: number, edges: AsphaltEdges): number {
  * Пока разъезд меньше ширины полотна, съезд ещё приклеен к правой кромке:
  * на него можно перестроиться. Дальше между ними открывается клин.
  * При нулевом разъезде правая лента имеет нулевую ширину.
- * Съезд — отдельная лента в одну полосу.
+ * Съезд — отдельная лента в одну сторону. Полотно шире городской полосы:
+ * на скорости в него заезжают не в нитку.
  */
 export function branchEdges(half: number, spread: number, seam = FORK_SEAM): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
@@ -786,7 +831,8 @@ export function branchEdges(half: number, spread: number, seam = FORK_SEAM): Asp
     };
   }
   const targetHalf = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
-  const grow = Math.min(1, open / Math.max(targetHalf, 0.001));
+  // Полная ширина набирается на коротком горле, пока съезд ещё приклеен к шоссе.
+  const grow = Math.min(1, open / 2.5);
   const exitHalf = targetHalf * grow;
   const exitCenter = road + open;
   let rightInner = exitCenter - exitHalf;
@@ -866,7 +912,21 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
 }
 
 /** Полуширина съезда: одна полоса в одну сторону. */
-export const EXIT_LANE_HALF = 2.375;
+export const EXIT_LANE_HALF = 4.5;
+
+/**
+ * Пешеходная дорога пересекает съезд.
+ * Переход — кусок тротуара от ближней кромки асфальта до дальней,
+ * а не разметка, снятая с ленты съезда.
+ * Пока съезд не набрал свою ширину или уже ушёл с тротуара, пересекать нечего.
+ */
+export function walkCrossing(edges: AsphaltEdges, walkOuter: number): { near: number; far: number } | null {
+  const width = edges.rightOuter - edges.rightInner;
+  if (!(width >= EXIT_LANE_HALF * 2 - 0.3)) return null;
+  const walk = Number.isFinite(walkOuter) ? Math.max(0, walkOuter) : 0;
+  if (edges.rightInner > edges.leftInner + walk) return null;
+  return { near: edges.rightInner, far: edges.rightOuter };
+}
 
 /** Откос начинается снаружи кромки асфальта и не складывается внутрь неё. */
 export function shoulderLats(asphaltAbs: number, cityOuter: number, shoulder: ShoulderProfile): ShoulderLats {

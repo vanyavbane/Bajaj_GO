@@ -134,7 +134,10 @@ export function initAtmosphere() {
   G.smoothstep = smoothstep;
 
   function updateAtmosphereAndTimeOfDay(dt, playerS) {
-    if (!G.started && !G.ended) {
+    // Отладочная страница держит сутки на месте: цикл и меню их не сдвигают.
+    if (typeof G.todHold === 'number') {
+      G.todCycleTime = G.todHold;
+    } else if (!G.started && !G.ended) {
       G.todCycleTime = 0.385;
     } else if (G.started && !G.ended) {
       G.todCycleTime = (G.todCycleTime + dt * 0.0085) % 1;

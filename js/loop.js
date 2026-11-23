@@ -424,6 +424,7 @@ export function initLoop() {
     if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
     G.updateRoadSurface(G.playerS);
+    if (G.updateGround) G.updateGround(G.playerS);
     G.updateAtmosphereAndTimeOfDay(dt, G.playerS);
     if (G.updateFrameLighting) G.updateFrameLighting();
     G.recycleRamps();

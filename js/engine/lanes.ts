@@ -53,8 +53,8 @@ type CarriageInput = {
   way?: RoadWay;
 };
 
-/** Съезд — одна попутная полоса. Ширина не берётся у биома: лента одна и та же на любой дороге. */
-export const EXIT_LANE_WIDTH = 4.75;
+/** Съезд — одна попутная полоса. Полотно шире полосы города, чтобы в него попасть на скорости. */
+export const EXIT_LANE_WIDTH = 9;
 
 export function exitCarriage(id: LaneLayout['id']): CarriageLayout {
   return {

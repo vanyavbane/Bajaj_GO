@@ -1,4 +1,4 @@
-import { asphaltSpan, branchEdges, goreSpan, groundAt, shellEdge } from './fork.ts';
+import { asphaltSpan, branchEdges, goreSpan, groundAt, roadsJoined, shellEdge, shoulderLats, vergeAt, walkCrossing } from './fork.ts';
 import { besidePose, spanEdges, stripSeam } from './roadside.ts';
 import type { AsphaltEdges, RoadsideFrame } from './roadside.ts';
 
@@ -78,5 +78,23 @@ assert(drivenRight.lateral === 39, 'объект справа стоит у то
 assert(!stripSeam(10, 12), 'кромка одной дороги ленту не рвёт');
 assert(stripSeam(10, 37), 'перескок на другую дорогу рвёт тротуар и откос');
 assert(!stripSeam(null, 37), 'первая точка ленты не рвётся');
+
+const nose = branchEdges(9.5, 0);
+assert(vergeAt(nose, nose.leftInner, 3.55) === 3.55, 'у шоссе откос начинается за тротуаром');
+const peeled = branchEdges(9.5, 8);
+assert(vergeAt(peeled, peeled.rightOuter, 3.55) === 0, 'справа от съезда запас тротуара не оставляет дыру');
+assert(vergeAt(peeled, peeled.leftOuter, 3.55) === 3.55, 'слева тротуар шоссе остаётся');
+const skirt = shoulderLats(4.5, vergeAt(peeled, peeled.rightOuter, 3.55), {
+  berm: 22, far: 95, lipY: 0.08, bermY: 1.8, farY: -4.5, cityEdge: 3.55,
+});
+assert(Math.abs(skirt.lip - 4.5) < 0.01, 'откос съезда начинается на кромке асфальта');
+assert(walkCrossing(branchEdges(9.5, 0), 3.55) == null, 'на носе тротуар ещё не пересекает съезд');
+const across = walkCrossing(branchEdges(9.5, 8), 3.55);
+const acrossEdges = branchEdges(9.5, 8);
+assert(across != null && across.near === acrossEdges.rightInner && across.far === acrossEdges.rightOuter, 'переход идёт от кромки съезда до кромки');
+assert(walkCrossing(branchEdges(9.5, 22), 3.55) == null, 'съезд, ушедший с тротуара, переход не держит');
+assert(roadsJoined(branchEdges(9.5, 3)), 'пока съезд приклеен, руль и картинка — одно полотно');
+assert(!roadsJoined(branchEdges(9.5, 22)), 'открытый клин уже две дороги');
+assert(!roadsJoined(branchEdges(9.5, 0)), 'на носе второй кромки нет');
 
 (globalThis as { console?: { log: (message: string) => void } }).console?.log('roadside contract ok');

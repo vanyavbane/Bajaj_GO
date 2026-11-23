@@ -5,7 +5,7 @@ import { carriageAt, carriageLat, drivenIsExit, laneMarks, ribbonApproachLat, ri
 import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt } from './engine/fork.js';
+import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
 import { decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -1058,15 +1058,15 @@ function buildVariant(biome, variant) {
   throw new Error(`Для биома «${id || biome}» нет слота: лес, горы и набережная строятся своими модулями, город — в roadside.js`);
 }
 
-/* Профиль откоса. Те же точки рисует лента в roadSurface.js через G.shoulder. */
+/* Профиль откоса. Те же точки рисует слой земли в ground.js через G.shoulder.
+ * Ровная бровка под тротуар есть только у шоссе. Съезд начинается от асфальта. */
 const SHOULDER = {
-  lip: 12.7,
   berm: 22,
   far: 95,
   lipY: 0.08,
   bermY: 1.8,
   farY: -4.5,
-  /** Бордюр 0.35 м + тротуар 3.2 м. Откос начинается за ними, по весу города. */
+  /** Бордюр 0.35 м + тротуар 3.2 м. Только кромки шоссе. */
   cityEdge: 3.55
 };
 
@@ -1081,7 +1081,8 @@ function groundOffset(lat, s) {
   const at = groundAt(frame.world, lat);
   const fromCenter = at.half;
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
-  const lats = shoulderLats(fromCenter, cityOuter, SHOULDER);
+  const apron = vergeAt(frame.world, groundEdge(frame.world, lat), cityOuter);
+  const lats = shoulderLats(fromCenter, apron, SHOULDER);
   const dist = at.dist;
   const side = lat >= 0 ? 1 : -1;
   // Набережная: справа пологая пешеходная зона и спуск к воде вместо откоса.

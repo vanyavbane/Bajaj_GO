@@ -27,6 +27,7 @@ import { initPostFx } from './postfx.js';
 import { initRepair } from './repair.js';
 import { initRoad } from './road.js';
 import { initRoadside } from './roadside.js';
+import { initGround } from './ground.js';
 import { initRoadSurface } from './roadSurface.js';
 import { initScene } from './scene.js';
 import { initShopPreview } from './shopPreview.js';
@@ -52,6 +53,7 @@ initEmbankment();
 initSky();
 initWeather();
 initRoadSurface();
+initGround();
 // Парк стоит на островке развилки: ему нужны и полотно, и материалы сцены.
 initForkPark();
 // Реклама стартует до roadside: модуль уже существует, а файлы догружаются

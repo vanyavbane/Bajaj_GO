@@ -372,6 +372,7 @@ export function initLocationEditor() {
     const savedS = G.playerS; G.playerS = editorS;
     if (G.updateBiome) G.updateBiome(0);
     if (G.updateRoadSurface) G.updateRoadSurface(editorS);
+    if (G.updateGround) G.updateGround(editorS);
     if (G.updateAtmosphereAndTimeOfDay) G.updateAtmosphereAndTimeOfDay(0, editorS);
     if (G.updateRoadside) G.updateRoadside();
     if (G.updateMegaStructures) G.updateMegaStructures(0);

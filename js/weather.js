@@ -239,7 +239,32 @@ export function initWeather() {
   G.resetWeather = resetWeather;
 
   /* ---------- Кадровое обновление ---------- */
+  function applyWeatherHold() {
+    const hold = G.weatherHold;
+    if (hold !== 'clear' && hold !== 'cloud' && hold !== 'rain') return false;
+    const rain = hold === 'rain';
+    state.raining = rain;
+    state.rain = rain ? 1 : 0;
+    state.cloud = hold === 'clear' ? 0 : 1;
+    state.wet = rain ? 1 : 0;
+    state.flashes.length = 0;
+    state.rainEndsAt = rain ? 1e12 : 0;
+    state.nextRainAt = rain ? 0 : 1e12;
+    flashT = -1;
+    thunderAt = -1;
+    if (flashEl) flashEl.style.opacity = '0';
+    return true;
+  }
+
   function updateWeather(dt) {
+    // Отладочная страница выбирает погоду сама и не отдаёт её расписанию.
+    if (applyWeatherHold()) {
+      updateDrops(dt);
+      applyRoadWetness();
+      if (G.setRainSound) G.setRainSound(state.rain * 0.055);
+      return;
+    }
+
     // Расписание и молнии живут только в активном заезде.
     if (G.started && !G.ended && !G.paused && !G.uiModal) {
       state.elapsed += dt;

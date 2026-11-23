@@ -5,7 +5,7 @@ import { G } from './state.js';
 
 /**
  * Та же сцена, что и заезд: полотно, разметка и мотоцикл.
- * Камера «оба» держит в кадре шоссе и съезд по мировым точкам.
+ * Страница открывается камерой на съезде, на текущем метре развилки.
  * Открывается как `/?fork=1`. Сохранение заезда не пишет.
  */
 
@@ -23,6 +23,19 @@ const STATIONS = [
   ['дорога', CLOCK.ownAfter + 40],
 ];
 
+/** Доли цикла суток, на которых палитра и солнце уже в этом состоянии. */
+const TOD = { day: 0.18, sunset: 0.46, night: 0.62 };
+const WEATHERS = [
+  ['clear', 'ясно'],
+  ['cloud', 'тучи'],
+  ['rain', 'дождь'],
+];
+const TIMES = [
+  ['day', 'день'],
+  ['sunset', 'закат'],
+  ['night', 'ночь'],
+];
+
 export function initForkLab() {
   const params = new URLSearchParams(location.search);
   if (!params.has('fork')) return;
@@ -32,6 +45,11 @@ export function initForkLab() {
   G.forkLabD = beside;
   G.forkLabLateral = 2.4;
   G.forkLabChoice = -1;
+  let weatherMode = 'clear';
+  let todMode = 'day';
+  G.weatherHold = weatherMode;
+  G.todHold = TOD[todMode];
+  G.todCycleTime = G.todHold;
 
   const withArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(), 3.4, WITH, 1.15, 0.6);
   const againstArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(), 3.4, AGAINST, 1.15, 0.6);
@@ -54,7 +72,7 @@ export function initForkLab() {
   const dir = new THREE.Vector3();
   let anchor = null;
   let started = false;
-  let cameraMode = 'both';
+  let cameraMode = 'exit';
   let seat = 'free';
 
   const stationButtons = STATIONS.map(([name, meters]) =>
@@ -62,55 +80,106 @@ export function initForkLab() {
 
   const panel = document.createElement('form');
   panel.id = 'fork-lab';
+  const weatherButtons = WEATHERS.map(([id, name]) =>
+    `<button type="button" data-weather="${id}"${id === weatherMode ? ' aria-pressed="true"' : ''}>${name}</button>`).join('');
+  const timeButtons = TIMES.map(([id, name]) =>
+    `<button type="button" data-tod="${id}"${id === todMode ? ' aria-pressed="true"' : ''}>${name}</button>`).join('');
+
   panel.innerHTML = `
     <p class="fork-lab-title">Развилка</p>
-    <div class="fork-lab-row" id="fork-stations">${stationButtons}</div>
-    <label>Метр от носа <output id="fork-d-out"></output>
-      <input id="fork-d" type="range" min="-40" max="940" value="${beside}" step="1">
-    </label>
-    <p class="fork-lab-caption">Камера</p>
-    <div class="fork-lab-row" role="group" aria-label="Камера">
-      <button type="button" data-cam="both" aria-pressed="true">оба</button>
-      <button type="button" data-cam="bike">байк</button>
-      <button type="button" data-cam="road">шоссе</button>
-      <button type="button" data-cam="exit">съезд</button>
-    </div>
-    <label>Метры от оси <output id="fork-lane-out"></output>
-      <input id="fork-lane" type="range" min="-12" max="80" value="2.4" step="0.5">
-    </label>
-    <div class="fork-lab-row" role="group" aria-label="Где байк">
-      <button type="button" data-seat="road">на шоссе</button>
-      <button type="button" data-seat="exit">на съезде</button>
-    </div>
-    <p class="fork-lab-caption">Решение</p>
-    <div class="fork-lab-row" role="group" aria-label="Решение">
-      <button type="button" data-choice="-1" aria-pressed="true">открыто</button>
-      <button type="button" data-choice="0">прямо</button>
-      <button type="button" data-choice="1">съезд</button>
-    </div>
-    <p id="fork-lab-read"></p>
-    <p class="fork-lab-key">Синие стрелки — по ходу. Жёлтые — встречные. Белая — нос мотоцикла.</p>
+    <section class="fork-lab-sec" aria-labelledby="fork-sec-sky">
+      <h2 id="fork-sec-sky">Атмосфера</h2>
+      <p class="fork-lab-note">Погода и время суток стоят, пока сами не смените.</p>
+      <p class="fork-lab-label">Погода</p>
+      <div class="fork-lab-row" role="group" aria-label="Погода">${weatherButtons}</div>
+      <p class="fork-lab-label">Время суток</p>
+      <div class="fork-lab-row" role="group" aria-label="Время суток">${timeButtons}</div>
+    </section>
+    <section class="fork-lab-sec" aria-labelledby="fork-sec-place">
+      <h2 id="fork-sec-place">Участок</h2>
+      <p class="fork-lab-note">Точка вдоль разъезда: от общего носа до отдельной дороги.</p>
+      <div class="fork-lab-row" id="fork-stations" role="group" aria-label="Участок">${stationButtons}</div>
+      <label>Метр от носа <output id="fork-d-out"></output>
+        <input id="fork-d" type="range" min="-40" max="940" value="${beside}" step="1">
+      </label>
+      <p class="fork-lab-status" id="fork-place-read"></p>
+    </section>
+    <section class="fork-lab-sec" aria-labelledby="fork-sec-bike">
+      <h2 id="fork-sec-bike">Байк</h2>
+      <p class="fork-lab-note">На какой ленте стоит мотоцикл.</p>
+      <div class="fork-lab-row" role="group" aria-label="Где байк">
+        <button type="button" data-seat="road">на шоссе</button>
+        <button type="button" data-seat="exit">на съезде</button>
+      </div>
+      <label>От оси шоссе <output id="fork-lane-out"></output>
+        <input id="fork-lane" type="range" min="-12" max="80" value="2.4" step="0.5">
+      </label>
+      <p class="fork-lab-status" id="fork-bike-read"></p>
+    </section>
+    <section class="fork-lab-sec" aria-labelledby="fork-sec-cam">
+      <h2 id="fork-sec-cam">Камера</h2>
+      <p class="fork-lab-note">Откуда смотреть на эту точку.</p>
+      <div class="fork-lab-row" role="group" aria-label="Камера">
+        <button type="button" data-cam="both">сверху</button>
+        <button type="button" data-cam="bike">байк</button>
+        <button type="button" data-cam="road">шоссе</button>
+        <button type="button" data-cam="exit" aria-pressed="true">съезд</button>
+      </div>
+      <p class="fork-lab-key">
+        <span><i class="swatch with"></i>по ходу</span>
+        <span><i class="swatch against"></i>встречные</span>
+        <span><i class="swatch bike"></i>нос байка</span>
+      </p>
+    </section>
+    <section class="fork-lab-sec" aria-labelledby="fork-sec-choice">
+      <h2 id="fork-sec-choice">Решение</h2>
+      <p class="fork-lab-note">Что уже выбрано. Прямо остаётся на шоссе.</p>
+      <div class="fork-lab-row" role="group" aria-label="Решение">
+        <button type="button" data-choice="-1" aria-pressed="true">не выбран</button>
+        <button type="button" data-choice="0">прямо</button>
+        <button type="button" data-choice="1">съезд</button>
+      </div>
+      <p class="fork-lab-status" id="fork-choice-read"></p>
+    </section>
   `;
   document.body.appendChild(panel);
+  const dock = document.getElementById('debug-dock');
+  if (dock) dock.hidden = true;
 
   const style = document.createElement('style');
   style.textContent = `
     #fork-lab {
-      position: fixed; z-index: 40; left: 12px; top: 12px; width: min(340px, calc(100vw - 24px));
+      position: fixed; z-index: 40; left: 12px; top: 12px; width: min(360px, calc(100vw - 24px));
       max-height: calc(100vh - 24px); overflow: auto;
-      margin: 0; padding: 12px; color: #e7ebf0; background: rgba(16, 20, 26, 0.88);
-      border: 1px solid #2c3440; border-radius: 8px; font: 14px/1.4 system-ui, sans-serif;
+      display: flex; flex-direction: column; gap: 8px;
+      margin: 0; padding: 10px; color: #e7ebf0; background: rgba(10, 14, 20, 0.92);
+      border: 1px solid #2c3440; border-radius: 2px; font: 13px/1.35 system-ui, sans-serif;
     }
-    #fork-lab label { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 8px 0; }
+    #fork-lab .fork-lab-title {
+      margin: 2px 2px 0; font-size: 11px; font-weight: 700; letter-spacing: .14em;
+      text-transform: uppercase; color: #8b97a8;
+    }
+    #fork-lab .fork-lab-sec {
+      margin: 0; padding: 8px 8px 10px;
+      border: 1px solid #2c3440; border-left: 2px solid #6fc3e8;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    #fork-lab h2 { margin: 0; font: 700 11px/1.2 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    #fork-lab .fork-lab-note { margin: 3px 0 0; color: #8b97a8; font-size: 12px; }
+    #fork-lab .fork-lab-label { margin: 8px 0 0; color: #b7c0cc; font-size: 12px; }
+    #fork-lab label { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; margin: 8px 0 0; }
     #fork-lab input { grid-column: 1 / -1; }
     #fork-lab output { font-variant-numeric: tabular-nums; }
-    #fork-lab .fork-lab-title { margin: 0 0 6px; }
-    #fork-lab .fork-lab-caption { margin: 8px 0 0; color: #b7c0cc; font-size: 12px; }
     #fork-lab .fork-lab-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    #fork-lab button { flex: 1 1 auto; min-width: 64px; background: #222833; color: inherit; border: 1px solid #3a4454; border-radius: 6px; padding: 8px 4px; }
+    #fork-lab button { flex: 1 1 auto; min-width: 64px; background: #222833; color: inherit; border: 1px solid #3a4454; border-radius: 2px; padding: 7px 4px; }
     #fork-lab button[aria-pressed="true"] { background: #2f6f4e; border-color: #3d8f64; }
-    #fork-lab-read { margin: 8px 0 0; white-space: pre-line; font-variant-numeric: tabular-nums; }
-    #fork-lab .fork-lab-key { margin: 6px 0 0; color: #b7c0cc; }
+    #fork-lab .fork-lab-status { margin: 8px 0 0; color: #d5dbe3; font-variant-numeric: tabular-nums; }
+    #fork-lab .fork-lab-key { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 0; color: #b7c0cc; font-size: 12px; }
+    #fork-lab .fork-lab-key span { display: inline-flex; align-items: center; gap: 6px; }
+    #fork-lab .swatch { width: 8px; height: 8px; }
+    #fork-lab .swatch.with { background: #7ec8ff; }
+    #fork-lab .swatch.against { background: #ffb15a; }
+    #fork-lab .swatch.bike { background: #f4f7fb; }
   `;
   document.head.appendChild(style);
 
@@ -158,6 +227,19 @@ export function initForkLab() {
       pressSeat(button.dataset.seat);
       return;
     }
+    if (button.dataset.weather) {
+      weatherMode = button.dataset.weather;
+      G.weatherHold = weatherMode;
+      press(button);
+      return;
+    }
+    if (button.dataset.tod && TOD[button.dataset.tod] != null) {
+      todMode = button.dataset.tod;
+      G.todHold = TOD[todMode];
+      G.todCycleTime = G.todHold;
+      press(button);
+      return;
+    }
     if (button.dataset.choice != null) {
       const choice = Number(button.dataset.choice);
       G.forkLabChoice = choice;
@@ -187,13 +269,6 @@ export function initForkLab() {
 
   function headingDelta(from, to) {
     return Math.atan2(from.fx * to.fz - from.fz * to.fx, from.fx * to.fx + from.fz * to.fz);
-  }
-
-  function viewRig(s) {
-    const here = spanAt(s);
-    const ahead = spanAt(s + 50);
-    const gap = Math.max(apart(here.main, here.exit), apart(ahead.main, ahead.exit));
-    return { here, ahead, gap };
   }
 
   /** Над текущим метром. Вперёд не заглядывает: нос смотрится на носе. */
@@ -288,24 +363,28 @@ export function initForkLab() {
     const lanes = lanesOf(G.riderLanesAt(s));
     const way = offsetDirection(lanes, G.laneOffset);
     const where = way === 'against' ? 'встречная' : 'попутная';
-    const choice = G.forkLabChoice === 1 ? 'съезд' : G.forkLabChoice === 0 ? 'прямо' : 'открыт';
     const lat = G.riderLatAt(s);
     const surface = G.drivenIsExitAt(s) ? 'на съезде' : 'на шоссе';
     const here = spanAt(s);
     const bike = G.embedRoad(s, lat);
     panel.querySelector('#fork-d-out').textContent = String(Math.round(G.forkLabD));
     panel.querySelector('#fork-lane-out').textContent = G.forkLabLateral.toFixed(1);
-    const lines = [
-      `${blockTitle(s)}, ${Math.round(G.forkLabD)} м. Выбор ${choice}.`,
-      `Байк ${surface}, ${lat.toFixed(1)} м, ${where}, ${courseWords(headingDelta(here.main, bike))}.`,
-    ];
+    const place = `${blockTitle(s)}, ${Math.round(G.forkLabD)} м от носа.`;
+    const placeRead = panel.querySelector('#fork-place-read');
     if (here.exit) {
       const world = apart(here.main, here.exit);
-      lines.push(`Съезд: полосы ${here.exitLat.toFixed(0)} м, мир ${world.toFixed(0)} м, ${courseWords(headingDelta(here.main, here.exit))}.`);
+      placeRead.textContent = `${place} Съезд в ${world.toFixed(0)} м, ${courseWords(headingDelta(here.main, here.exit))}.`;
     } else {
-      lines.push('Отдельного съезда в этой точке нет.');
+      placeRead.textContent = `${place} Съезд ещё не отделился.`;
     }
-    panel.querySelector('#fork-lab-read').textContent = lines.join('\n');
+    const choiceText = G.forkLabChoice === 1
+      ? 'Уходит на съезд.'
+      : G.forkLabChoice === 0
+        ? 'Едет прямо по шоссе.'
+        : 'Выбор ещё не сделан.';
+    panel.querySelector('#fork-bike-read').textContent =
+      `${surface}, ${lat.toFixed(1)} м от оси, ${where}, ${courseWords(headingDelta(here.main, bike))}.`;
+    panel.querySelector('#fork-choice-read').textContent = choiceText;
   }
 
   function parkBike() {
@@ -333,6 +412,22 @@ export function initForkLab() {
     readout();
   };
 
+  /** Съезд на этом метре. На носе ленты ещё нет: стоим на кромке, откуда она растёт. */
+  function exitStand(s) {
+    const here = spanAt(s);
+    if (here.exit) return here.exit;
+    return G.embedRoad(s, G.roadEdgesAt(s).leftInner);
+  }
+
+  /** Куда смотреть вдоль съезда. Метр страницы не сдвигается. */
+  function exitLook(s) {
+    for (let d = 24; d <= 90; d += 8) {
+      const sample = spanAt(s + d);
+      if (sample.exit) return sample.exit;
+    }
+    return exitStand(s + 60);
+  }
+
   function lookBetween(stand, look, back, height) {
     G.camera.position.set(stand.x - stand.fx * back, stand.y + height, stand.z - stand.fz * back);
     G.camera.up.set(0, 1, 0);
@@ -345,7 +440,6 @@ export function initForkLab() {
     follow(dt, isQute);
     if (!G.forkLabActive || !G.started) return;
     const s = G.playerS;
-    const rig = viewRig(s);
     const bikeLat = G.riderLatAt(s);
     const bike = G.embedRoad(s, bikeLat);
     if (G.camera.parent !== G.scene) G.scene.add(G.camera);
@@ -357,10 +451,10 @@ export function initForkLab() {
       G.camera.lookAt(spot.x + spot.fx * 10, spot.y, spot.z + spot.fz * 10);
     } else if (cameraMode === 'bike') {
       lookBetween(bike, G.embedRoad(s + 70, bikeLat), 16, 36);
-    } else if (cameraMode === 'exit' && rig.here.exit && rig.ahead.exit) {
-      lookBetween(rig.here.exit, rig.ahead.exit, 16, 36);
+    } else if (cameraMode === 'exit') {
+      lookBetween(exitStand(s), exitLook(s), 18, 22);
     } else {
-      lookBetween(rig.here.main, rig.ahead.main, 16, 36);
+      lookBetween(spanAt(s).main, spanAt(s + 50).main, 16, 36);
     }
     if (Math.abs(G.camera.fov - 68) > 0.1) {
       G.camera.fov = 68;
@@ -374,7 +468,8 @@ export function initForkLab() {
     G.updateAtmosphereAndTimeOfDay = (dt, s) => {
       atmosphere(dt, s);
       if (!G.forkLabActive || !G.scene.fog) return;
-      G.scene.fog.density = 0.00055;
+      const cloud = G.weather ? Math.min(1, Math.max(0, G.weather.cloud || 0)) : 0;
+      G.scene.fog.density = 0.00055 * (1 + 2.2 * cloud);
       const uniforms = G.skyDomeMat && G.skyDomeMat.uniforms;
       if (uniforms && uniforms.fogDensity) uniforms.fogDensity.value = G.scene.fog.density;
     };
