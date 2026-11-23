@@ -238,10 +238,28 @@ export function buildCockpits() {
   let quteCockpitWindshieldMesh = null;
   {
     const cabinRoofMat = new THREE.MeshStandardMaterial({ color: 0x1e2634, roughness: 0.85 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x2b3038, roughness: 0.92, metalness: 0.06 });
+    const carpetMat = new THREE.MeshStandardMaterial({ color: 0x191d23, roughness: 0.98 });
+    // Потолок и обивка.
     addBox(G.quteCockpitGroup, 1.56, 0.08, 1.38, cabinRoofMat, 0, 0.43, -0.52, 0.05, 0, 0);
-    // Коврик и пороги.
     addBox(G.quteCockpitGroup, 1.4, 0.02, 1.2, G.M.rubber, 0, 0.475, -0.56, 0.05, 0, 0);
+
+    // === Пол салона: реальная поверхность под камерой, видна от первого лица ===
+    addBox(G.quteCockpitGroup, 1.5, 0.05, 1.06, floorMat, 0, -0.5, -0.24);
+    // Коврик водителя с рёбрами.
+    addBox(G.quteCockpitGroup, 0.66, 0.012, 0.54, carpetMat, -0.06, -0.466, -0.36);
+    for (let i = 0; i < 5; i += 1) {
+      addBox(G.quteCockpitGroup, 0.6, 0.008, 0.016, G.M.mattePlastic, -0.06, -0.456, -0.16 - i * 0.085);
+    }
+    // Центральный тоннель и накладка.
+    addBox(G.quteCockpitGroup, 0.26, 0.1, 0.92, cabinRoofMat, 0, -0.42, -0.2);
+    addBox(G.quteCockpitGroup, 0.28, 0.018, 0.88, G.M.mattePlastic, 0, -0.36, -0.2);
+    // Передняя кромка пола у приборки.
+    addBox(G.quteCockpitGroup, 1.46, 0.04, 0.06, G.M.metalDark, 0, -0.46, -0.75);
     for (const side of [-1, 1]) {
+      // Боковые пороги пола.
+      addBox(G.quteCockpitGroup, 0.05, 0.11, 0.96, G.M.mattePlastic, side * 0.73, -0.42, -0.24);
+      addBox(G.quteCockpitGroup, 0.02, 0.015, 0.9, G.M.chrome, side * 0.7, -0.355, -0.24);
       addBox(G.quteCockpitGroup, 0.42, 0.11, 0.03, G.M.mattePlastic, side * 0.34, 0.33, -0.94, 0.18, 0, 0);
       addBox(G.quteCockpitGroup, 0.095, 0.88, 0.11, G.tankMat, side * 0.68, 0.02, -0.96, -0.22, 0, -side * 0.06);
       addBox(G.quteCockpitGroup, 0.03, 0.68, 0.92, G.M.glassWindow, side * 0.73, 0.02, -0.52);
@@ -256,8 +274,10 @@ export function buildCockpits() {
       addTorus(G.quteCockpitGroup, 0.045, 0.008, G.M.chrome, side * 0.725, -0.26, -0.8, 0, Math.PI / 2, 0);
       // Накладка на порог пола.
       addBox(G.quteCockpitGroup, 0.03, 0.02, 1.1, G.M.chrome, side * 0.55, 0.49, -0.56);
-      // Неон вдоль порогов (только Yura).
+      // Неон вдоль порогов и по полу (только Yura).
       addBox(G.quteYuraInteriorNeon, 0.018, 0.015, 1.0, G.M.neonMagenta, side * 0.5, 0.5, -0.56);
+      addBox(G.quteYuraInteriorNeon, 0.02, 0.012, 0.9, G.M.neonCyan, side * 0.62, -0.455, -0.26);
+      addBox(G.quteYuraInteriorNeon, 0.02, 0.012, 0.5, G.M.neonMagenta, side * 0.36, -0.455, -0.36);
     }
     addBox(G.quteCockpitGroup, 0.28, 0.08, 0.04, G.M.mattePlastic, 0, 0.28, -0.88);
     addBox(G.quteCockpitGroup, 0.25, 0.06, 0.015, G.M.glass, 0, 0.28, -0.86);
@@ -286,16 +306,29 @@ export function buildCockpits() {
     addBox(G.quteCockpitGroup, 0.33, 0.016, 0.015, G.M.metalDark, 0.42, -0.49, -0.79, 0, -0.2, 0);
     addBox(G.quteCockpitGroup, 0.05, 0.02, 0.02, G.M.chrome, 0.42, -0.4, -0.78, 0, -0.2, 0);
 
-    // Педали — ниже руля и ближе к камере, чтобы читались от первого лица.
+    // Педали на полу, под приборкой, но в зоне видимости камеры.
+    G.qutePedals = {};
     const pedals = [
-      { x: 0.32, w: 0.12, mat: G.M.mattePlastic },
-      { x: 0.12, w: 0.1, mat: G.M.mattePlastic },
-      { x: -0.22, w: 0.1, mat: G.M.mattePlastic }
+      { id: 'gas', x: 0.34, w: 0.12, h: 0.13 },
+      { id: 'brake', x: 0.12, w: 0.11, h: 0.14 },
+      { id: 'clutch', x: -0.18, w: 0.11, h: 0.12 }
     ];
     for (const p of pedals) {
-      addBox(G.quteCockpitGroup, p.w, 0.01, 0.05, G.M.metalDark, p.x, -0.34, -0.94, 0.5);
-      addBox(G.quteCockpitGroup, p.w, 0.08, 0.035, p.mat, p.x, -0.29, -0.92, 0.42);
-      addBox(G.quteCockpitGroup, p.w * 0.86, 0.05, 0.018, G.M.rubber, p.x, -0.28, -0.9, 0.42);
+      const pedal = new THREE.Group();
+      pedal.position.set(p.x, -0.47, -0.62);
+      // Кронштейн от пола.
+      addBox(pedal, 0.05, 0.16, 0.05, G.M.metalDark, 0, 0.08, 0.04, -0.25);
+      // Ось педали.
+      addCyl(pedal, 0.022, 0.022, 0.12, G.M.chrome, 0, 0.155, 0, 0, Math.PI / 2);
+      // Наклонная площадка с резиновой накладкой.
+      addBox(pedal, p.w, p.h, 0.035, G.M.mattePlastic, 0, 0.21, 0.02, 0.42);
+      addBox(pedal, p.w * 0.86, p.h * 0.72, 0.012, G.M.rubber, 0, 0.21, 0.048, 0.42);
+      for (let r = 0; r < 3; r += 1) {
+        addBox(pedal, p.w * 0.7, 0.012, 0.01, G.M.metalDark, 0, 0.17 + r * 0.04, 0.056, 0.42);
+      }
+      addBox(pedal, p.w + 0.014, 0.012, 0.042, G.M.chrome, 0, 0.21 + p.h / 2, 0.02, 0.42);
+      G.quteCockpitGroup.add(pedal);
+      G.qutePedals[p.id] = pedal;
     }
 
     const quteDashScreen = new THREE.Mesh(plane(0.52, 0.23), quteDashMat);

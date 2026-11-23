@@ -18,11 +18,14 @@ export function initCamera() {
 
   // Профили камеры от первого лица: отдельно для каждого мотоцикла.
   // { ns125: { fov: 100, height: 0.35 }, ... }
+  // У Qute низкая посадка: общая высота 0.35 ставит глаз почти под крышей,
+  // поэтому пол и педали выходят из кадра. Свой дефолт ниже.
   const CAM_PROFILE_KEY = 'bajajGO_camprofiles';
   const CAM_FOV_DEFAULT = 100;
   const CAM_FOV_MIN = 60;
   const CAM_FOV_MAX = 160;
   const CAM_HEIGHT_DEFAULT = 0.35;
+  const CAM_HEIGHT_QUTE = -0.02;
   const CAM_HEIGHT_MIN = -1.5;
   const CAM_HEIGHT_MAX = 1.5;
   let camProfiles = {};
@@ -36,9 +39,11 @@ export function initCamera() {
     const p = camProfiles[bikeId] || {};
     const fov = Number(p.fov);
     const height = Number(p.height);
+    const qute = typeof bikeId === 'string' && bikeId.toLowerCase().startsWith('qute');
+    const defaultHeight = qute ? CAM_HEIGHT_QUTE : CAM_HEIGHT_DEFAULT;
     return {
       fov: clamp(Number.isFinite(fov) ? fov : CAM_FOV_DEFAULT, CAM_FOV_MIN, CAM_FOV_MAX),
-      height: clamp(Number.isFinite(height) ? height : CAM_HEIGHT_DEFAULT, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
+      height: clamp(Number.isFinite(height) ? height : defaultHeight, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
     };
   }
   G.getCamProfile = getCamProfile;
