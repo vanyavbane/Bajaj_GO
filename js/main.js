@@ -20,6 +20,7 @@ import { initLighting } from './lighting.js';
 import { initLoop } from './loop.js';
 import { initMileage } from './mileage.js';
 import { initOutfit } from './outfit.js';
+import { initPlayerStats } from './playerStats.js';
 import { initPedestrians } from './pedestrians.js';
 import { initPostFx } from './postfx.js';
 import { initRepair } from './repair.js';
@@ -40,6 +41,7 @@ initMileage();
 
 // Биом задаёт профиль дороги до того, как его прочитают road/roadSurface.
 initBiome();
+initPlayerStats();
 initScene();
 initRoad();
 initBiomeWorld();

@@ -919,6 +919,7 @@ function exitLane(s, side) {
     // bankedOrderRun не даёт зачислить её повторно в конце заезда.
     G.bankPoints += reward;
     G.bankedOrderRun += reward;
+    if (G.trackSuccessfulDelivery) G.trackSuccessfulDelivery();
     activeOrder = null;
     deliveryMarker.visible = false;
     G.saveGarage();
@@ -1015,6 +1016,7 @@ function exitLane(s, side) {
       if (G.bankPoints < TOW_PRICE) return;
       G.bankPoints -= TOW_PRICE;
       G.saveGarage();
+      if (G.trackFuelTowCall) G.trackFuelTowCall();
       G.playerS += 120;
       G.laneOffset = exitLane(G.playerS, 1);
       G.lateralVelocity = 0;
@@ -1028,6 +1030,7 @@ function exitLane(s, side) {
     $('fuel-selftow').addEventListener('click', () => {
       G.limpMode = true;
       saveEco();
+      if (G.trackFuelTowRefusal) G.trackFuelTowRefusal();
       spawnEmergencyFuelExit();
       closeOverlayToGame();
       showEcoToast(`Режим «своим ходом»: максимум ${G.LIMP_MAX_SPEED} км/ч до АЗС`, true);
@@ -1075,6 +1078,7 @@ function exitLane(s, side) {
         wearM[part] = 0;
         G.saveGarage();
         saveEco();
+        if (G.trackStoRepair) G.trackStoRepair();
         renderServiceMenu(`${WEAR_LABELS[part]}: деталь заменена, ресурс восстановлен.`);
       });
     });

@@ -228,10 +228,13 @@ export function initLoop() {
     const prevS = G.playerS;
     G.playerS += forwardMeters;
     G.distance += (G.speed * dt) / 3600;
+    if (G.jumpState.airborne && G.trackFlightDistance) G.trackFlightDistance(forwardMeters);
+    if (G.trackMaxSpeed) G.trackMaxSpeed(G.speed);
 
     // 3.1 Экономика: расход топлива, износ деталей и таймер заказа
     G.tickEconomy(dt, forwardMeters);
     G.tickOrder(dt);
+    if (G.tickPlayerStats) G.tickPlayerStats(dt);
 
     // 4. ФИЗИКА ТРАМПЛИНОВ И ПРЫЖКОВ
     let surfaceRampHeight = 0;

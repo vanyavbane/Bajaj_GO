@@ -1363,9 +1363,11 @@ function commitSplit(zone, side, commitMeters) {
     dropRoadCache();
     return;
   }
+  if (side === 0 && G.trackForkLeftChoice) G.trackForkLeftChoice();
   G.visitCounts = G.visitCounts || ZERO_VISITS();
   G.visitCounts[chosen] = Math.min(2, (G.visitCounts[chosen] || 0) + 1);
   G.currentBiome = chosen;
+  if (G.trackBiomeVisitByIndex) G.trackBiomeVisitByIndex(chosen);
   updateBiomeChip(chosen);
   showBiomeBanner(BIOMES[chosen]);
   persistBiome();

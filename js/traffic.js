@@ -451,6 +451,7 @@ export function initTraffic() {
         car.nearMissAwarded = true;
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
+        if (G.trackMaxCombo) G.trackMaxCombo(G.comboCount);
         const pts = nearMissPoints(
           G.comboCount,
           ribbonDirection(G.drivenIsExitAt(G.playerS), offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset))

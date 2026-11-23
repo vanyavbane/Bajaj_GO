@@ -805,6 +805,8 @@ export function initUi() {
     // Пробег заезда дописывается в счётчик выбранного мотоцикла и на выходе
     // в меню, и в аварии: оба пути ведут сюда.
     if (G.creditRunMileage) G.creditRunMileage();
+    if (G.creditRunBiomeDistance) G.creditRunBiomeDistance();
+    if (G.savePlayerStats) G.savePlayerStats(true);
     if (G.closeShopPreview) G.closeShopPreview();
     disposeOutfitPreview();
     G.currentScreen = 'main';
@@ -1032,6 +1034,7 @@ export function initUi() {
         G.selectedBikeId = bike.id;
         G.shopPreviewId = bike.id;
         G.saveGarage();
+        if (G.trackBikeBought) G.trackBikeBought();
         G.syncVehicleAndCameraVisibility(true);
         renderShop();
       });
@@ -1076,6 +1079,8 @@ export function initUi() {
     // Кусок, не дописанный до аварии/выхода, зачисляем до обнуления заезда.
     if (G.creditRunMileage) G.creditRunMileage();
     if (G.resetRunMileage) G.resetRunMileage();
+    if (G.creditRunBiomeDistance) G.creditRunBiomeDistance();
+    if (G.resetRunPlayerStats) G.resetRunPlayerStats();
     resetRun(G, G.START_LANE);
     G.laneAssistTarget = null;
     if (G.updateBiome) G.updateBiome(0);
@@ -1153,6 +1158,8 @@ export function initUi() {
     if (navigator.vibrate) navigator.vibrate(40);
 
     if (G.creditRunMileage) G.creditRunMileage();
+    if (G.creditRunBiomeDistance) G.creditRunBiomeDistance();
+    if (G.savePlayerStats) G.savePlayerStats(true);
     const earned = creditRun(G.score, G.bankedOrderRun);
     G.bankPoints += earned;
     G.bankedOrderRun = 0;
