@@ -39,7 +39,7 @@ assert(BIOMES.every((biome) => biome.signs.length > 0 && biome.boards.length > 0
 assert(BIOMES[0]!.signs === BIOMES[4]!.signs && BIOMES[0]!.signArrows === 2, 'город и МКАД делят список съездов');
 assert(BIOMES[5]!.signs[0]?.title !== BIOMES[0]!.signs[0]?.title, 'набережная не берёт указатели города');
 assert(BIOME_NEXT.city[0] === 'mountain' && BIOME_NEXT.city[1] === 'mkad', 'город ведёт в горы и на МКАД');
-assert(BIOMES.filter((biome) => !biome.route).map((biome) => biome.id).join() === 'embankment', 'набережная записана, но не стоит на маршруте');
+assert(BIOMES.every((biome) => biome.route === true), 'все локации каталога стоят на маршруте');
 const decorOf = { city: 'roadside', field: 'slots', forest: 'forest', mountain: 'mountain', mkad: 'slots', embankment: 'embankment' } as const;
 for (const biome of BIOMES) {
   assert(biome.decor === decorOf[biome.id], `${biome.id}: декор записан в каталоге`);

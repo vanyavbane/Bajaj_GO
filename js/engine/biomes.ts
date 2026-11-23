@@ -382,7 +382,7 @@ export const BIOMES: readonly BiomeDef[] = [
     signArrows: 1,
     signs: [{ title: 'ДВОРЦОВАЯ НАБЕРЕЖНАЯ', subtitle: 'НЕВА · ПАРАПЕТ · ФОНАРИ' }],
     boards: [0, 2, 8],
-    route: false,
+    route: true,
     traffic: {
       count: 18,
       pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck'],
@@ -395,8 +395,8 @@ export const BIOME_NEXT: Record<BiomeId, readonly [BiomeId, BiomeId]> = {
   city: ['mountain', 'mkad'],
   field: ['city', 'forest'],
   forest: ['field', 'mountain'],
-  mountain: ['city', 'forest'],
-  mkad: ['city', 'field'],
+  mountain: ['embankment', 'forest'],
+  mkad: ['city', 'embankment'],
   embankment: ['city', 'field'],
 };
 
