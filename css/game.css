@@ -994,13 +994,18 @@ sl-card.outfit-shell::part(body){display:flex;flex-direction:column;flex:1;min-h
   margin-bottom:10px;
   padding:0;
 }
+.outfit-cat-ach{font-size:var(--sl-font-size-x-small);font-weight:var(--sl-font-weight-normal);opacity:.72;margin-left:6px}
 .outfit-swatches{display:flex;flex-wrap:wrap;gap:10px}
 .outfit-swatch{
+  position:relative;
   width:42px;height:42px;border-radius:999px;
   border:0;background:transparent;padding:3px;cursor:pointer;
 }
 .outfit-swatch span{display:block;width:100%;height:100%;border-radius:999px}
 .outfit-swatch.is-on{outline:2px solid currentColor;outline-offset:2px}
+.outfit-swatch.is-locked{cursor:not-allowed;opacity:.55;filter:saturate(.35)}
+.outfit-swatch.is-locked span{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.outfit-lock{position:absolute;inset:0;display:grid;place-items:center;font-size:14px;font-style:normal;line-height:1;text-shadow:0 1px 4px rgba(0,0,0,.7);pointer-events:none}
 .outfit-hint{margin:8px 0 16px}
 .outfit-preview-wrap{
   position:relative;flex:1;min-height:360px;

@@ -10,6 +10,37 @@ export const OUTFIT_COLORS = [
   { id: 'green',    name: 'Зелёный',    hex: '#2e7d32' },
 ];
 
+export const OUTFIT_ACH_MAP = {
+  helmet: 'mountaineer',
+  jacket: 'forester',
+  pants: 'petersburger',
+  boots: 'mkadWarrior',
+};
+
+export function getOutfitAchLevel(part) {
+  const achId = OUTFIT_ACH_MAP[part];
+  if (!achId || typeof G.getPlayerStats !== 'function') return null;
+  const stats = G.getPlayerStats();
+  const a = Array.isArray(stats?.achievements) ? stats.achievements.find(x => x.id === achId) : null;
+  return Math.max(0, Math.min(5, Number(a?.level) || 0));
+}
+
+export function isOutfitColorUnlocked(part, hex) {
+  const idx = OUTFIT_COLORS.findIndex(c => c.hex === sanitizeHex(hex, ''));
+  if (idx <= 0) return true; // black/default/unknown
+  const lvl = getOutfitAchLevel(part);
+  if (lvl == null) return true; // stats not ready - don't wipe
+  return lvl >= idx;
+}
+
+export function clampOutfitToAchievements(outfit) {
+  const o = normalizeOutfit(outfit);
+  for (const part of Object.keys(OUTFIT_DEFAULT)) {
+    if (!isOutfitColorUnlocked(part, o[part])) o[part] = OUTFIT_DEFAULT[part];
+  }
+  return o;
+}
+
 export const OUTFIT_DEFAULT = {
   helmet: '#111111',
   jacket: '#111111',
@@ -59,7 +90,9 @@ export function applyOutfit(outfit) {
 
 export function setOutfitPart(part, hex) {
   if (!Object.prototype.hasOwnProperty.call(OUTFIT_DEFAULT, part)) return G.outfit || { ...OUTFIT_DEFAULT };
-  const next = { ...(G.outfit || loadOutfit()), [part]: sanitizeHex(hex, OUTFIT_DEFAULT[part]) };
+  const safeHex = sanitizeHex(hex, OUTFIT_DEFAULT[part]);
+  if (!isOutfitColorUnlocked(part, safeHex)) return G.outfit || { ...OUTFIT_DEFAULT };
+  const next = { ...(G.outfit || loadOutfit()), [part]: safeHex };
   saveOutfit(next);
   return applyOutfit(next);
 }
@@ -71,12 +104,14 @@ export function resetOutfit() {
 }
 
 export function initOutfit() {
-  G.outfit = loadOutfit();
+  G.outfit = clampOutfitToAchievements(loadOutfit());
   G.applyOutfit = applyOutfit;
   G.setOutfitPart = setOutfitPart;
   G.resetOutfit = resetOutfit;
   G.OUTFIT_COLORS = OUTFIT_COLORS;
   G.OUTFIT_DEFAULT = OUTFIT_DEFAULT;
+  G.isOutfitColorUnlocked = isOutfitColorUnlocked;
+  G.clampOutfitToAchievements = clampOutfitToAchievements;
   // Apply if rider materials already exist (usually called after initBike).
   applyOutfit(G.outfit);
 }

@@ -4,7 +4,7 @@ import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
-import { OUTFIT_COLORS, OUTFIT_DEFAULT, applyOutfit, loadOutfit, normalizeOutfit, resetOutfit, saveOutfit } from './outfit.js';
+import { OUTFIT_COLORS, OUTFIT_DEFAULT, applyOutfit, clampOutfitToAchievements, loadOutfit, normalizeOutfit, resetOutfit, saveOutfit } from './outfit.js';
 import { buildDetailedRider } from './outfitRig.js';
 import { ACHIEVEMENT_DEFS, ACHIEVEMENT_THRESHOLDS } from './achievements.js';
 
@@ -820,12 +820,22 @@ export function initUi() {
     const overlay = $('overlay');
     overlay.style.display = 'flex';
     overlay.className = 'mode-outfit';
-    const current = normalizeOutfit(G.outfit || loadOutfit());
+    const rawOutfit = normalizeOutfit(G.outfit || loadOutfit());
+    const current = clampOutfitToAchievements(rawOutfit);
+    if (current.helmet !== rawOutfit.helmet || current.jacket !== rawOutfit.jacket || current.pants !== rawOutfit.pants || current.boots !== rawOutfit.boots) {
+      saveOutfit(current);
+      applyOutfit(current);
+    }
+    const achStats = G.getPlayerStats ? G.getPlayerStats() : {};
+    const achLevel = (id) => {
+      const a = Array.isArray(achStats.achievements) ? achStats.achievements.find(x => x.id === id) : null;
+      return Math.max(0, Math.min(5, Number(a?.level) || 0));
+    };
     const cats = [
-      { id: 'helmet', label: 'Шлем' },
-      { id: 'jacket', label: 'Куртка' },
-      { id: 'pants',  label: 'Штаны' },
-      { id: 'boots',  label: 'Ботинки' },
+      { id: 'helmet', label: 'Шлем',   ach: 'mountaineer',  achName: 'Горец' },
+      { id: 'jacket', label: 'Куртка', ach: 'forester',     achName: 'Лесник' },
+      { id: 'pants',  label: 'Штаны',  ach: 'petersburger', achName: 'Питербуржец' },
+      { id: 'boots',  label: 'Ботинки',ach: 'mkadWarrior',  achName: 'МКАД-ый воин' },
     ];
 
     overlay.innerHTML = `
@@ -842,20 +852,29 @@ export function initUi() {
         </header>
         <div class="outfit-body">
           <div class="outfit-left">
-            ${cats.map(cat => `
+            ${cats.map(cat => {
+              const lvl = achLevel(cat.ach);
+              return `
               <fieldset class="outfit-cat" data-cat="${cat.id}">
-                <legend class="outfit-cat-title">${cat.label}</legend>
+                <legend class="outfit-cat-title">${cat.label} <span class="outfit-cat-ach">${cat.achName}: ${achievementRoman(lvl)}</span></legend>
                 <div class="outfit-swatches">
-                  ${OUTFIT_COLORS.map(c => `
-                    <button class="outfit-swatch ${current[cat.id] === c.hex ? 'is-on' : ''}"
-                      data-part="${cat.id}" data-color="${c.hex}" title="${c.name}" aria-label="${c.name}">
+                  ${OUTFIT_COLORS.map((c, i) => {
+                    const unlocked = i === 0 || lvl >= i;
+                    const need = i === 0 ? '' : ` (ур. ${i} «${cat.achName}»)`;
+                    const title = unlocked ? c.name : `${c.name}${need}`;
+                    const on = current[cat.id] === c.hex;
+                    return `
+                    <button class="outfit-swatch ${on ? 'is-on' : ''} ${unlocked ? '' : 'is-locked'}"
+                      data-part="${cat.id}" data-color="${c.hex}" data-locked="${unlocked ? '0' : '1'}"
+                      title="${title}" aria-label="${title}" ${unlocked ? '' : 'disabled'}>
                       <span style="background:${c.hex}"></span>
-                    </button>
-                  `).join('')}
+                      ${unlocked ? '' : '<i class="outfit-lock" aria-hidden="true">🔒</i>'}
+                    </button>`;
+                  }).join('')}
                 </div>
-              </fieldset>
-            `).join('')}
-            <div class="outfit-hint ds-note">Изменения применяются сразу и сохраняются автоматически.</div>
+              </fieldset>`;
+            }).join('')}
+            <div class="outfit-hint ds-note">Цвета открываются уровнями достижений: Горец — шлем, Лесник — куртка, Питербуржец — штаны, МКАД-ый воин — ботинки.</div>
             ${button({ id: 'outfit-back', icon: 'arrow-left', label: 'Назад в меню' })}
           </div>
           <div class="outfit-right">
@@ -868,6 +887,7 @@ export function initUi() {
 
     overlay.querySelectorAll('.outfit-swatch').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (btn.getAttribute('data-locked') === '1') return;
         const part = btn.getAttribute('data-part');
         const color = btn.getAttribute('data-color');
         if (!part || !color) return;
