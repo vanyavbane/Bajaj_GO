@@ -13,8 +13,8 @@ import { G } from './state.js';
 
 export const EMBANKMENT_CFG = {
   CHUNK_M: 50,
-  VIEW_AHEAD: 560,
-  VIEW_BEHIND: 100,
+  VIEW_AHEAD: 1800,
+  VIEW_BEHIND: 260,
   FACADE_DEPTH: 15,
   FACADE_W: 16,
   FACADE_H_MIN: 16,
@@ -195,31 +195,31 @@ export function initEmbankment() {
 
   const unitBox = box(1, 1, 1);
   const pools = {
-    turq: instance(unitBox, mats.turq, 90, true),
-    beige: instance(unitBox, mats.beige, 90, true),
-    yellow: instance(unitBox, mats.yellow, 60, true),
-    parapet: instance(unitBox, mats.granite, 220, false),
-    ramp: instance(unitBox, mats.graniteDark, 120, false),
-    lampPole: instance(cylinder(0.09, 0.13, 1, 6), mats.iron, 160, true),
-    lampArm: instance(unitBox, mats.iron, 160, false),
-    lampHead: instance(new THREE.IcosahedronGeometry(0.28, 0), mats.lampGlow, 160, false),
-    signPole: instance(cylinder(0.05, 0.06, 1, 5), mats.iron, 80, false),
-    signBoard: instance(unitBox, mats.sign, 80, false),
-    pedTorso: instance(unitBox, mats.ped, 60, false),
-    pedHead: instance(unitBox, mats.pedHead, 60, false),
-    boatHull: instance(unitBox, mats.boat, 20, false),
-    boatCabin: instance(unitBox, mats.boatBlue, 20, false),
-    bank: instance(unitBox, mats.bank, 220, false)
+    turq: instance(unitBox, mats.turq, 280, true),
+    beige: instance(unitBox, mats.beige, 280, true),
+    yellow: instance(unitBox, mats.yellow, 180, true),
+    parapet: instance(unitBox, mats.granite, 700, false),
+    ramp: instance(unitBox, mats.graniteDark, 380, false),
+    lampPole: instance(cylinder(0.09, 0.13, 1, 6), mats.iron, 500, true),
+    lampArm: instance(unitBox, mats.iron, 500, false),
+    lampHead: instance(new THREE.IcosahedronGeometry(0.28, 0), mats.lampGlow, 500, false),
+    signPole: instance(cylinder(0.05, 0.06, 1, 5), mats.iron, 260, false),
+    signBoard: instance(unitBox, mats.sign, 260, false),
+    pedTorso: instance(unitBox, mats.ped, 180, false),
+    pedHead: instance(unitBox, mats.pedHead, 180, false),
+    boatHull: instance(unitBox, mats.boat, 60, false),
+    boatCabin: instance(unitBox, mats.boatBlue, 60, false),
+    bank: instance(unitBox, mats.bank, 700, false)
   };
 
   /* ---------- Река и брусчатка: два длинных полотна ---------- */
-  const river = new THREE.Mesh(new THREE.PlaneGeometry(220, 1200), mats.water);
+  const river = new THREE.Mesh(new THREE.PlaneGeometry(220, 4200), mats.water);
   river.rotation.x = -Math.PI / 2;
   river.position.y = CFG.WATER_Y;
   river.visible = false;
   G.scene.add(river);
 
-  const cobble = new THREE.Mesh(new THREE.PlaneGeometry(9, 1200), mats.cobble);
+  const cobble = new THREE.Mesh(new THREE.PlaneGeometry(9, 4200), mats.cobble);
   cobble.rotation.x = -Math.PI / 2;
   cobble.position.y = 0.06;
   cobble.visible = false;
@@ -432,22 +432,26 @@ export function initEmbankment() {
     }
     const w = EMBANKMENT_INDEX >= 0 ? (G.biomeWeightsAtS(G.playerS)[EMBANKMENT_INDEX] || 0) : 0;
     const op = smooth01((w - 0.02) / 0.4);
-    for (const m of fadeMats) m.opacity = op;
+    const visK = smooth01(w / 0.35);
+    for (const m of fadeMats) m.opacity = 1;
     const nightGlow = G.inTunnel ? 1 : (G.nightGlow || 0);
-    const winGlow = nightGlow * op;
+    const winGlow = nightGlow * visK;
     mats.turq.emissiveIntensity = winGlow * 1.15;
     mats.beige.emissiveIntensity = winGlow * 1.15;
     mats.yellow.emissiveIntensity = winGlow * 1.15;
-    mats.lampGlow.emissiveIntensity = (0.25 + 0.9 * nightGlow) * op;
-    const visible = op > 0.02;
+    mats.lampGlow.emissiveIntensity = (0.25 + 0.9 * nightGlow) * Math.max(op, visK);
+    const visible = visK > 0.001;
     for (const pool of Object.values(pools)) pool.visible = visible && pool.count > 0;
     river.visible = visible;
     cobble.visible = visible;
+    const flatScale = Math.max(0.001, visK);
+    river.scale.set(flatScale, 1, flatScale);
+    cobble.scale.set(flatScale, 1, flatScale);
 
     // Река и брусчатка едут с игроком: бесконечная лента вдоль дороги.
     if (visible) {
-      placeFlat(river, G.playerS + 260, CFG.RIVER_LAT, CFG.WATER_Y);
-      placeFlat(cobble, G.playerS + 260, 13, 0.06);
+      placeFlat(river, G.playerS + 800, CFG.RIVER_LAT, CFG.WATER_Y);
+      placeFlat(cobble, G.playerS + 800, 13, 0.06);
       waterTex.offset.x += dt * 0.012;
       waterTex.offset.y += dt * 0.02;
     }
@@ -463,7 +467,11 @@ export function initEmbankment() {
         g.visible = true;
       }
     }
-    for (const g of bridges) g.visible = visible;
+    const bridgeScale = Math.max(0.001, visK);
+    for (const g of bridges) {
+      g.visible = visible;
+      g.scale.setScalar(bridgeScale);
+    }
   }
 
   rebuild();
