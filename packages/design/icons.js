@@ -7,7 +7,7 @@ import { registerIconLibrary } from '@shoelace-style/shoelace/dist/utilities/ico
  * одиночный HTML игры должен открываться офлайн.
  */
 const files = import.meta.glob(
-  '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/{arrow-counterclockwise,arrow-down,arrow-left,arrow-left-right,arrow-right,arrow-up,arrows-fullscreen,backpack,bandaid,basket,basket2,buildings,bullseye,cake,cake2,camera-video,cart3,check-lg,circle,cup-hot,droplet,egg-fried,ev-front,exclamation-triangle-fill,flower1,fuel-pump,funnel,gear,geo-alt,hospital,hourglass-split,joystick,lightbulb,lightbulb-fill,lightning-charge,link-45deg,moisture,moon,pause-fill,play-fill,rocket-takeoff,screwdriver,signpost-split,sliders,stop-circle,sun,sunset,tools,train-front,tree,truck-front,vinyl,water,wind,wrench,x-lg}.svg',
+  '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/{arrow-counterclockwise,arrow-down,arrow-left,arrow-left-right,arrow-right,arrow-up,arrows-fullscreen,backpack,bandaid,basket,basket2,buildings,bullseye,cake,cake2,camera-video,cart3,check-lg,circle,cup-hot,droplet,egg-fried,ev-front,exclamation-triangle-fill,flower1,fuel-pump,funnel,gear,geo-alt,hospital,hourglass-split,joystick,lightbulb,lightbulb-fill,lightning-charge,link-45deg,moisture,moon,pause-fill,play-fill,rocket-takeoff,screwdriver,signpost-split,sliders,stop-circle,sun,sunset,tools,train-front,tree,trophy,truck-front,vinyl,water,wind,wrench,x-lg}.svg',
   { eager: true, query: '?raw', import: 'default' }
 );
 

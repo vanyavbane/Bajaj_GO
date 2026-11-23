@@ -1,5 +1,6 @@
 import { G } from './state.js';
 import { BIOMES } from './engine/biomes.js';
+import { evaluateAchievements } from './achievements.js';
 
 /**
  * Статистика игрока для будущих достижений.
@@ -72,10 +73,22 @@ export function initPlayerStats() {
     stats = normalizeStats(null);
   }
 
+  function snapshotStats() {
+    const base = {
+      ...stats,
+      biomeDistanceM: { ...stats.biomeDistanceM },
+      biomesVisited: { ...stats.biomesVisited },
+      totalBiomeDistanceM: BIOME_IDS.reduce((sum, id) => sum + (stats.biomeDistanceM[id] || 0), 0),
+      allBiomesVisited: BIOME_IDS.every((id) => !!stats.biomesVisited[id]),
+    };
+    base.achievements = evaluateAchievements(base);
+    return base;
+  }
+
   function saveStats(force = false) {
     if (!force && !dirty) return;
     try {
-      localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+      localStorage.setItem(STATS_KEY, JSON.stringify(snapshotStats()));
       dirty = false;
     } catch {
       // Приватный режим: статистика живёт до перезагрузки.
@@ -85,13 +98,7 @@ export function initPlayerStats() {
   function markDirty() { dirty = true; }
 
   function getPlayerStats() {
-    return {
-      ...stats,
-      biomeDistanceM: { ...stats.biomeDistanceM },
-      biomesVisited: { ...stats.biomesVisited },
-      totalBiomeDistanceM: BIOME_IDS.reduce((sum, id) => sum + (stats.biomeDistanceM[id] || 0), 0),
-      allBiomesVisited: BIOME_IDS.every((id) => !!stats.biomesVisited[id]),
-    };
+    return snapshotStats();
   }
 
   function trackMaxCombo(combo) {

@@ -6,6 +6,7 @@ import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
 import { OUTFIT_COLORS, OUTFIT_DEFAULT, applyOutfit, loadOutfit, normalizeOutfit, resetOutfit, saveOutfit } from './outfit.js';
 import { buildDetailedRider } from './outfitRig.js';
+import { ACHIEVEMENT_DEFS, ACHIEVEMENT_THRESHOLDS } from './achievements.js';
 
 function buildStamp() {
   const iso = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : '';
@@ -801,6 +802,82 @@ export function initUi() {
     startOutfitPreview($('outfit-preview-canvas'));
   }
 
+  function achievementRoman(level) {
+    return ['—', 'I', 'II', 'III', 'IV', 'V'][Math.max(0, Math.min(5, level))] || '—';
+  }
+
+  function achievementValueText(def, value) {
+    const v = Number(value) || 0;
+    if (def.unit === 'm') return runDistance(v / 1000);
+    if (def.unit === 'kmh') return `${Math.round(v)} км/ч`;
+    return `${Math.floor(v)}`;
+  }
+
+  function renderAchievements() {
+    G.currentScreen = 'achievements';
+    const overlay = $('overlay');
+    overlay.style.display = 'flex';
+    overlay.className = 'mode-achievements';
+
+    const stats = G.getPlayerStats ? G.getPlayerStats() : {};
+    const progress = Array.isArray(stats.achievements) ? stats.achievements : [];
+    const byId = new Map(progress.map((p) => [p.id, p]));
+
+    const tiles = ACHIEVEMENT_DEFS.map((def) => {
+      const p = byId.get(def.id) || { value: 0, level: 0, unlocked: false };
+      const thresholds = ACHIEVEMENT_THRESHOLDS[def.id] || [];
+      const level = def.type === 'boolean' ? (p.unlocked ? 1 : 0) : Math.max(0, Math.min(5, p.level || 0));
+      const unlocked = !!p.unlocked || level > 0;
+      const stateClass = def.type === 'boolean'
+        ? (p.unlocked ? 'is-done' : 'is-locked')
+        : (level >= 5 ? 'is-done' : (level > 0 ? 'is-progress' : 'is-locked'));
+
+      let progressHtml = '';
+      if (def.type === 'boolean') {
+        progressHtml = `<div class="ach-state">${p.unlocked ? 'Открыто' : 'Не открыто'}</div>`;
+      } else {
+        const cur = Number(p.value) || 0;
+        const next = level < 5 ? thresholds[level] : thresholds[4];
+        const prev = level > 0 ? thresholds[level - 1] : 0;
+        const pct = level >= 5 ? 100 : Math.max(0, Math.min(100, ((cur - prev) / Math.max(1, next - prev)) * 100));
+        const levelText = achievementRoman(level);
+        const valueText = level >= 5
+          ? `${achievementValueText(def, cur)} · макс.`
+          : `${achievementValueText(def, cur)} / ${achievementValueText(def, next)}`;
+        progressHtml = `
+          <div class="ach-level">Уровень ${levelText}</div>
+          <div class="ach-bar"><span style="width:${pct.toFixed(1)}%"></span></div>
+          <div class="ach-value">${valueText}</div>`;
+      }
+
+      return `
+        <article class="ach-tile ${stateClass}">
+          <div class="ach-icon" aria-hidden="true">${def.icon}</div>
+          <div class="ach-body">
+            <h3 class="ach-title">${def.title}</h3>
+            <p class="ach-desc">${def.description}</p>
+            ${progressHtml}
+          </div>
+        </article>`;
+    }).join('');
+
+    overlay.innerHTML = `
+      <sl-card class="ach-shell">
+        <header class="ach-head">
+          <div>
+            <p class="ds-kicker">ПРОГРЕСС</p>
+            <h2 class="ds-title">Достижения</h2>
+          </div>
+          ${iconButton({ id: 'ach-close', icon: 'x-lg', title: 'Закрыть' })}
+        </header>
+        <div class="ach-grid">${tiles}</div>
+        <footer class="ach-foot">${button({ id: 'ach-back', icon: 'arrow-left', label: 'Назад в меню' })}</footer>
+      </sl-card>`;
+
+    $('ach-close').addEventListener('click', renderMainMenu);
+    $('ach-back').addEventListener('click', renderMainMenu);
+  }
+
   function renderMainMenu() {
     // Пробег заезда дописывается в счётчик выбранного мотоцикла и на выходе
     // в меню, и в аварии: оба пути ведут сюда.
@@ -840,6 +917,7 @@ export function initUi() {
         button({ id: 'mm-start', variant: 'primary', icon: 'play-fill', label: 'Начать заезд' }),
         button({ id: 'mm-shop', icon: 'cart3', label: 'Магазин мотоциклов', trail: `${G.bikeCatalog.length} ед.` }),
         button({ id: 'mm-outfit', icon: 'backpack', label: 'Экипировка' }),
+        button({ id: 'mm-achievements', icon: 'trophy', label: 'Достижения' }),
         button({
           id: 'mm-settings',
           icon: 'gear',
@@ -861,6 +939,7 @@ export function initUi() {
     $('mm-start').addEventListener('click', startGame);
     $('mm-shop').addEventListener('click', renderShop);
     $('mm-outfit').addEventListener('click', renderOutfit);
+    $('mm-achievements').addEventListener('click', renderAchievements);
     $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
     $('mm-cam-settings').addEventListener('click', () => {
       G.renderCameraSettings(renderMainMenu);
