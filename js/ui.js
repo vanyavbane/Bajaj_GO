@@ -43,6 +43,92 @@ export function initUi() {
   let controlsNotice = '';
   let controlsInfo = '';
 
+  // --- Достижения: всплывающее уведомление ---
+  const achQueue = [];
+  let achShowing = false;
+  let achEl = null;
+
+  function ensureAchEl() {
+    if (achEl) return achEl;
+    achEl = document.createElement('div');
+    achEl.className = 'ach-toast';
+    achEl.innerHTML = `
+      <div class="ach-toast-rays" aria-hidden="true"></div>
+      <div class="ach-toast-flags" aria-hidden="true">
+        <svg class="ach-flag ach-flag-l" viewBox="0 0 64 96"><defs><pattern id="achChkL" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#fff"/><rect width="8" height="8" fill="#111"/><rect x="8" y="8" width="8" height="8" fill="#111"/></pattern></defs><rect x="6" y="8" width="6" height="84" fill="#d0d4dc"/><path d="M12 10 L58 22 L12 38 Z" fill="url(#achChkL)" stroke="#e8ecf2" stroke-width="2"/></svg>
+        <svg class="ach-flag ach-flag-r" viewBox="0 0 64 96"><defs><pattern id="achChkR" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#fff"/><rect width="8" height="8" fill="#111"/><rect x="8" y="8" width="8" height="8" fill="#111"/></pattern></defs><rect x="52" y="8" width="6" height="84" fill="#d0d4dc"/><path d="M52 10 L6 22 L52 38 Z" fill="url(#achChkR)" stroke="#e8ecf2" stroke-width="2"/></svg>
+      </div>
+      <div class="ach-toast-cup" aria-hidden="true">🏆</div>
+      <div class="ach-toast-title"></div>
+    `;
+    document.body.appendChild(achEl);
+    return achEl;
+  }
+
+  function playAchievementSound() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = G.audioCtx || new Ctx();
+      if (!G.audioCtx) G.audioCtx = ctx;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const now = ctx.currentTime;
+      // Короткая фанфара на "трубах": два слоя sawtooth с фильтром.
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+      notes.forEach((freq, i) => {
+        const t = now + i * 0.08;
+        const dur = i === notes.length - 1 ? 0.45 : 0.12;
+        const osc = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        osc.type = 'sawtooth';
+        osc2.type = 'square';
+        osc.frequency.value = freq;
+        osc2.frequency.value = freq * 1.002;
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1800, t);
+        filter.frequency.exponentialRampToValueAtTime(900, t + dur);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+        osc.start(t); osc2.start(t);
+        osc.stop(t + dur + 0.02); osc2.stop(t + dur + 0.02);
+      });
+    } catch {}
+  }
+
+  function showNextAchievement() {
+    if (achShowing || achQueue.length === 0) return;
+    achShowing = true;
+    const item = achQueue.shift();
+    const el = ensureAchEl();
+    el.querySelector('.ach-toast-title').textContent = item.title || 'Достижение';
+    el.classList.remove('is-in', 'is-out');
+    // перезапуск анимации
+    void el.offsetWidth; // eslint-disable-line no-unused-expressions
+    el.classList.add('is-in');
+    playAchievementSound();
+    clearTimeout(el._hideTimer);
+    clearTimeout(el._doneTimer);
+    el._hideTimer = setTimeout(() => {
+      el.classList.remove('is-in');
+      el.classList.add('is-out');
+    }, 2500);
+    el._doneTimer = setTimeout(() => {
+      el.classList.remove('is-out');
+      achShowing = false;
+      showNextAchievement();
+    }, 3100);
+  }
+
+  G.onAchievementUnlock = (item) => {
+    if (!item) return;
+    achQueue.push(item);
+    showNextAchievement();
+  };
+
   function saveVisual() {
     if (G.saveVisualSettings) G.saveVisualSettings();
   }

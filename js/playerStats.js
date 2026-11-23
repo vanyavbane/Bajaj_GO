@@ -1,6 +1,6 @@
 import { G } from './state.js';
 import { BIOMES } from './engine/biomes.js';
-import { evaluateAchievements } from './achievements.js';
+import { ACHIEVEMENT_DEFS, evaluateAchievements } from './achievements.js';
 
 /**
  * Статистика игрока для будущих достижений.
@@ -65,6 +65,8 @@ export function initPlayerStats() {
   let runBiomeCreditedM = 0;
   let saveTimer = 0;
   let dirty = false;
+  let ready = false;
+  const prevAch = new Map();
 
   try {
     const saved = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
@@ -95,7 +97,33 @@ export function initPlayerStats() {
     }
   }
 
-  function markDirty() { dirty = true; }
+  function seedPrevAchievements(list) {
+    prevAch.clear();
+    for (const a of list || []) prevAch.set(a.id, { level: a.level || 0, unlocked: !!a.unlocked });
+  }
+
+  function checkAchievementUnlocks() {
+    if (!ready) return;
+    const snap = snapshotStats();
+    const list = Array.isArray(snap.achievements) ? snap.achievements : [];
+    for (const a of list) {
+      const prev = prevAch.get(a.id) || { level: 0, unlocked: false };
+      const levelUp = (a.level || 0) > (prev.level || 0);
+      const unlockedNow = !!a.unlocked && !prev.unlocked;
+      if (levelUp || unlockedNow) {
+        const def = ACHIEVEMENT_DEFS.find((d) => d.id === a.id);
+        if (def && typeof G.onAchievementUnlock === 'function') {
+          G.onAchievementUnlock({ id: def.id, title: def.title, icon: def.icon, level: a.level || 0, unlocked: !!a.unlocked, type: def.type });
+        }
+      }
+      prevAch.set(a.id, { level: a.level || 0, unlocked: !!a.unlocked });
+    }
+  }
+
+  function markDirty() {
+    dirty = true;
+    checkAchievementUnlocks();
+  }
 
   function getPlayerStats() {
     return snapshotStats();
@@ -195,5 +223,7 @@ export function initPlayerStats() {
 
   // Засчитываем уже посещённые биомы из существующих счётчиков.
   trackAllBiomeVisitsFromCounts();
+  seedPrevAchievements(snapshotStats().achievements);
+  ready = true;
   saveStats(true);
 }
