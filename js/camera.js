@@ -419,7 +419,7 @@ export function initCamera() {
   function updateFollowCamera(dt, isQute) {
     const useThirdPersonCam = (!G.started || G.ended) || (G.cameraMode === 'third');
 
-    // Крен в поворотах: читаем кривизну профиля дороги, в горах усиливаем.
+    // Крен в поворотах: читаем кривизну профиля дороги.
     // Сглаживание ~6/с убирает дрожь и не даёт камере прыгать на стыках биомов.
     const driving = G.started && !G.ended;
     if (driving && G.runIntro > 0) G.runIntro = Math.max(0, G.runIntro - dt / 0.95);
@@ -430,12 +430,8 @@ export function initCamera() {
     }
     let targetRoll = 0;
     if (driving) {
-      const wts = G.biomeWeightsAtS(G.playerS);
-      const mountainIndex = G.BIOMES.findIndex((b) => b.id === 'mountain');
-      const mountainWeight = mountainIndex >= 0 ? wts[mountainIndex] : 0;
       const speedFactor = clamp(G.speed / 55, 0.3, 1.25);
-      targetRoll = clamp(-G.roadCurvature(G.playerS) * 5.5, -0.055, 0.055)
-        * speedFactor * (1 + 0.9 * mountainWeight);
+      targetRoll = clamp(-G.roadCurvature(G.playerS) * 5.5, -0.055, 0.055) * speedFactor;
     }
     camBiomeRoll += (targetRoll - camBiomeRoll) * Math.min(1, dt * 6);
 
