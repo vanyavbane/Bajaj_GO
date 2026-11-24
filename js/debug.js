@@ -104,6 +104,8 @@ export function initDebug() {
       paused: !!G.paused,
       ended: !!G.ended,
       speed: round(G.speed, 1),
+      gear: G.gearbox ? G.gearbox.gear : 0,
+      rpm: G.gearbox ? round(G.gearbox.rpmFrac, 3) : 0,
       playerS: round(G.playerS, 1),
       lane: round(G.laneOffset, 2),
       airborne: !!(G.jumpState && G.jumpState.airborne),

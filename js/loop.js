@@ -2,6 +2,7 @@ import { ribbonDirection } from './engine/carriage.js';
 import { exitEntryPull } from './engine/fork.js';
 import { defaultRunOffset, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
+import { stepGearbox } from './engine/gearbox.ts';
 import { meters, rubles } from './engine/money.js';
 import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
 import * as THREE from 'three';
@@ -551,6 +552,10 @@ export function initLoop() {
     G.frameStats = effStats;
     const isQute = effStats.isQute;
 
+    // Коробка крутит тахометр и двигатель: обороты растут внутри передачи
+    // и падают при переключении. Саму скорость она не меняет.
+    G.gearbox = stepGearbox(G.gearbox, G.speed, effStats.maxSpeed, realDt);
+
     if (G.audio) {
       G.audio.setGameplayActive(G.started && !G.ended);
       G.audio.update(realDt, {
@@ -558,6 +563,8 @@ export function initLoop() {
         maxSpeed: effStats.maxSpeed,
         gas: !!(G.keys.gas || (G.controlMode === 'stick' && G.stickGas)),
         night: !!G.todIsNight,
+        rpmFrac: G.gearbox.rpmFrac,
+        gear: G.gearbox.gear,
       });
     }
 

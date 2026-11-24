@@ -1,3 +1,5 @@
+import { initialGearboxState } from './engine/gearbox.ts';
+
 /** @type {import('./game-state.d.ts').GameState} */
 export const G = /** @type {import('./game-state.d.ts').GameState} */ ({
   $: (id) => {
@@ -7,4 +9,5 @@ export const G = /** @type {import('./game-state.d.ts').GameState} */ ({
   },
   clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
   lerp: (a, b, t) => a + (b - a) * t,
+  gearbox: initialGearboxState(),
 });

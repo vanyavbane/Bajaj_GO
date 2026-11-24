@@ -28,7 +28,7 @@
 | 1 | `js/catalog.js` | `bikeCatalog` (14 моделей, поля `variant` и `hudStyle`), `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `roadY` и `roadDY` делегируют высоту биома. `placeOnRoad` ставит объект через `embedRoad`. Кромку `ROAD_EDGE` считает биом |
-|   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money`, `lanes` (`readLanes` — единственное чтение полос, без городской подстановки), `audio` (настройки, кривые, файлы и лимиты SFX), `repair` |
+|   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money`, `lanes` (`readLanes` — единственное чтение полос, без городской подстановки), `audio` (настройки, кривые, файлы и лимиты SFX), `gearbox` (передачи и обороты), `repair` |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары и бордюры по весу города |
 |   | `js/ground.js` | слой земли: откос от кромки асфальта. Запас под тротуар только у шоссе |
@@ -45,7 +45,7 @@
 |   | `js/models/motorcycle.js` | меш мотоцикла, варианты Boxer и чоппер Avenger, райдер, детали тюнинга |
 |   | `js/models/qute.js` | Bajaj Qute и обвес Юры. Пропорции не менять |
 |   | `js/models/cockpit.js` | кокпит мотоцикла (Pulsar / Boxer / Avenger) и Qute от первого лица; кокпит — дочерний к `G.riderPivot`, а не к камере |
-| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` (цифровая и круглая `drawRoundDashboard`), профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота камеры), экран `renderCameraSettings` с живым предпросмотром |
+| 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` (цифровая и круглая `drawRoundDashboard`, тахометр и передача из `G.gearbox`), профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота камеры), экран `renderCameraSettings` с живым предпросмотром |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `biomeAtmos` (тинты и плотность по биомам), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
 |   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии; `G.updateWeather` / `G.resetWeather`, состояние `G.weather`; звук через `G.audio.setRain` / `G.playThunder` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
@@ -578,6 +578,31 @@ overheads показывают постер. Загрузка асинхронн
 - **Совместимость.** Работает в обеих камерах, не перекрывает HUD, не трогает
   физику кроме торможения, экономику, сохранения, трамплины и съезды.
 
+## Коробка и тахометр
+
+- **Модель.** Ножная коробка с шестью передачами и нейтралью живёт в
+  `js/engine/gearbox.ts`. Состояние `G.gearbox = { gear, rpmFrac, cooldown }`
+  создаётся в `js/state.js`, сбрасывается на старте и аварии в `js/ui.js`.
+  Каждый кадр `stepGearbox()` в `js/loop.js` читает `G.speed` и
+  `effStats.maxSpeed`, но саму скорость не меняет — физика, экономика и трафик
+  остаются прежними.
+- **Переключения.** Верхние границы передач — 0.16 / 0.32 / 0.49 / 0.66 / 0.84
+  от максималки, нижние с гистерезисом — 0.12 / 0.27 / 0.43 / 0.60 / 0.77.
+  Ниже 1.5 км/ч — нейтраль. Между переключениями 0.3 с, поэтому на одной
+  скорости передача не дёргается. На шестой передаче переключения выше нет.
+- **Обороты.** Внутри передачи `rpmFrac` идёт от 0.26 сразу после включения
+  до 1.0 у верхней границы; на нейтрали — 0.13. Одно и то же значение читают
+  полоски тахометра и `AudioManager`, поэтому стрелка и звук падают вместе.
+- **Приборка.** В `js/camera.js` цифровая шкала из 22 сегментов и круглый
+  дашборд Boxer/Avenger берут `rpmFrac` и передачу из `G.gearbox`. В третьем
+  лице `tp-gear` показывает `N` или `G1…G6`. Красная зона — последние 4
+  сегмента (с 18-го). Порог перерисовки учитывает обороты, чтобы сброс был
+  виден даже при неизменной скорости.
+- **Проверки.** `npm run check:gearbox` (`js/engine/gearbox.check.ts`) покрывает
+  нейтраль, повышение и понижение, гистерезис, задержку и сброс оборотов.
+  Отладка: `window.__bajaj.snapshot().gear` / `.rpm` и
+  `.snapshot().audio.{gear,rpmFrac,rate}`.
+
 ## Звук
 
 - **Шины.** `master` → `ctx.destination`; `engine`, `ambient`, `weather` →
@@ -595,8 +620,9 @@ overheads показывают постер. Загрузка асинхронн
   из 14 байков свой тембр, у `qute_yura` — electric-слой), дождь и гром —
   процедурный шум, остальные SFX пропускаются.
 - **Двигатель.** Один loop на заезд по `G.selectedBikeId`. `playbackRate`
-  идёт от 0.55 (холостые) до 1.35 (максималка), громкость —
-  `0.12 + 0.5·sin(π·speed/maxSpeed)` от `effStats.maxSpeed`; газ даёт короткий
+  идёт от 0.55 (холостые) до 1.35 (красная зона), громкость — `0.12 + 0.5·rpmFrac`.
+  Обороты приходят из `G.gearbox`, а не из `speed / maxSpeed`: внутри передачи
+  они растут к красной зоне и сбрасываются при переключении. Газ даёт короткий
   буст ×1.08. Обновление не чаще ~30 Гц из `animate()` в `js/loop.js`.
 - **Окружение.** `city_day` / `city_night` кроссфейдятся за ~1.8 с по
   `G.todIsNight` из `js/atmosphere.js`. Ветер `wind_high_speed` идёт по
@@ -674,6 +700,7 @@ overheads показывают постер. Загрузка асинхронн
 | Будущая реклама Google Play | `registerExternalProvider` / `unregisterExternalProvider` в `js/adManager.js`; провайдер получает приоритет над папкой, показ и клик репортятся через `reportImpression` / `reportClick` |
 | Частицы, фид и игровые события | `spawnOverflyParticles`, `pushFeed(text, tone, level, side)`, `playJumpSound`, `playExitChime` в `js/effects.js`; сами звуки/тоны через `G.audio` |
 | Звук, шины и замена файлов | `js/audio.js`, `js/engine/audio.ts`, `sounds/README.txt`, `sounds/{engines,sfx,ambient,weather}/` |
+| Передачи, обороты и тахометр | `js/engine/gearbox.ts`, `G.gearbox` в `js/state.js`, шаг в `js/loop.js`, шкалы в `js/camera.js`; обороты в `G.audio.update({ rpmFrac, gear })` |
 | Настройки громкости | Вкладка «Звук» в `renderSettings` (`js/ui.js`), стили `.audio-*` в `css/game.css`, ключи `bajajGO_vol_*`/`bajajGO_sound_on` |
 | Сторона уведомления комбо/перелёта | `side` в вызовах `G.pushFeed` из `js/traffic.js`; классы `.side-*` в `css/game.css` |
 | Физика разгона/торможения | `animate` в `js/loop.js` |

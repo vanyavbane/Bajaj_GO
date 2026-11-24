@@ -112,14 +112,15 @@ assert(Object.keys(AUDIO_FILES).length === 14 + 13 + 3 + 4, 'всего 34 за�
 
 /* ---------- Кривые ---------- */
 
-near(engineRate(0, 160), ENGINE_RATE_MIN, 'холостой ход');
-near(engineRate(160, 160), ENGINE_RATE_MAX, 'максимальная скорость');
-near(engineRate(80, 160), (ENGINE_RATE_MIN + ENGINE_RATE_MAX) / 2, 'середина диапазона');
-near(engineRate(999, 160), ENGINE_RATE_MAX, 'скорость выше максималки не уходит выше 1.35');
-assert(Number.isFinite(engineRate(50, 0)) && engineRate(50, 0) <= ENGINE_RATE_MAX, 'нулевая максималка не даёт NaN');
+near(engineRate(0), ENGINE_RATE_MIN, 'холостой ход');
+near(engineRate(1), ENGINE_RATE_MAX, 'красная зона передачи');
+near(engineRate(0.5), (ENGINE_RATE_MIN + ENGINE_RATE_MAX) / 2, 'середина оборотов');
+near(engineRate(2), ENGINE_RATE_MAX, 'обороты выше красной зоны не уходят выше 1.35');
+assert(Number.isFinite(engineRate(Number.NaN)) && engineRate(Number.NaN) === ENGINE_RATE_MIN, 'битые обороты не дают NaN');
 near(engineGain(0), 0.12, 'громкость на холостых');
-near(engineGain(1), 0.12, 'громкость на максималке');
-near(engineGain(0.5), 0.62, 'громкость на средних оборотах');
+near(engineGain(1), 0.62, 'громкость в красной зоне');
+near(engineGain(0.5), 0.37, 'громкость на средних оборотах');
+assert(engineGain(1) > engineGain(0.5) && engineGain(0.5) > engineGain(0), 'громкость растёт с оборотами');
 near(windGain(60), 0, 'ветер не звучит до 60 км/ч');
 near(windGain(150), 0.3, 'ветер на 150 км/ч');
 near(windGain(300), 0.6, 'ветер насыщается на 0.6');

@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { AudioSettings } from './engine/audio.ts';
+import type { GearboxState } from './engine/gearbox.ts';
 import type { BiomeDef, TrafficModel } from './engine/biomes.js';
 import type { DriveRoads, LiveCarriage } from './engine/carriage.js';
 import type { CarriageLayout } from './engine/lanes.js';
@@ -70,7 +71,14 @@ export interface AudioManagerApi {
     filterTo?: number;
   }): void;
   playClick(): void;
-  update(dt: number, opts: { speed: number; maxSpeed: number; gas: boolean; night: boolean }): void;
+  update(dt: number, opts: {
+    speed: number;
+    maxSpeed: number;
+    gas: boolean;
+    night: boolean;
+    rpmFrac?: number;
+    gear?: number;
+  }): void;
   load(key: string): Promise<AudioBuffer | null>;
   snapshot(): {
     settings: AudioSettings;
@@ -79,6 +87,9 @@ export interface AudioManagerApi {
     inRun: boolean;
     engineId: string;
     engineSourceKey: string;
+    gear: number;
+    rpmFrac: number;
+    rate: number;
     buffers: number;
     failed: string[];
     rain: number;
@@ -501,6 +512,8 @@ export interface GameState {
   cameraMode: 'cockpit' | 'third';
   started: boolean;
   ended: boolean;
+  /** Ножная коробка: передача и обороты общие для тахометра и двигателя. */
+  gearbox: GearboxState;
   speed: number;
   distance: number;
   score: number;

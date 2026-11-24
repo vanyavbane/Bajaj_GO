@@ -156,17 +156,16 @@ export function saveAudioSettings(storage: AudioStorage, settings: AudioSettings
   }
 }
 
-/** Обороты: 0.55 на холостом ходу и 1.35 на максимальной скорости. */
-export function engineRate(speed: number, maxSpeed: number): number {
-  const limit = Math.max(1, finite(maxSpeed, 1));
-  const frac = Math.max(0, Math.min(1, finite(speed, 0) / limit));
-  return ENGINE_RATE_MIN + (ENGINE_RATE_MAX - ENGINE_RATE_MIN) * frac;
+/** Обороты: 0.55 на холостом ходу и 1.35 в красной зоне выбранной передачи. */
+export function engineRate(rpmFrac: number): number {
+  const t = Math.max(0, Math.min(1, finite(rpmFrac, 0)));
+  return ENGINE_RATE_MIN + (ENGINE_RATE_MAX - ENGINE_RATE_MIN) * t;
 }
 
-/** Громкость двигателя: тише на холостых и на максималке, громче в середине. */
+/** Громкость растёт вместе с оборотами и падает при переключении передачи. */
 export function engineGain(rpmFrac: number): number {
   const t = Math.max(0, Math.min(1, finite(rpmFrac, 0)));
-  return 0.12 + 0.5 * Math.sin(Math.PI * t);
+  return 0.12 + 0.5 * t;
 }
 
 export function windGain(speed: number): number {

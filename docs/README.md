@@ -21,7 +21,8 @@
 - Сборка: `npm run build` или `./build` пишет один `dist/bajaj-go.html`. Его можно открыть двойным щелчком. Рядом копируется папка `sounds/` с заменяемыми MP3 (см. `sounds/README.txt`); без файлов игра работает тихо и без ошибок.
 - Three.js 0.160.0 ставится пакетом `three`. Кнопки, панели и меню — пакетом `@bajajgo/design`. Внешнего CDN нет. `./serve` — запасной сервер после `npm install`.
 - Сохранения в `localStorage`, в том числе громкость `bajajGO_vol_*` и выключатель `bajajGO_sound_on`.
-- Проверки движка: `npm test` (включая `audio.check.ts` и `repair.check.ts`); точечно — `node --experimental-strip-types js/engine/<имя>.check.ts`.
+- Проверки движка: `npm test` (включая `audio.check.ts`, `gearbox.check.ts` и `repair.check.ts`); точечно — `node --experimental-strip-types js/engine/<имя>.check.ts`.
+- Тахометр и звук двигателя работают от ножной коробки (`G.gearbox`, 1–6 и нейтраль): обороты растут внутри передачи и падают при переключении. Скорость и разгон от коробки не зависят.
 - Git-репозиторий: https://github.com/vanyavbane/Bajaj_GO (приватный).
 
 ## Статусы задач

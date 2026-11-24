@@ -67,6 +67,7 @@ export function initAudio() {
   let lastSpeed = 0;
   let lastMaxSpeed = 1;
   let lastRpmFrac = 0;
+  let lastGear = 0;
   let lastRate = 1;
   let lastGas = false;
   let boostUntil = 0;
@@ -525,6 +526,7 @@ export function initAudio() {
     lastSpeed = 0;
     lastMaxSpeed = 1;
     lastRpmFrac = 0;
+    lastGear = 0;
     lastRate = 1;
     lastGas = false;
     boostUntil = 0;
@@ -559,12 +561,17 @@ export function initAudio() {
     const maxSpeed = Number(opts.maxSpeed);
     lastSpeed = Number.isFinite(speed) ? Math.max(0, speed) : 0;
     lastMaxSpeed = Math.max(1, Number.isFinite(maxSpeed) ? maxSpeed : 1);
-    lastRpmFrac = Math.min(1, lastSpeed / lastMaxSpeed);
+    // Обороты приходят из коробки передач; без неё — старый запасной вариант по скорости.
+    const rpm = Number(opts.rpmFrac);
+    const fallbackRpm = Math.min(1, lastSpeed / lastMaxSpeed);
+    lastRpmFrac = Number.isFinite(rpm) ? Math.max(0, Math.min(1, rpm)) : fallbackRpm;
+    const gear = Number(opts.gear);
+    lastGear = Number.isFinite(gear) ? Math.max(0, Math.round(gear)) : 0;
     const gas = !!opts.gas;
     if (gas && !lastGas) boostUntil = nowMs + 100;
     lastGas = gas;
     const boost = gas || nowMs < boostUntil ? 1.08 : 1;
-    modulateEngine(engineRate(lastSpeed, lastMaxSpeed) * boost, engineGain(lastRpmFrac));
+    modulateEngine(engineRate(lastRpmFrac) * boost, engineGain(lastRpmFrac));
     if (windLoop) rampParam(windLoop.gain.gain, windGain(lastSpeed), 0.15);
     if (typeof opts.night === 'boolean' && opts.night !== night) {
       night = opts.night;
@@ -651,6 +658,9 @@ export function initAudio() {
         inRun,
         engineId,
         engineSourceKey,
+        gear: lastGear,
+        rpmFrac: lastRpmFrac,
+        rate: lastRate,
         buffers: buffers.size,
         failed: [...failed],
         rain: rainWanted,

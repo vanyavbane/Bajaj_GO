@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { button, callout, check, choiceGrid, currency, field, heading, icon, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabs, tag } from '@bajajgo/design';
 import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
 import { DEFAULT_AUDIO_SETTINGS, isNightish } from './engine/audio.ts';
+import { initialGearboxState } from './engine/gearbox.ts';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
@@ -1327,6 +1328,7 @@ export function initUi() {
     G.currentScreen = 'playing';
     G.started = true;
     G.ended = false;
+    G.gearbox = initialGearboxState();
     if (G.audio) G.audio.startRun(G.selectedBikeId, isNightish(G.todCycleTime));
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
@@ -1409,6 +1411,7 @@ export function initUi() {
     if (G.ended) return;
     G.ended = true;
     G.started = false;
+    G.gearbox = initialGearboxState();
     G.runIntro = 0;
     G.currentScreen = 'crash';
     if (G.audio) {

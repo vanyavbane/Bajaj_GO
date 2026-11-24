@@ -126,7 +126,7 @@ export function initCamera() {
   /* ---------- Круглая аналоговая приборка Boxer / Avenger ---------- */
   const roundDash = { bg: null, chrome: null };
 
-  function drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd) {
+  function drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd, rpmFrac, gearText) {
     const ctx = G.dashCtx;
     if (!roundDash.bg) {
       roundDash.bg = ctx.createLinearGradient(0, 0, 0, 256);
@@ -147,6 +147,22 @@ export function initCamera() {
     ctx.strokeStyle = '#313131';
     ctx.lineWidth = 2;
     ctx.strokeRect(10, 10, 492, 236);
+
+    // Тахометр: та же шкала, что и на цифровой приборке, но над круглыми циферблатами.
+    const tachBars = 22;
+    const tachGap = 2;
+    const tachW = 464;
+    const tachBarW = (tachW - tachGap * (tachBars - 1)) / tachBars;
+    for (let i = 0; i < tachBars; i++) {
+      const active = (i / tachBars) <= rpmFrac;
+      ctx.fillStyle = !active ? '#163042' : (i > 17 ? '#ff1744' : i > 13 ? '#ffab00' : '#00e5ff');
+      ctx.fillRect(24 + i * (tachBarW + tachGap), 14, tachBarW, 7);
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd54f';
+    ctx.font = '900 14px system-ui,Arial';
+    ctx.fillText(gearText === 'N' ? 'N' : 'G' + gearText, 256, 34);
 
     const accent = '#' + G.accentMat.color.getHexString();
     const speedFrac = clamp(maxSpd > 0 ? speedVal / maxSpd : 0, 0, 1);
@@ -312,17 +328,20 @@ export function initCamera() {
     const maxSpd = effStats.maxSpeed;
     const bike = G.selectedBike();
     const hudStyle = bike.hudStyle || 'digital';
-    const gear = speedVal < 2 ? 'N' : Math.min(6, Math.max(1, Math.ceil((speedVal / maxSpd) * 6)));
+    const gear = G.gearbox ? G.gearbox.gear : 0;
+    const gearText = gear === 0 ? 'N' : String(gear);
+    // Обороты и передача приходят из коробки, а не из скорости по вариаторной кривой.
+    const rpmFrac = G.gearbox ? G.gearbox.rpmFrac : clamp(speedVal / maxSpd, 0, 1);
     const speedText = String(Math.round(speedVal));
     const distText = runDistance(distVal);
     const rubText = rubles(scoreVal);
 
     if (G.cameraMode === 'third' && G.started && !G.ended) {
-      const thirdKey = `${speedText}|${gear}|${distText}|${rubText}`;
+      const thirdKey = `${speedText}|${gearText}|${distText}|${rubText}`;
       if (thirdKey !== lastThirdKey) {
         lastThirdKey = thirdKey;
         $('tp-speed').textContent = speedText;
-        $('tp-gear').textContent = 'G' + gear;
+        $('tp-gear').textContent = gearText === 'N' ? 'N' : 'G' + gearText;
         $('tp-dist').textContent = distText;
         $('tp-rub').textContent = rubText;
       }
@@ -336,18 +355,17 @@ export function initCamera() {
       return;
     }
 
-    const dashKey = `${bike.id}|${hudStyle}|${speedText}|${distText}|${rubText}|${gear}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
+    const dashKey = `${bike.id}|${hudStyle}|${speedText}|${distText}|${rubText}|${gearText}|${rpmFrac.toFixed(3)}|${maxSpd}|${multVal}|${highBeamActive ? 1 : 0}`;
     if (dashKey === lastDashKey || now - lastDashDraw < 30) return;
     lastDashKey = dashKey;
     lastDashDraw = now;
 
     if (hudStyle === 'round') {
-      drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd);
+      drawRoundDashboard(speedVal, distVal, scoreVal, multVal, highBeamActive, maxSpd, rpmFrac, gearText);
       G.dashTex.needsUpdate = true;
       return;
     }
 
-    const rpmFrac = clamp(speedVal / maxSpd, 0, 1);
     const isYura = effStats.isYura;
 
     if (!dashGrad) {
@@ -394,7 +412,7 @@ export function initCamera() {
 
     G.dashCtx.fillStyle = '#ffd54f';
     G.dashCtx.font = '900 28px system-ui,Segoe UI,Arial';
-    G.dashCtx.fillText('GEAR ' + gear, 264, 148);
+    G.dashCtx.fillText('GEAR ' + gearText, 264, 148);
 
     G.dashCtx.fillStyle = '#90caf9';
     G.dashCtx.font = '800 16px system-ui,Segoe UI,Arial';
