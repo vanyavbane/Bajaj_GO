@@ -176,16 +176,18 @@ export function initRoadSurface() {
   const roadMesh = makeRibbon(1, G.M.road);
   const roadRightMat = G.M.road.clone();
   roadRightMat.polygonOffset = true;
-  roadRightMat.polygonOffsetFactor = 1;
-  roadRightMat.polygonOffsetUnits = 1;
+  // Положительный сдвиг уводил асфальт +1 полосы под текстуру биома.
+  // Небольшой отрицательный держит его над землёй, но под разметкой (-2).
+  roadRightMat.polygonOffsetFactor = -1;
+  roadRightMat.polygonOffsetUnits = -1;
   const roadRightMesh = makeRibbon(1, roadRightMat);
   // Обе ленты асфальта — основная и правая половина на развилке — мокнут
   // вместе: погода красит весь список через js/weather.js.
   G.roadWetMats = [G.M.road, roadRightMat];
   const gapMat = G.M.grass.clone();
   gapMat.polygonOffset = true;
-  gapMat.polygonOffsetFactor = 1;
-  gapMat.polygonOffsetUnits = 1;
+  gapMat.polygonOffsetFactor = -0.5;
+  gapMat.polygonOffsetUnits = -0.5;
   const forkGapMesh = makeRibbon(1, gapMat);
   forkGapMesh.receiveShadow = true;
   const sidewalkLeftMesh = makeRibbon(3.2, G.M.sidewalk);

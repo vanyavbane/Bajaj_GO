@@ -97,6 +97,7 @@ export function vectorSpawnOf(zone: number, vector: CourseVector, layout: Course
     key: `${zone}:${vector.id}`,
     nose,
     yaw: vector.yaw,
+    turnAt: nose + layout.choiceAt,
     ownsFrom: nose + layout.ownAfter,
   };
 }
@@ -124,6 +125,9 @@ export interface VectorSpawn {
   ownsFrom: number;
   /** Метры вправо от родителя, где съезд отрывается. Без числа путь начинается на оси. */
   born?: number;
+  /** С какой метки вектор начинает поворот. По умолчанию нос.
+   *  +1 полоса едет рядом с дорогой до выбора: поворот начинается только на отделении. */
+  turnAt?: number;
 }
 
 export interface SplineSample {
@@ -209,14 +213,15 @@ export function createVectorField() {
     baseAt: (s: number) => PathFrame,
     from: string,
   ): PathFrame {
-    if (!(s > spawn.nose)) return baseAt(s);
+    const start = Number.isFinite(spawn.turnAt) ? (spawn.turnAt as number) : spawn.nose;
+    if (!(s > start)) return baseAt(s);
     const id = `${spawn.key}@${from}`;
     const born = Number.isFinite(spawn.born) ? (spawn.born ?? 0) : 0;
     let rec = cache.get(id);
-    if (!rec || rec.nose !== spawn.nose || rec.yaw !== spawn.yaw || rec.born !== born) {
-      const origin = baseAt(spawn.nose);
+    if (!rec || rec.nose !== start || rec.yaw !== spawn.yaw || rec.born !== born) {
+      const origin = baseAt(start);
       rec = {
-        nose: spawn.nose,
+        nose: start,
         yaw: spawn.yaw,
         born,
         samples: [{
@@ -228,9 +233,9 @@ export function createVectorField() {
       };
       cache.set(id, rec);
     }
-    const need = Math.ceil((s - spawn.nose) / STEP);
+    const need = Math.ceil((s - start) / STEP);
     while (rec.samples.length - 1 < need) advance(rec, turn, baseAt);
-    const t = (s - spawn.nose) / STEP;
+    const t = (s - start) / STEP;
     const i0 = Math.max(0, Math.min(rec.samples.length - 1, Math.floor(t)));
     const i1 = Math.min(rec.samples.length - 1, i0 + 1);
     const u = Math.max(0, Math.min(1, t - i0));
@@ -343,8 +348,9 @@ export function createVectorField() {
     const bz = legal ? frame.z + frame.rz * along : from.z;
     const aimX = legal ? frame.fx : head.parent.fx;
     const aimZ = legal ? frame.fz : head.parent.fz;
-    // Heading follows the exit geometry as it peels; position can lag behind to stay on asphalt.
-    const hw = Math.max(w, legal ? head.peel : 0);
+    // Курс поворачивает ровно там, где лента отделяется. Пока +1 полоса
+    // прижата, байк едет вдоль дороги, а не боком к своей будущей ветке.
+    const hw = legal ? w : 0;
     const turned = turnToward(head.parent.fx, head.parent.fz, aimX, aimZ, hw);
     return {
       x: from.x + (bx - from.x) * w,

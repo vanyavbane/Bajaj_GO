@@ -95,7 +95,9 @@ export function exitClock(): ExitClock {
   if (!seal) throw new Error('Съезд без закрытия: курс не знает, когда въезд приходит в новую дорогу');
   return {
     lead: EXIT_PLAN.length,
-    turn: EXIT_PLAN.diverge,
+    // Курс поворачивает на отделении, а не на подходе: +1 полоса едет
+    // параллельно дороге до выбора, и только в seal уходит в свою сторону.
+    turn: seal.length,
     ownAfter: seal.start + seal.length,
     choiceAt: EXIT_PLAN.choiceAt,
     spread: EXIT_PLAN.spread,
@@ -242,11 +244,12 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
   if (!block.built) return branchEdges(road, FORK_SPREAD);
-  if (block.kind === 'split' || block.kind === 'fork') return attachedEdges(road);
+  if (block.kind === 'split') return attachedEdges(road, smooth01(block.u));
+  if (block.kind === 'fork') return attachedEdges(road, 1);
   if (block.kind === 'seal') {
     const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
     if (chosen === 1) return takenEntrance(road, dest, t);
-    const edge = attachedEdges(road);
+    const edge = attachedEdges(road, 1);
     // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
     if (chosen === -1) {
       const away = t * FORK_SPREAD * 1.5;
@@ -264,16 +267,19 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
 }
 
 /**
- * +1 полоса на подходе: уже полной ширины и плотно прижата к правой кромке.
- * Пока выбор открыт, она едет параллельно основной и не растёт каждый кадр.
+ * +1 полоса на подходе: плотно прижата к правой кромке.
+ * В носу её ещё нет, на блоке split она плавно набирает полную ширину.
+ * Пока выбор открыт, она едет параллельно основной и больше не растёт.
  * Отделяется только после выбора, блоком seal.
  */
-function attachedEdges(road: number): AsphaltEdges {
+function attachedEdges(road: number, open = 1): AsphaltEdges {
+  const grow = Math.max(0, Math.min(1, Number.isFinite(open) ? open : 1));
+  const exitHalf = EXIT_LANE_HALF * grow;
   return {
     leftOuter: -road,
     leftInner: road,
     rightInner: road,
-    rightOuter: road + EXIT_LANE_HALF * 2,
+    rightOuter: road + exitHalf * 2,
   };
 }
 

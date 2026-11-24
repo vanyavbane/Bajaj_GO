@@ -5,7 +5,7 @@ import { carriageAt, carriageLat, laneMarks, riderCarriage, roadsAt, sideRibbon,
 import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
-import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
+import { EXIT_LANE_HALF, asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
 import { decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
 import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
@@ -384,6 +384,12 @@ function catalogHalfAt(s) {
   return baseRoadWidthAtMeters(meters) * 0.5;
 }
 
+/** Откуда начинается курс съезда: середина прижатой +1 полосы, не кромка дороги. */
+function exitBornAt(spawn) {
+  const at = Number.isFinite(spawn.turnAt) ? spawn.turnAt : spawn.nose;
+  return catalogHalfAt(at) + EXIT_LANE_HALF;
+}
+
 /** Полуширина биома, в который ведёт съезд этой зоны. */
 function arriveHalfAt(zone) {
   ensureZonePlan(zone + 1);
@@ -451,7 +457,7 @@ function ownedCourse(s) {
     if (decisionAt(z).side !== 1) continue;
     const spawn = vectorSpawnOf(z, EXIT_RIGHT, layout);
     if (!spawn || !(s >= spawn.ownsFrom)) continue;
-    owned.push({ ...spawn, born: catalogHalfAt(spawn.nose) });
+    owned.push({ ...spawn, born: exitBornAt(spawn) });
   }
   return owned;
 }
@@ -483,7 +489,7 @@ function computeHeading(s) {
     owned,
     branches: openCourse(RIGHT_FORK, s, at.layout).map((spawn) => ({
       ...spawn,
-      born: catalogHalfAt(spawn.nose),
+      born: exitBornAt(spawn),
     })),
     origin: owned.length ? laneAnchor(frame) : roadCenter(frame),
     turn: at.layout.turn,

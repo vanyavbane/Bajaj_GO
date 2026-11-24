@@ -21,16 +21,25 @@ assert(plan.diverge === 50 && plan.run === 140 && plan.seal === 120 && plan.marg
 const noseBlock = placedBlock(plan, 0, 0);
 assert(noseBlock != null && noseBlock.kind === 'split' && noseBlock.u === 0, 'ноль метров от носа — это начало отхода');
 const noseEdges = frameAt(0, 0).world;
-assert(Math.abs(noseEdges.rightOuter - noseEdges.rightInner - EXIT_LANE_HALF * 2) < 0.05, '+1 полоса уже полной ширины от носа');
+assert(Math.abs(noseEdges.rightOuter - noseEdges.rightInner) < 0.05, '+1 полоса в носу ещё нулевой ширины');
 assert(Math.abs(noseEdges.rightInner - noseEdges.leftInner) < 0.05, '+1 полоса прижата к кромке дороги');
 const growing = frameAt(12, 0).world;
-assert(Math.abs(growing.rightOuter - growing.rightInner - EXIT_LANE_HALF * 2) < 0.05, '+1 полоса не растёт каждый кадр');
+assert(growing.rightOuter > growing.rightInner + 0.5 && growing.rightOuter < growing.rightInner + EXIT_LANE_HALF * 2, '+1 полоса набирает ширину на подходе');
 assert(Math.abs(growing.rightInner - growing.leftInner) < 0.05, 'до выбора полоса остаётся прижатой');
+let approachMid: number | null = null;
+for (let distance = -2; distance <= plan.diverge + 2; distance += 2) {
+  const mid = exitRibbonMid(frameAt(distance, 0).world);
+  if (approachMid != null) assert(Math.abs(mid - approachMid) < 0.5, '+1 полоса не появляется целиком в носу');
+  approachMid = mid;
+}
+const attached = frameAt(plan.diverge + 20, 0).world;
+assert(Math.abs(attached.rightOuter - attached.rightInner - EXIT_LANE_HALF * 2) < 0.05, 'подход держит полную ширину до выбора');
+assert(Math.abs(attached.rightInner - attached.leftInner) < 0.05, 'до выбора полоса остаётся прижатой');
 assert(plan.choiceAt === 190 && plan.length === 390, 'выбор стоит в конце общего подхода, рецепт кончается у границы зоны');
 assert(plan.straight[0]?.start === plan.exit[0]?.start && plan.straight[1]?.length === plan.exit[1]?.length, 'стык двух цепочек на одной метке');
 const clock = exitClock();
 const seal = plan.exit.find((span) => span.kind === 'seal');
-assert(clock.lead === plan.length && clock.turn === plan.diverge && clock.choiceAt === plan.choiceAt && clock.spread === plan.spread, 'курс берёт длины из рецепта');
+assert(clock.lead === plan.length && clock.turn === plan.seal && clock.choiceAt === plan.choiceAt && clock.spread === plan.spread, 'курс берёт длины из рецепта');
 assert(seal != null && clock.ownAfter === seal.start + seal.length, 'съезд приходит в дорогу ровно к концу закрытия');
 
 const nose = placedBlock(plan, 20, 0);
