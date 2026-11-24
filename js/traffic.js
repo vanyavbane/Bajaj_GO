@@ -131,6 +131,7 @@ export function initTraffic() {
       onExit: road.onExit,
       joiningExit: false,
       heldLat: NaN,
+      ribbonHalf: NaN,
       /** Середина ленты, с которой машина ехала в прошлом кадре. */
       surface: NaN,
       heading: ribbonDirection(road.onExit, facing?.direction) === 'against' ? Math.PI : 0,
@@ -377,9 +378,13 @@ export function initTraffic() {
       ? car.heldLat
       : carriageLat(road.axis, scale, car.lateralOffset || 0);
     const placed = retargetRide(steered, car.surface, Number.isFinite(car.surface), center);
+    let world = placed.world;
+    const half = road.spot.ribbon.half;
+    if (own && Number.isFinite(car.ribbonHalf)) world += half - car.ribbonHalf;
+    car.ribbonHalf = own ? half : NaN;
     car.lateralOffset = own
-      ? placed.world - center
-      : laneAtWorld(placed.world, road.axis, scale);
+      ? world - center
+      : laneAtWorld(world, road.axis, scale);
     car.surface = center;
   }
 

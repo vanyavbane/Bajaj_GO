@@ -314,6 +314,8 @@ let riderWorld = NaN;
 let riderAxis = NaN;
 /** Середина дороги, на которой байк сидел в прошлом кадре. */
 let riderSurface = NaN;
+/** Полуширина ленты въезда в прошлом кадре. Расширение въезда держит байка у правой кромки. */
+let riderRibbonHalf = NaN;
 /** Прошлый кадр байк был на ленте съезда. */
 let riderOnRibbon = false;
 /** Масштаб, которым посчитана текущая полоса байка. Пока неизвестен — полоса не пересчитывается. */
@@ -740,6 +742,12 @@ function updateExitHold() {
   const onRibbon = ridingRibbon(spot, riderSeat.kind);
   const center = surfaceWorld(axis, spot, onRibbon);
   const placed = retargetRide(steeredWorld, riderSurface, onRibbon === riderOnRibbon, center);
+  // Въезд растёт в новую дорогу симметрично вокруг середины. Правая кромка —
+  // линия въезда: байк остаётся на ней и вливается справа, а не в центр.
+  let merged = placed.world;
+  const ribbonNow = onRibbon && spot.ribbon && !spot.ribbon.joined ? spot.ribbon : null;
+  if (ribbonNow && Number.isFinite(riderRibbonHalf)) merged += ribbonNow.half - riderRibbonHalf;
+  riderRibbonHalf = ribbonNow ? ribbonNow.half : NaN;
   let seat;
   if (G.forkLabActive && Number.isFinite(G.forkLabLateral)) {
     const stick = riderSeat.kind === 'exit' ? 'exit' : 'road';
@@ -748,7 +756,7 @@ function updateExitHold() {
     const ruler = rideRuler(frame, kind === 'exit', scale);
     seat = { kind, lane: laneAtWorld(frame.origin + held, ruler.axis, ruler.scale) };
   } else {
-    const local = placed.world - frame.origin;
+    const local = merged - frame.origin;
     const stick = onRibbon ? 'exit' : 'road';
     const held = stayOnAsphalt(frame.local, local, stick);
     const incoming = rideRuler(frame, riderSeat.kind === 'exit', scale);
@@ -1352,6 +1360,7 @@ function resetBiomeRun() {
   riderWorld = NaN;
   riderAxis = NaN;
   riderSurface = NaN;
+  riderRibbonHalf = NaN;
   riderOnRibbon = false;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];

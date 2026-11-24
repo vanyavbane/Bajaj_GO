@@ -4,7 +4,7 @@
  * а не заводить второе чтение кромок.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { carriageAt, carriageLat, laneAtWorld, rideRuler, vehicleLat } from './carriage.ts';
+import { carriageAt, carriageLat, laneAtWorld, rideRuler } from './carriage.ts';
 import { EXIT_LANE_HALF, exitClock, logicalRoadLimits, sampleRoad, type ChosenSide } from './fork.ts';
 import { readExit, retargetRide, rideCenter, sampleRide, surfaceWorld, type ExitLife } from './exit.ts';
 import { stepSeat, type RiderSeat } from './seat.ts';
@@ -131,6 +131,8 @@ for (const id of ['city', 'mkad']) {
   let lane = laneAtWorld(at.origin + ribbon0.center, ruler.axis, ruler.scale);
   let surface = surfaceWorld(live.axis, spot, true);
   let onRibbon = true;
+  let ribbonHalf = Number.NaN;
+  let inset = Number.NaN;
   for (distance = clock.choiceAt - 1; distance <= clock.ownAfter + 8; distance += 0.5) {
     at = sampleRoad({
       forkDistance: distance,
@@ -146,22 +148,28 @@ for (const id of ['city', 'mkad']) {
     const still: boolean = onRibbon && spot.ribbon != null;
     const center = surfaceWorld(live.axis, spot, still);
     const placed = retargetRide(worldIn, surface, still === onRibbon, center);
+    const openRibbon = still && spot.ribbon != null && !spot.ribbon.joined ? spot.ribbon : null;
+    const grown = openRibbon && Number.isFinite(ribbonHalf) ? openRibbon.half - ribbonHalf : 0;
+    const merged = placed.world + grown;
+    ribbonHalf = openRibbon ? openRibbon.half : Number.NaN;
     const incoming = rideRuler(at, kind === 'exit', live.scale);
-    const laneIn = laneAtWorld(placed.world, incoming.axis, incoming.scale);
+    const laneIn = laneAtWorld(merged, incoming.axis, incoming.scale);
     const seat = stepSeat(at, { kind, lane: laneIn }, live.scale);
     const used = rideRuler(at, seat.kind === 'exit', live.scale);
     const seated = carriageLat(used.axis, used.scale, seat.lane);
-    const car = vehicleLat(live, seat.kind === 'exit' && spot.ribbon != null && !spot.ribbon.joined ? seat.lane : lane, seat.kind === 'exit' && spot.ribbon != null && !spot.ribbon.joined);
     if (spot.ribbon != null && !spot.ribbon.joined) {
-      const mid = at.origin + spot.ribbon.center;
-      assert(Math.abs(seated - mid) < 0.5, `${id} ${distance} м: байк сошёл с ленты на сходящую дорогу`);
+      const right = at.origin + spot.ribbon.center + spot.ribbon.half;
+      if (!Number.isFinite(inset)) inset = right - seated;
+      assert(Math.abs((right - seated) - inset) < 0.6, `${id} ${distance} м: въезд не вливает байка по правой кромке`);
+      assert(seated > at.origin + spot.ribbon.center - spot.ribbon.half && seated < right, `${id} ${distance} м: байк сошёл с ленты въезда`);
       assert(Math.abs(seated) > spot.main.half + 1, `${id} ${distance} м: байк сидит в центре старой дороги`);
-      assert(Math.abs(car - mid) < 0.5, `${id} ${distance} м: машина съезда едет по линейке старой дороги`);
       assert(seat.kind === 'exit', `${id} ${distance} м: съезд перестал быть своей дорогой`);
     }
     if (spot.life === 'arrived') {
+      const right = at.local.leftInner;
       assert(seat.kind === 'road', `${id} ${distance} м: приезд не сажает байка на новую дорогу`);
-      assert(seated > at.local.leftOuter && seated < at.local.leftInner, `${id} ${distance} м: новая дорога не под байком`);
+      assert(seated > at.local.leftOuter && seated < right, `${id} ${distance} м: новая дорога не под байком`);
+      assert(seated > at.origin + spot.main.center, `${id} ${distance} м: въезд сажает байка в центр, а не вливает справа`);
     }
     kind = seat.kind;
     lane = seat.lane;
