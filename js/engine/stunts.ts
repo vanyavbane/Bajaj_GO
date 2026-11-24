@@ -4,7 +4,7 @@ export const STUNT = {
   STOPPIE_MIN_START_SPEED: 105,
   STOPPIE_HOLD_SPEED: 40,
   STOPPIE_BRAKE_MULTIPLIER: 1.5,
-  STOPPIE_CHANCE: 0.4,
+  STOPPIE_CHANCE: 0.1,
   STOPPIE_MAX_PITCH: -0.72,
   STOPPIE_RISE_TIME: 0.55,
   STOPPIE_FALL_TIME: 0.45,
@@ -15,8 +15,8 @@ export const STUNT = {
   WHEELIE_HOLD_MIN: 30,
   WHEELIE_HOLD_MAX: 75,
   WHEELIE_MAX_PITCH: 0.62,
-  WHEELIE_RISE_TIME: 0.5,
-  WHEELIE_FALL_TIME: 0.45,
+  WHEELIE_RISE_TIME: 0.95,
+  WHEELIE_FALL_TIME: 0.85,
   WHEELIE_STEER_SENSITIVITY: 0.58,
 
   DRIFT_CHANCE: 0.3,
@@ -158,19 +158,24 @@ export function stepStunt(state: StuntState, input: StuntInput): StuntState {
     if (s.phase === 'rise') {
       s.pitch = approach(s.pitch, target, (target / STUNT.WHEELIE_RISE_TIME) * dt);
       if (s.pitch >= target - 0.01) { s.pitch = target; s.phase = 'hold'; }
+      if (!gas || brake) s.phase = 'fall';
     }
     if (s.phase === 'hold') {
       s.pitch = approach(s.pitch, target, dt * 1.2);
-      const inHoldRange = speed >= STUNT.WHEELIE_HOLD_MIN && speed <= STUNT.WHEELIE_HOLD_MAX;
-      const acceleratingToDrop = gas && speed > STUNT.WHEELIE_HOLD_MAX;
       if (speed >= STUNT.WHEELIE_AUTO_DROP_SPEED) s.phase = 'fall';
-      else if (!inHoldRange && !acceleratingToDrop && speed < STUNT.WHEELIE_HOLD_MIN) s.phase = 'fall';
-      else if (!gas && !inHoldRange) s.phase = 'fall';
+      else if (!gas) s.phase = 'fall';
       else if (brake) s.phase = 'fall';
+      else if (speed < STUNT.WHEELIE_HOLD_MIN) s.phase = 'fall';
     }
     if (s.phase === 'fall') {
-      s.pitch = approach(s.pitch, 0, (STUNT.WHEELIE_MAX_PITCH / STUNT.WHEELIE_FALL_TIME) * dt);
-      if (s.pitch <= 0.001) { s.pitch = 0; s.mode = 'none'; s.phase = 'rise'; }
+      // Resume wheelie if gas is pressed again before fully down.
+      const canResume = gas && !brake && speed < STUNT.WHEELIE_AUTO_DROP_SPEED && speed > 1;
+      if (canResume && s.pitch > 0.001) {
+        s.phase = 'hold';
+      } else {
+        s.pitch = approach(s.pitch, 0, (STUNT.WHEELIE_MAX_PITCH / STUNT.WHEELIE_FALL_TIME) * dt);
+        if (s.pitch <= 0.001) { s.pitch = 0; s.mode = 'none'; s.phase = 'rise'; }
+      }
     }
     s.slip = approach(s.slip, 0, dt * 4);
     s.smoke = approach(s.smoke, 0, dt * 3);
