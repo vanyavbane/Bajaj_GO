@@ -447,11 +447,12 @@ export function initCamera() {
       const cockpitY = isQute ? 1.33 : 1.56;
       const cockpitZ = isQute ? -0.14 : 0.35;
       const stuntPitch = (G.started && !G.ended && G.stunt) ? G.stunt.pitch : 0;
-      const stuntY = stuntPitch > 0 ? stuntPitch * 0.18 : stuntPitch * 0.08;
-      const stuntZ = stuntPitch > 0 ? -stuntPitch * 0.12 : -stuntPitch * 0.06;
+      const stuntY = stuntPitch > 0 ? stuntPitch * 0.1 : stuntPitch * 0.08;
+      const stuntZ = stuntPitch > 0 ? -stuntPitch * 0.08 : -stuntPitch * 0.06;
+      const stuntCamPitch = stuntPitch > 0 ? stuntPitch * 0.32 : stuntPitch * 0.85;
       G.riderPivot.position.set(0, cockpitY + stuntY, cockpitZ + stuntZ);
       G.camera.position.set(0, profile.height + G.accelPitchOffset * 0.35, 0);
-      G.camera.rotation.set(G.accelPitchOffset * 0.4 + stuntPitch * 0.85, 0, -G.steerVisual * (isQute ? 0.025 : 0.04) + camBiomeRoll);
+      G.camera.rotation.set(G.accelPitchOffset * 0.4 + stuntCamPitch, 0, -G.steerVisual * (isQute ? 0.025 : 0.04) + camBiomeRoll);
       if (Math.abs(G.camera.fov - profile.fov) > 0.01) {
         G.camera.fov = profile.fov;
         G.camera.aspect = innerWidth / innerHeight;
