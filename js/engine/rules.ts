@@ -1,6 +1,7 @@
 /** Правила заезда без Three.js и без DOM. Новые механики берут числа отсюда. */
 
 import type { LaneDirection } from './lanes.ts';
+import { blankStuntState, type StuntState } from './stunts.ts';
 
 /** Светящаяся коробка на полосе. Меню открывается внутри неё только медленнее этого порога. */
 export const EXIT_ENTER_SPEED = 50;
@@ -107,6 +108,7 @@ export interface RunTarget {
   highBeamTimer: number;
   highBeamCooldown: number;
   jumpState: BlankJump;
+  stunt?: StuntState;
   keys?: RunKeys;
 }
 
@@ -141,6 +143,7 @@ export function resetRun(target: RunTarget, startLane: number): void {
   target.highBeamTimer = 0;
   target.highBeamCooldown = 0;
   target.jumpState = blankJumpState();
+  target.stunt = blankStuntState();
   if (target.keys) {
     target.keys.left = false;
     target.keys.right = false;
