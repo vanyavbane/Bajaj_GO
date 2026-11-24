@@ -3,7 +3,7 @@ import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
 import { carriageAt, carriageLat, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
-import { rescaleSeat, seatAxis, seatOnFrameWorld, seatWorld, stepSeat } from './engine/seat.js';
+import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
 import { EXIT_LANE_HALF, asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
 import { decideZone } from './engine/route.js';
@@ -782,16 +782,8 @@ function updateExitHold() {
 
 function riderFrameSeat(s, lane) {
   const frame = frameAt(s);
-  const homeFrame = frameAt(G.playerS);
-  // Камера спереди/сзади смотрит на ту же мировую точку полосы, даже если
-  // на её s лента уже стала новой дорогой. Иначе взгляд прыгает в сторону.
-  return seatOnFrameWorld(
-    frame,
-    { kind: riderSeat.kind, lane },
-    homeFrame,
-    laneSpanAt(G.playerS),
-    laneSpanAt(s),
-  );
+  const home = frameAt(G.playerS).origin;
+  return seatOnFrame(frame, { kind: riderSeat.kind, lane }, home);
 }
 
 /** Полоса машины или разметки: масштаб ширины, без съезда. */
@@ -831,6 +823,33 @@ function exitLaneCenterOffset() {
   const center = exitRibbonCenter(frame.local);
   if (center == null) return G.laneOffset;
   return (frame.origin + center - laneAnchor(frame)) / laneSpanAt(G.playerS);
+}
+
+/**
+ * Боковая точка следа камеры в абсолютных метрах курса.
+ * Сзади и спереди держимся оси той ленты, по которой едет байк: пока есть
+ * съезд — его середины, а когда он стал новой дорогой — её оси. Так взгляд не
+ * прыгает на 30 м в сторону на стыке полосы и биома.
+ */
+function followLatAt(s, factor = 1, extra = 0) {
+  const frame = frameAt(s);
+  const f = Number.isFinite(factor) ? Math.max(0, Math.min(1.5, factor)) : 1;
+  const add = Number.isFinite(extra) ? extra : 0;
+  const span = laneSpanAt(G.playerS);
+  const scale = Number.isFinite(span) && span !== 0 ? span : 1;
+  const ribbon = exitRibbonCenter(frame.local);
+  const taken = riderSeat.kind === 'exit' || (frame.chosen === 1 && !!G.splitState && G.splitState.chosenSide === 1);
+  let relative;
+  if (riderSeat.kind === 'exit') {
+    const homeFrame = frameAt(G.playerS);
+    const homeRibbon = exitRibbonCenter(homeFrame.local);
+    const homeAxis = homeRibbon != null ? homeFrame.origin + homeRibbon : laneAnchor(homeFrame);
+    relative = (G.riderLatAt(G.playerS) - homeAxis) * f;
+  } else {
+    relative = G.laneOffset * scale * f;
+  }
+  const axis = ribbon != null && taken ? frame.origin + ribbon : laneAnchor(frame);
+  return axis + relative + add;
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -1635,6 +1654,7 @@ export function initBiome() {
   G.riderLatAt = riderLatAt;
   G.onExitLane = onExitLane;
   G.exitLaneCenterOffset = exitLaneCenterOffset;
+  G.followLatAt = followLatAt;
   G.forkCloseAtS = forkCloseAtS;
   G.roadEdgesAt = roadEdgesAt;
   G.roadsideFrameAt = (s) => {

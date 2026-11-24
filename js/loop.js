@@ -14,6 +14,7 @@ export function initLoop() {
   const lerp = G.lerp;
   let jumpLineShown = '';
   let oncomingShown = false;
+  let medianCooldown = 0;
   G.stunt = G.stunt || blankStuntState();
   G.driftSmoke = G.driftSmoke || [];
 
@@ -194,6 +195,7 @@ export function initLoop() {
   function simulateRun(dt, now, bike, effStats) {
     const prevSpeed = G.speed;
     G.accidentCooldown = Math.max(0, G.accidentCooldown - dt);
+    medianCooldown = Math.max(0, medianCooldown - dt);
     // Пустой бак без эвакуатора: жёсткое ограничение 5 км/ч, не зависит от тюнинга
     const effectiveMaxSpeed = (G.limpMode && G.fuelM <= 0)
       ? Math.min(effStats.maxSpeed, G.LIMP_MAX_SPEED)
@@ -250,7 +252,9 @@ export function initLoop() {
     const fork = G.splitState;
     const forkOpen = fork && fork.active && !fork.chosen;
     const forkTaken = fork && fork.active && fork.chosenSide === 1;
-    const onExit = forkTaken && G.onExitLane && G.onExitLane();
+    // Весь подход по +1 полосе, а не только момент после выбора: именно там
+    // байк чаще всего чувствует боковую тягу кривизны старой дороги.
+    const onExit = !!(G.onExitLane && G.onExitLane());
     if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen && !forkTaken) {
       const assist = G.laneAssistTarget - G.laneOffset;
       G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
@@ -283,9 +287,9 @@ export function initLoop() {
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,
-      // На дуге +1 полосы не гасим совсем, но не даём центробежной силе
-      // уносить байк к левому краю, пока он ещё на самой полосе.
-      curvature: G.roadCurvature(G.playerS) * (onExit ? 0.35 : 1),
+      // Пока байк на своей +1 полосе, дорога сама задаёт курс; искусственная
+      // центробежная тяга здесь только мешает и уводит байк влево.
+      curvature: onExit ? 0 : G.roadCurvature(G.playerS),
       isYura: effStats.isYura,
       wideTires: effStats.wideTires,
       upgradedBrakes: effStats.upgradedBrakes,
@@ -295,8 +299,9 @@ export function initLoop() {
     });
     G.laneOffset = steered.laneOffset;
     G.lateralVelocity = steered.lateralVelocity;
-    // Мягкое удержание центра +1 полосы без резкого доворота: байк сам едет
-    // по своей ленте, но руль игрока по-прежнему может увести в любую сторону.
+    // Очень мягкое возвращение к середине своей ленты. Ограничение в полосных
+    // единицах не даёт довороту разрастись, когда к концу закрытия масштаб
+    // полосы падает, а руль игрока всё ещё может увести в любую сторону.
     if (onExit && !G.jumpState.airborne && G.exitLaneCenterOffset) {
       const steerNow = typeof steerInput === 'number'
         ? steerInput
@@ -304,8 +309,9 @@ export function initLoop() {
       if (Math.abs(steerNow) < 0.15) {
         const center = G.exitLaneCenterOffset();
         if (Number.isFinite(center)) {
-          const pull = clamp((center - G.laneOffset) * 1.8, -2.4, 2.4);
-          G.lateralVelocity = lerp(G.lateralVelocity, pull, Math.min(1, dt * 2.4));
+          const diff = clamp(center - G.laneOffset, -0.6, 0.6);
+          const pull = clamp(diff * 1.2, -1.2, 1.2);
+          G.lateralVelocity = lerp(G.lateralVelocity, pull, Math.min(1, dt * 2));
         }
       }
     }
@@ -434,7 +440,13 @@ export function initLoop() {
   }
 
   function stopAtMedian(prevS, halfPlayer) {
-    if (!G.medianBlocksBike || G.jumpState.airborne) return;
+    if (!G.medianBlocksBike || G.jumpState.airborne || medianCooldown > 0) return;
+    // На подходах и стыке съезда медиана не должна ронять байк в ноль:
+    // дорога ещё перестраивается, а игрок едет по своей ленте.
+    if (G.onExitLane && G.onExitLane()) return;
+    const fork = G.splitState;
+    if (fork && fork.d > -40 && fork.d < 760) return;
+    if (G.biomeTransition && G.biomeTransition.active) return;
     let hit = null;
     for (let i = 0; i <= 4; i++) {
       const s = prevS + (G.playerS - prevS) * (i / 4);
@@ -445,7 +457,8 @@ export function initLoop() {
       }
     }
     if (!hit) return;
-    G.speed = 0;
+    medianCooldown = 1.2;
+    G.speed = Math.max(G.speed * 0.55, Math.min(45, G.speed));
     G.lateralVelocity = 0;
     const world = G.riderLatAt(G.playerS);
     const sign = world <= hit.lat ? -1 : 1;

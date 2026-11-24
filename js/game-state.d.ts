@@ -330,6 +330,8 @@ export interface GameState {
   onExitLane: () => boolean;
   /** Центр живой +1 полосы в единицах G.laneOffset. */
   exitLaneCenterOffset: () => number;
+  /** Боковая точка следа камеры на съезде/новой дороге в абсолютных метрах. */
+  followLatAt: (s: number, factor?: number, extra?: number) => number;
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };

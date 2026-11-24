@@ -472,8 +472,7 @@ export function initCamera() {
         : (3.05 + G.jumpState.height * 0.72 + clamp(G.speed / 320, 0, 0.45))) + intro * 1.15;
 
       const camS = G.playerS - distBehind;
-      const camLatLogical = isMenuView ? (G.laneOffset - 1.4) : (G.laneOffset * 0.92);
-      const camLat = G.riderLatAt(camS, camLatLogical);
+      const camLat = G.followLatAt(camS, isMenuView ? 0.82 : 0.92, isMenuView ? -1.4 : 0);
       const camPose = G.embedRoad(camS, camLat);
       const minSafeY = G.roadY(camS) + 1.85;
       const targetCamX = camPose.x;
@@ -481,17 +480,17 @@ export function initCamera() {
       const targetCamY = Math.max(minSafeY, G.roadY(G.playerS) + heightAboveRoad);
 
       const distSq = G.camPosSmooth.distanceToSquared(G.bikeRoot.position);
-      // При резком смещении дороги (съезд/переход) не прыгаем камерой мгновенно,
-      // а быстро догоняем цель, чтобы не было рывка.
-      const followRate = distSq > 2500 ? 1 : Math.min(1, dt * (distSq > 900 ? 22 : 11.5));
+      // Ось камеры теперь непрерывна на стыке ленты, поэтому ускорение
+      // догона на 30 м только само создавало рывок. Быстрый догон нужен лишь
+      // после телепорта, когда камера реально осталась далеко позади.
+      const followRate = distSq > 2500 ? 1 : Math.min(1, dt * 11.5);
       G.camPosSmooth.x = lerp(G.camPosSmooth.x, targetCamX, followRate);
       G.camPosSmooth.y = lerp(G.camPosSmooth.y, targetCamY, followRate);
       G.camPosSmooth.z = lerp(G.camPosSmooth.z, targetCamZ, followRate);
       G.camera.position.copy(G.camPosSmooth);
 
       const lookAheadS = G.playerS + (isMenuView ? 42 : 46);
-      const lookLatLogical = isMenuView ? 0.5 : (G.laneOffset * 0.55);
-      const lookLat = G.riderLatAt(lookAheadS, lookLatLogical);
+      const lookLat = G.followLatAt(lookAheadS, isMenuView ? 0.35 : 0.55);
       const lookPose = G.embedRoad(lookAheadS, lookLat);
       const targetLookX = lookPose.x;
       const targetLookZ = lookPose.z;

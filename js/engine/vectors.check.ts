@@ -1,5 +1,5 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { EXIT_LANE_HALF, besidePoint, branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
+import { EXIT_LANE_HALF, besidePoint, branchEdges, exitClock, exitRibbonCenter, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
 import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, vectorSpawnOf, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
@@ -38,6 +38,10 @@ assert(openCourse(RIGHT_FORK, nose + 20, layout).length === 1, 'после но�
 assert(openCourse(RIGHT_FORK, nose - 5, layout).length === 0, 'до носа ответвлений нет');
 assert(openCourse(RIGHT_FORK, nose + clock.ownAfter, layout).length === 1, 'пришедший съезд остаётся ответвлением, а не дорогой');
 assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд односторонний, прямая наследует дорогу биома');
+const sealEnd = sampleRoad({ forkDistance: clock.ownAfter - 1, half: 10, chosen: 1, baseOrigin: 0 });
+const settleStart = sampleRoad({ forkDistance: clock.ownAfter + 1, half: 10, chosen: 1, baseOrigin: 0 });
+const sealMid = exitRibbonCenter(sealEnd.local);
+assert(sealMid != null && Math.abs(sealMid - laneAnchor(settleStart)) < 0.1, 'лента приходит на ось новой дороги без бокового скачка');
 
 const approachSpawn = vectorSpawnOf(0, EXIT_RIGHT, layout);
 assert(approachSpawn != null && approachSpawn.turnAt === nose + clock.choiceAt, 'вектор ждёт выбора, а не поворачивает в носу');
