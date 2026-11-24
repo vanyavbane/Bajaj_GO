@@ -459,6 +459,7 @@ export function initTraffic() {
         G.handleAccident(car);
       } else if (kind === 'near') {
         car.nearMissAwarded = true;
+        if (G.audio) G.audio.playSfx('near_miss');
         G.comboCount++;
         G.comboTimer = COMBO_WINDOW;
         if (G.trackMaxCombo) G.trackMaxCombo(G.comboCount);

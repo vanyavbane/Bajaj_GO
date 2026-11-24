@@ -28,14 +28,15 @@
 | 1 | `js/catalog.js` | `bikeCatalog` (14 моделей, поля `variant` и `hudStyle`), `tuningCatalog`, цены, характеристики, свотчи, `purchaseUpgrade` и `toggleUpgrade` |
 | 2 | `js/scene.js` | `scene`, `camera`, `renderer`, `createCanvasTexture`, PBR-генераторы асфальта и тротуара, объект материалов `M` |
 | 3 | `js/road.js` | `roadY` и `roadDY` делегируют высоту биома. `placeOnRoad` ставит объект через `embedRoad`. Кромку `ROAD_EDGE` считает биом |
-|   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money`, `lanes` (`readLanes` — единственное чтение полос, без городской подстановки) |
+|   | `js/engine/` | чистые модули без Three.js: `rules`, `motion`, `stream`, `vehicle`, `money`, `lanes` (`readLanes` — единственное чтение полос, без городской подстановки), `audio` (настройки, кривые, файлы и лимиты SFX), `repair` |
 | 4 | `js/sky.js` | `skyDome` (шейдер), `FogExp2`, `hemiLight`, `sunLight`, солнце/луна, воксельные облака, пул фонарных `PointLight` |
 | 5 | `js/roadSurface.js` | ленты (ribbon) асфальта, разметка, тротуары и бордюры по весу города |
 |   | `js/ground.js` | слой земли: откос от кромки асфальта. Запас под тротуар только у шоссе |
 | 6 | `js/roadside.js` | процедурные текстуры билбордов и биомных указателей, `createBillboardMesh`, `createBuildingGroup`, эстакады; плотность и тексты зависят от биома. Текстуру щита/портала выбирает `G.AdManager.pickBannerForSlot`, без баннера остаётся процедурная |
 |   | `js/adManager.js` | реклама из папки `AdManager/` рядом с игрой: `manifest.json` → автолистинг каталога → процедурный fallback, `sessionStorage`-кэш `bajajGO_adManagerDiscovery`, загрузка JPG/PNG/WebP и MP4/WebM без звука, постеры, лимит двух активных видео, доля показов и API для будущего Google Play |
 | 7 | `js/structures.js` | `createOverpassStructure`, `createShortTunnelStructure`, `createVoxelRampMesh`, `findSafeRampS`; мосты/тоннели реже вне города |
-|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), звуки прыжка, фида и маркерной зоны, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
+|   | `js/audio.js` | `AudioManager`: шесть шин, ленивый `AudioContext`, кэш MP3 и fallback, двигатель по `selectedBikeId`, город/ветер, дождь и гром, SFX, `G.audio` и глобальные клики |
+|   | `js/effects.js` | частицы прыжка, фид комбо и улучшений со стороной события (слева/справа/центр), эффекты прыжка/фида/маркерной зоны через `G.audio`, slow-mo (`triggerSlowMo` / `updateSlowMo` / `endSlowMo`, виньетка и бейдж) |
 | 8 | `js/pedestrians.js` | пешеходы на тротуарах; вне города скрываются и сжимаются по `cityWeightAtS` |
 | 9 | `js/traffic.js` | пул из 36 машин 11 типов, маски активности по биомам (лимиты 18/12/9/10/36) с гарантией тяжёлой машины, скорость по `LANE_SPEEDS` текущего биома, `resetTrafficVehicle`, `updateTraffic`, мигание поворотников по `flashReactTimer`, запуск slow-mo на третьей перелетённой машине |
 |   | `js/models/vehicles.js` | `createVehicleModel(type, color, variant)`: 11 типов трафика; общие материалы и кэш `box`/`cylinder`, детализированные двери/арки/диски/оптика/номера, `hiDetail`/`loDetail`, `blinkers`, additive-спрайты бликов фар `G.glowTex` |
@@ -46,9 +47,9 @@
 |   | `js/models/cockpit.js` | кокпит мотоцикла (Pulsar / Boxer / Avenger) и Qute от первого лица; кокпит — дочерний к `G.riderPivot`, а не к камере |
 | 11 | `js/camera.js` | переключение кокпита/третьего лица, приборная панель `updateCockpitDashboard` (цифровая и круглая `drawRoundDashboard`), профили кокпита `getCamProfile` / `saveCamProfiles` (FOV и высота камеры), экран `renderCameraSettings` с живым предпросмотром |
 | 12 | `js/atmosphere.js` | `todPalettes` (day/sunset/night), `biomeAtmos` (тинты и плотность по биомам), `updateAtmosphereAndTimeOfDay`, `todCycleTime`; гасит небо/свет и сгущает туман по `G.weather` |
-|   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии и звук; `G.updateWeather` / `G.resetWeather`, состояние `G.weather` |
+|   | `js/weather.js` | расписание дождя, `InstancedMesh` капель, грозовые тучи, мокрый асфальт, молнии; `G.updateWeather` / `G.resetWeather`, состояние `G.weather`; звук через `G.audio.setRain` / `G.playThunder` |
 | 13 | `js/highbeam.js` | `triggerHighBeam` (клавиша F), реакция трафика |
-| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), включая «Управление», модалки Motion Blur и God Rays. Тюнинг только на съезде |
+| 14 | `js/ui.js` | `startGame`, `crashGame`, `renderMainMenu` (полоска биома и кнопка звука), `renderShop`, экран «Настройки» с вкладками (`renderSettings`), включая «Управление», «Звук» (шесть ползунков) и модалки Motion Blur / God Rays. Тюнинг только на съезде |
 | 15 | `js/input.js` | `handleKey`, экранные кнопки, свайп-руление (`G.swipeActive` перебивает наклон), джойстик `#stick` |
 | 15b | `js/controls.js` | режим управления: `controlMode` (`buttons` / `stick` / `tilt`). Стик справа вместо стрелок, газа и тормоза; клавиатура работает, пока палец не на стике. Наклон: разрешение iOS, ось по ориентации экрана, `G.tiltSmoothed` в `stepSteer` |
 | 16 | `js/economy.js` | `exitPool`, отдельные остановки `rest_N` для каждого ресторана, маркерные зоны съездов (`EXIT_MARKER_COLORS`, `createExitMarker`, `getExitGlowLevel`), меню POI (`renderRestaurantMenu`, `renderFuelMenu`, `renderServiceMenu`, `renderExitTuning`), заказы, топливо/износ, `handleAccident`, `togglePause`, `renderPauseMenu` (строка «Локация»; «Настройки» открывают общий экран) |
@@ -87,6 +88,13 @@
 | `tiltCalibration` | `bajajGO_tiltCalibration` | JSON `{beta, gamma, calibratedAt, axis, angle}` — нейтральное положение устройства для активной оси наклона; свежее 30 дней, при смене ориентации пересчитывается автоматически |
 | `tiltSensitivity` | `bajajGO_tiltSensitivity` | 0.5…2.0 — множитель наклона, по умолчанию 1 |
 | `tiltInvert` | `bajajGO_tiltInvert` | `'1'` — инверсия руления наклоном |
+| `audio.engine` | `bajajGO_vol_engine` | 0–100, по умолчанию 70 — громкость двигателя |
+| `audio.ambient` | `bajajGO_vol_ambient` | 0–100, по умолчанию 45 — город и ветер |
+| `audio.sfx` | `bajajGO_vol_sfx` | 0–100, по умолчанию 60 — эффекты |
+| `audio.weather` | `bajajGO_vol_weather` | 0–100, по умолчанию 55 — дождь и гром |
+| `audio.ui` | `bajajGO_vol_ui` | 0–100, по умолчанию 50 — клики, фанфара достижений |
+| `audio.master` | `bajajGO_vol_master` | 0–100, по умолчанию 80 — общая громкость |
+| `audio.soundOn` | `bajajGO_sound_on` | `'1'` / `'0'` — общий выключатель звука; дублируется в старый `bajajGO_soundMuted`, но новый ключ имеет приоритет |
 
 Кэш обнаружения рекламы лежит в `sessionStorage` под ключом
 `bajajGO_adManagerDiscovery` и сбрасывается при перезагрузке страницы.
@@ -104,6 +112,11 @@
 **Погода (в памяти):** `G.weather` = `{ rain, cloud, wet, raining, elapsed,
 nextRainAt, rainEndsAt, flashes }`. `rain`/`cloud`/`wet` — плавные 0…1;
 `wet` сохнет медленнее, чем рассеивается дождь.
+
+**Звук (в памяти):** `G.audio.settings` — шесть громкостей и `soundOn`;
+`G.audio.snapshot()` — состояние контекста, активность заезда, id двигателя,
+число закэшированных буферов, список missing-файлов, уровень дождя и флаг грома.
+`G.todIsNight` — общий флаг ночи для кроссфейда городского фона.
 
 `bankedOrderRun` — сколько рублей за заказы уже зачислено на баланс во время
 заезда. В конце заезда `score - bankedOrderRun` добавляется к `bankPoints`,
@@ -452,8 +465,8 @@ overheads показывают постер. Загрузка асинхронн
   `SLOWMO_MAX_SECONDS` = 6 с не даёт эффекту зависнуть.
 - Бонусы и комбо не отменяются: slow-mo не трогает `jumpState`, счёт и фид.
 - Визуал — виньетка `#slowmo-vignette` и бейдж `#slowmo-badge` в `#jump-live`.
-  На входе играет низкий звук `playSlowMoEnter()`, тон остальных звуков
-  понижается через `slowMoPitch`.
+  На входе играет низкий звук через `G.audio.playTone()`, тон остальных звуков
+  понижается через `G.audio.setPitch(slowMoPitch)`.
 
 ## Камера от первого лица
 
@@ -559,11 +572,46 @@ overheads показывают постер. Загрузка асинхронн
   `applyGraphics`, поэтому переключение качества не сбрасывает погоду.
   На мокрой дороге торможение слабее на 15 % (`brakeDecel` в `js/loop.js`).
 - **Молнии и звук.** За эпизод 1–2 вспышки: `#lightning-flash` (CSS-оверлей,
-  максимум 0.20) и раскат `G.playThunder()` с задержкой. Дождь звучит через
-  общий `AudioContext` в `js/effects.js` (`G.setRainSound`), плавно
-  нарастает/затихает, на паузе гасится. Уровень низкий, игровые звуки важнее.
+  максимум 0.20) и раскат `G.playThunder()` с задержкой. Громкость дождя и
+  грома идёт через шину `weather` в `G.audio` (`setRainSound`, `playThunder`),
+  пауза гасит игру, но не master. Уровень низкий, игровые звуки важнее.
 - **Совместимость.** Работает в обеих камерах, не перекрывает HUD, не трогает
   физику кроме торможения, экономику, сохранения, трамплины и съезды.
+
+## Звук
+
+- **Шины.** `master` → `ctx.destination`; `engine`, `ambient`, `weather` →
+  `gameplayGain` → `master`; `sfx` и `ui` → `master` напрямую. Пауза, меню
+  и модалки глушат `gameplayGain`, но не клики. Все переходы громкости —
+  линейные рампы 0.1–0.3 с (город 1.8 с, дождь 2.2 с).
+- **Контекст.** Создаётся лениво по первому `pointerdown` / `touchend` /
+  `keydown` и повторно `resume()` на жестах. До жеста звука нет, но игра
+  работает. `AudioManager` живёт в `js/audio.js`, вызывается первым в `main.js`.
+- **Файлы.** `sounds/{engines,sfx,ambient,weather}/` копируются в `dist/sounds/`
+  при сборке, имена фиксированы и перечислены в `sounds/README.txt`. MP3
+  грузятся через `fetch` + `decodeAudioData` и кэшируются; отсутствующий файл
+  не ломает игру — один `console.warn` на файл и тишина для этого звука. Полной тишины без
+  файлов нет: двигатель синтезируется (два осциллятора + lowpass, у каждого
+  из 14 байков свой тембр, у `qute_yura` — electric-слой), дождь и гром —
+  процедурный шум, остальные SFX пропускаются.
+- **Двигатель.** Один loop на заезд по `G.selectedBikeId`. `playbackRate`
+  идёт от 0.55 (холостые) до 1.35 (максималка), громкость —
+  `0.12 + 0.5·sin(π·speed/maxSpeed)` от `effStats.maxSpeed`; газ даёт короткий
+  буст ×1.08. Обновление не чаще ~30 Гц из `animate()` в `js/loop.js`.
+- **Окружение.** `city_day` / `city_night` кроссфейдятся за ~1.8 с по
+  `G.todIsNight` из `js/atmosphere.js`. Ветер `wind_high_speed` идёт по
+  `clamp((speed − 60) / 180, 0, 1) · 0.6`.
+- **Погода.** `rain_loop` появляется/гаснет за 2–2.5 с, гром — через `thunderDelay()`
+  1–1.5 с после молнии, случайный `thunder_0X` с rate 0.9–1.1 и не больше
+  одного раската одновременно (`js/weather.js` + `js/audio.js`).
+- **SFX.** 13 файлов: авария, три прыжка, близкий пролёт, дальний свет,
+  четыре заказа/покупки, заправка, ремонт и клик. Повтор одного звука режется
+  по `SFX_COOLDOWN_MS` в `js/engine/audio.ts`. Slow-mo понижает тон через
+  `G.audio.setPitch()`.
+- **Настройки.** Вкладка «Звук» в `renderSettings` и кнопка «Настройки звука»
+  в главном меню: шесть `input[type=range]` 0–100, toggle, сброс к дефолтам
+  (70/45/60/55/50/80). Значения пишутся сразу и в шины, и в localStorage.
+  Отладка: `window.__bajaj.snapshot().audio` (только `?debug`).
 
 ## Пост-эффекты: Motion Blur и God Rays
 
@@ -624,7 +672,9 @@ overheads показывают постер. Загрузка асинхронн
 | Рекламные баннеры | Процедурные текстуры — `buildBillboardTextures`, `createBillboardMesh` в `js/roadside.js`; свои файлы — папка `AdManager/`, выбор — `pickBannerForSlot` в `js/adManager.js` |
 | Лимиты и доля показов рекламы | `AD_*` в `js/adManager.js`; пользовательские переопределения — `bajajGO_adUploadedShare`, `bajajGO_adEnabled` |
 | Будущая реклама Google Play | `registerExternalProvider` / `unregisterExternalProvider` в `js/adManager.js`; провайдер получает приоритет над папкой, показ и клик репортятся через `reportImpression` / `reportClick` |
-| Частицы, фид и звуки | `spawnOverflyParticles`, `pushFeed(text, tone, level, side)`, `playJumpSound`, `playExitChime` в `js/effects.js` |
+| Частицы, фид и игровые события | `spawnOverflyParticles`, `pushFeed(text, tone, level, side)`, `playJumpSound`, `playExitChime` в `js/effects.js`; сами звуки/тоны через `G.audio` |
+| Звук, шины и замена файлов | `js/audio.js`, `js/engine/audio.ts`, `sounds/README.txt`, `sounds/{engines,sfx,ambient,weather}/` |
+| Настройки громкости | Вкладка «Звук» в `renderSettings` (`js/ui.js`), стили `.audio-*` в `css/game.css`, ключи `bajajGO_vol_*`/`bajajGO_sound_on` |
 | Сторона уведомления комбо/перелёта | `side` в вызовах `G.pushFeed` из `js/traffic.js`; классы `.side-*` в `css/game.css` |
 | Физика разгона/торможения | `animate` в `js/loop.js` |
 | Прыжки и бонусы за перелёт | `jumpState` в `js/ui.js`, `finishJumpLanding` в `js/loop.js` |
@@ -635,7 +685,8 @@ overheads показывают постер. Загрузка асинхронн
 | Топливо и износ | `FUEL_RANGE_M`, `WEAR_LIMITS`, `tickEconomy`, `applyWearToStats` в `js/economy.js` |
 | Критические ситуации | `openFuelEmpty`, `handleAccident` в `js/economy.js` |
 | Пауза | `togglePause`, `renderPauseMenu`, `resumeGame` в `js/economy.js` |
-| Slow-Mo при перелётах | `SLOWMO_TARGET`, `SLOWMO_MAX_SECONDS`, `triggerSlowMo`, `updateSlowMo`, `endSlowMo` в `js/effects.js`; вызов в `overfly` (`js/traffic.js`); `dt` в `js/loop.js` |
+| Slow-Mo при перелётах | `SLOWMO_TARGET`, `SLOWMO_MAX_SECONDS`, `triggerSlowMo`, `updateSlowMo`, `endSlowMo` в `js/effects.js`; вызов в `overfly` (`js/traffic.js`); `dt` в `js/loop.js`; тон через `G.audio.setPitch` |
+| Дождь, гром и звук погоды | `RAIN_MIN`/`RAIN_MAX`, `GAP_MIN`, `initWeather`/`updateWeather` в `js/weather.js`, `thunderDelay()` в `js/engine/audio.ts`, шина `weather` в `js/audio.js` |
 | Погода, дождь и мокрый асфальт | `RAIN_MIN/RAIN_MAX`, `GAP_MIN`, `initWeather` / `updateWeather` в `js/weather.js`; `storm` в `todPalettes` и `updateAtmosphereAndTimeOfDay`; `G.stormClouds` в `js/sky.js` |
 | Профиль камеры кокпита | `CAM_FOV_*`, `CAM_HEIGHT_*`, `getCamProfile`, `saveCamProfiles`, `renderCameraSettings` в `js/camera.js` |
 | Motion Blur и God Rays | `MOTION_BLUR_FRAGMENT`, `GOD_RAYS_FRAGMENT`, `MotionBlurPass`, `GodRaysPass`, `initPostFx`, `G.renderFrame` в `js/postfx.js` |
@@ -655,3 +706,6 @@ overheads показывают постер. Загрузка асинхронн
 - **Сборка**: `npm run build` или `./build` пишет один `dist/bajaj-go.html`
   (Vite + vite-plugin-singlefile). Файл открывается двойным щелчком.
   Каталог `dist/` в git не входит. Править собранный HTML не нужно.
+  Рядом с HTML копируется `sounds/`: заменяемые MP3 грузятся через `fetch`,
+  поэтому полный звук требует HTTP-сервера. С `file://` браузер блокирует
+  запросы — игра остаётся рабочей, но звучит только синтетика.

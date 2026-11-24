@@ -888,6 +888,7 @@ function exitLane(s, side) {
       baseReward,
       penaltyApplied: false
     };
+    if (G.audio) G.audio.playSfx('order_pickup');
     saveEco();
   }
 
@@ -900,6 +901,7 @@ function exitLane(s, side) {
       const penalty = latePenalty(G.bankPoints, activeOrder.baseReward);
       G.bankPoints -= penalty;
       activeOrder.penaltyApplied = true;
+      if (G.audio) G.audio.playSfx('order_fail');
       G.saveGarage();
       saveEco();
       showEcoToast(`⏱ ПРОСРОЧКА! Штраф −${rubles(penalty)} · заказ всё равно нужно доставить`, true);
@@ -922,6 +924,7 @@ function exitLane(s, side) {
     if (G.trackSuccessfulDelivery) G.trackSuccessfulDelivery();
     activeOrder = null;
     deliveryMarker.visible = false;
+    if (G.audio) G.audio.playSfx('order_deliver');
     G.saveGarage();
     saveEco();
     showEcoToast(`Заказ «${name}» доставлен · +${rubles(reward)} на баланс`);
@@ -967,6 +970,7 @@ function exitLane(s, side) {
       G.bankPoints -= REFUEL_PRICE;
       G.fuelM = FUEL_RANGE_M;
       G.limpMode = false;
+      if (G.audio) G.audio.playSfx('refuel');
       G.saveGarage();
       saveEco();
       renderFuelMenu({ message: 'Бак заправлен полностью. Можно ехать дальше!' });
@@ -1076,6 +1080,7 @@ function exitLane(s, side) {
         if (wearM[part] < 300 || G.bankPoints < price) return;
         G.bankPoints -= price;
         wearM[part] = 0;
+        if (G.audio) G.audio.playSfx('repair');
         G.saveGarage();
         saveEco();
         if (G.trackStoRepair) G.trackStoRepair();
@@ -1129,6 +1134,7 @@ function exitLane(s, side) {
         const upg = G.tuningCatalog.find(u => u.id === btn.dataset.buyUpg);
         if (!upg) return;
         const bought = G.purchaseUpgrade(bike, upg);
+        if (bought.ok && G.audio) G.audio.playSfx('purchase');
         if (!bought.ok) {
           G.pushFeed(`Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'bad');
           renderExitTuning(`Не хватает ${rubles(bought.missing)} на «${upg.shortName}»`, 'err');
@@ -1147,6 +1153,7 @@ function exitLane(s, side) {
         if (!upg) return;
         const toggled = G.toggleUpgrade(bike, upg);
         if (!toggled.ok) return;
+        if (G.audio) G.audio.playSfx('purchase');
         G.syncVehicleAndCameraVisibility(true);
         const msg = toggled.installed
           ? `Деталь «${upg.shortName}» установлена`
@@ -1275,6 +1282,7 @@ function exitLane(s, side) {
       return;
     }
     G.paused = true;
+    if (G.audio) G.audio.setPaused(true);
     G.keys.gas = G.keys.brake = G.keys.left = G.keys.right = false;
     if (G.releaseStick) G.releaseStick();
     if (G.syncControlUi) G.syncControlUi();
@@ -1284,6 +1292,7 @@ function exitLane(s, side) {
 
   function resumeGame() {
     G.paused = false;
+    if (G.audio) G.audio.setPaused(false);
     G.currentScreen = (G.started && !G.ended) ? 'playing' : 'main';
     const overlay = $('overlay');
     overlay.style.display = 'none';
@@ -1297,6 +1306,7 @@ function exitLane(s, side) {
 
   function exitToMenuFromPause() {
     G.paused = false;
+    if (G.audio) G.audio.setPaused(false);
     G.bankPoints += creditRun(G.score, G.bankedOrderRun);
     G.bankedOrderRun = 0;
     G.score = 0;

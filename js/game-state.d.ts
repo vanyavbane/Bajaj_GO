@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { AudioSettings } from './engine/audio.ts';
 import type { BiomeDef, TrafficModel } from './engine/biomes.js';
 import type { DriveRoads, LiveCarriage } from './engine/carriage.js';
 import type { CarriageLayout } from './engine/lanes.js';
@@ -33,6 +34,57 @@ export interface BikeStats {
   variant?: BikeVariant;
   hudStyle?: HudStyle;
   swatches?: ColorSwatch[];
+}
+
+export interface AudioManagerApi {
+  init(): AudioContext | null;
+  context(): AudioContext | null;
+  bus(name: string): GainNode | null;
+  readonly settings: AudioSettings;
+  readonly active: boolean;
+  readonly engineId: string;
+  readonly pitch: number;
+  setPitch(value: number): void;
+  setVolume(bus: string, value: number): void;
+  setSoundOn(value: boolean): void;
+  toggleSound(): void;
+  reset(): void;
+  startRun(bikeId?: string, nightish?: boolean): void;
+  stopRun(): void;
+  setGameplayActive(value: boolean): void;
+  setPaused(value: boolean): void;
+  setNight(value: boolean): void;
+  setRain(level: number): void;
+  setRainSound(level: number): void;
+  playThunder(): void;
+  playSfx(key: string, opts?: { rate?: number; volume?: number }): void;
+  playTone(opts?: {
+    freq?: number;
+    dur?: number;
+    type?: OscillatorType;
+    level?: number;
+    delay?: number;
+    bus?: string;
+    sweepTo?: number;
+    filterFrom?: number;
+    filterTo?: number;
+  }): void;
+  playClick(): void;
+  update(dt: number, opts: { speed: number; maxSpeed: number; gas: boolean; night: boolean }): void;
+  load(key: string): Promise<AudioBuffer | null>;
+  snapshot(): {
+    settings: AudioSettings;
+    contextState: string;
+    active: boolean;
+    inRun: boolean;
+    engineId: string;
+    engineSourceKey: string;
+    buffers: number;
+    failed: string[];
+    rain: number;
+    thunder: boolean;
+    night: boolean;
+  };
 }
 
 export interface TuningUpgrade {
@@ -469,6 +521,9 @@ export interface GameState {
   controlMode: 'buttons' | 'stick' | 'tilt';
   soundMuted: boolean;
   setSoundMuted: (muted: boolean) => void;
+  /** Звуковая система: шины, заменяемые MP3 и настройки громкости. */
+  audio: AudioManagerApi;
+  todIsNight: boolean;
   /** −1…1, горизонталь джойстика. */
   stickSteer: number;
   /** Палец на стике. Пока его нет, рулят клавиши. */

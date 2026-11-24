@@ -7,7 +7,7 @@
     "build": "vite build && node scripts/sync-admanager.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.engine.json --noEmit",
-    "test": "npm run check:roadside && npm run check:biomes && npm run check:blocks && npm run check:branch && npm run check:vectors && npm run check:route && npm run check:seat && npm run check:carriage",
+    "test": "npm run check:roadside && npm run check:biomes && npm run check:blocks && npm run check:branch && npm run check:vectors && npm run check:route && npm run check:seat && npm run check:carriage && npm run check:repair && npm run check:audio",
     "check:roadside": "node --experimental-strip-types js/engine/roadside.check.ts",
     "check:biomes": "node --experimental-strip-types js/engine/biomes.check.ts",
     "check:blocks": "node --experimental-strip-types js/engine/blocks.check.ts",
@@ -16,6 +16,8 @@
     "check:route": "node --experimental-strip-types js/engine/route.check.ts",
     "check:seat": "node --experimental-strip-types js/engine/seat.check.ts",
     "check:carriage": "node --experimental-strip-types js/engine/carriage.check.ts",
+    "check:repair": "node --experimental-strip-types js/engine/repair.check.ts",
+    "check:audio": "node --experimental-strip-types js/engine/audio.check.ts",
     "scene": "node scripts/scene.mjs"
   },
   "workspaces": [

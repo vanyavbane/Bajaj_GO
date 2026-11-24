@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isNightish } from './engine/audio.ts';
 import { BIOMES } from './engine/biomes.js';
 import { G } from './state.js';
 
@@ -160,6 +161,8 @@ export function initAtmosphere() {
       mark = t < 0.5 ? 'moon' : 'sun';
       label = t < 0.5 ? 'НОЧЬ' : 'ДЕНЬ';
     }
+    // Звуковое окружение читает тот же флаг, что и иконка времени суток.
+    G.todIsNight = isNightish(G.todCycleTime);
 
     let inTunnel = false;
     for (const ms of G.megaStructures) {

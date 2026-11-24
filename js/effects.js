@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sfxRate } from './engine/audio.ts';
 import { G } from './state.js';
 
 export function initEffects() {
@@ -33,75 +34,30 @@ export function initEffects() {
   }
   G.spawnOverflyParticles = spawnOverflyParticles;
 
-  G.soundMuted = localStorage.getItem('bajajGO_soundMuted') === '1';
-  G.setSoundMuted = (muted) => {
-    G.soundMuted = !!muted;
-    localStorage.setItem('bajajGO_soundMuted', G.soundMuted ? '1' : '0');
-    if (G.soundMuted && rainGain && audioCtx) {
-      rainGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
-    }
-  };
-
-  let audioCtx = null;
-  // Тон звуков понижается вместе с замедлением мира (0.45…1.0).
+  // Звуком теперь управляет js/audio.js: шины, громкость и заменяемые MP3.
+  // Здесь остаются только игровые эффекты, которые не привязаны к файлам.
   let slowMoPitch = 1;
+
   function playJumpSound(type = 'overfly', combo = 1) {
-    if (G.soundMuted) return;
-    try {
-      const ctx = ensureAudio();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      const now = ctx.currentTime;
-      if (type === 'overfly') {
-        osc.type = 'triangle';
-        const baseFreq = (520 + Math.min(combo, 5) * 110) * slowMoPitch;
-        osc.frequency.setValueAtTime(baseFreq, now);
-        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.45, now + 0.16);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-        osc.start(now);
-        osc.stop(now + 0.18);
-      } else if (type === 'launch') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(240 * slowMoPitch, now);
-        osc.frequency.exponentialRampToValueAtTime(480 * slowMoPitch, now + 0.22);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-        osc.start(now);
-        osc.stop(now + 0.24);
-      }
-    } catch {
-      // Игнорируем, если аудио заблокировано браузером
+    if (type === 'launch') {
+      G.audio.playSfx('jump_launch');
+      return;
     }
+    G.audio.playSfx('jump_overfly', { rate: sfxRate(combo) });
   }
   G.playJumpSound = playJumpSound;
 
   // Короткий двухнотный отклик при въезде в маркерную зону съезда
   function playExitChime(isFood) {
-    if (G.soundMuted) return;
-    try {
-      const ctx = ensureAudio();
-      const now = ctx.currentTime;
-      const base = (isFood ? 660 : 520) * slowMoPitch;
-      const steps = [1, 1.5];
-      for (let i = 0; i < steps.length; i++) {
-        const off = i * 0.075;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(base * steps[i], now + off);
-        gain.gain.setValueAtTime(0.0001, now + off);
-        gain.gain.exponentialRampToValueAtTime(0.07, now + off + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + off + 0.18);
-        osc.start(now + off);
-        osc.stop(now + off + 0.2);
-      }
-    } catch {
-      // Аудио может быть заблокировано браузером — молча пропускаем
+    const base = isFood ? 660 : 520;
+    for (const [i, step] of [1, 1.5].entries()) {
+      G.audio.playTone({
+        freq: base * step,
+        dur: 0.18,
+        type: 'sine',
+        level: 0.07,
+        delay: i * 0.075,
+      });
     }
   }
   G.playExitChime = playExitChime;
@@ -110,130 +66,37 @@ export function initEffects() {
   const FEED_MAX = 4;
   const feedItems = [];
 
-  function ensureAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-  }
-
-  /* ---------- Дождь и гром: фоновый шум, не перекрывающий игровые звуки ---------- */
-  let rainSource = null;
-  let rainGain = null;
-
-  function ensureRainAudio() {
-    const ctx = ensureAudio();
-    if (rainSource) return ctx;
-    const seconds = 2;
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    rainSource = ctx.createBufferSource();
-    rainSource.buffer = buf;
-    rainSource.loop = true;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 2600;
-    rainGain = ctx.createGain();
-    rainGain.gain.value = 0;
-    rainSource.connect(filter);
-    filter.connect(rainGain);
-    rainGain.connect(ctx.destination);
-    rainSource.start();
-    return ctx;
-  }
-
-  function setRainSound(level) {
-    const lvl = G.soundMuted ? 0 : Math.max(0, Math.min(0.2, level));
-    // Не создаём AudioContext до первого реального дождя.
-    if (!rainSource && lvl < 0.001) return;
-    try {
-      const ctx = ensureRainAudio();
-      rainGain.gain.setTargetAtTime(lvl, ctx.currentTime, 0.45);
-    } catch {
-      // Аудио может быть заблокировано — пропускаем
-    }
-  }
-  G.setRainSound = setRainSound;
-
-  function playThunder() {
-    if (G.soundMuted) return;
-    try {
-      const ctx = ensureAudio();
-      const now = ctx.currentTime;
-      const dur = 2.2;
-      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(340, now);
-      filter.frequency.exponentialRampToValueAtTime(90, now + dur);
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.28);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-      src.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-      src.start(now);
-      src.stop(now + dur + 0.02);
-    } catch {
-      // Аудио может быть заблокировано — молча пропускаем
-    }
-  }
-  G.playThunder = playThunder;
-
   function feedTone(freq, dur, type, level, delay) {
-    const ctx = ensureAudio();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    const t = ctx.currentTime + (delay || 0);
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, t);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(level, t + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.start(t);
-    osc.stop(t + dur + 0.02);
+    G.audio.playTone({ freq, dur, type, level, delay });
   }
 
   function playFeedSound(kind, level) {
-    if (G.soundMuted) return;
-    try {
-      ensureAudio();
-      if (kind === 'overfly') {
-        playJumpSound('overfly', level);
-        return;
-      }
-      if (kind === 'land') {
-        feedTone(520, 0.16, 'sine', 0.07);
-        feedTone(780, 0.18, 'sine', 0.05, 0.08);
-        return;
-      }
-      if (kind === 'hard') {
-        feedTone(180, 0.22, 'sine', 0.08);
-        feedTone(110, 0.26, 'triangle', 0.06, 0.06);
-        return;
-      }
-      if (kind === 'upgrade') {
-        feedTone(523, 0.14, 'sine', 0.06);
-        feedTone(659, 0.14, 'sine', 0.05, 0.09);
-        feedTone(784, 0.2, 'sine', 0.05, 0.18);
-        return;
-      }
-      if (kind === 'remove' || kind === 'bad') {
-        feedTone(392, 0.12, 'sine', 0.05);
-        feedTone(262, 0.2, 'sine', 0.05, 0.08);
-        return;
-      }
-      feedTone(360 + Math.min(level, 6) * 70, 0.12, 'triangle', 0.07);
-    } catch {
-      // Аудио может быть заблокировано браузером — молча пропускаем
+    if (kind === 'overfly') {
+      playJumpSound('overfly', level);
+      return;
     }
+    if (kind === 'land') {
+      feedTone(520, 0.16, 'sine', 0.035);
+      feedTone(780, 0.18, 'sine', 0.025, 0.08);
+      return;
+    }
+    if (kind === 'hard') {
+      feedTone(180, 0.22, 'sine', 0.08);
+      feedTone(110, 0.26, 'triangle', 0.06, 0.06);
+      return;
+    }
+    if (kind === 'upgrade') {
+      feedTone(523, 0.14, 'sine', 0.06);
+      feedTone(659, 0.14, 'sine', 0.05, 0.09);
+      feedTone(784, 0.2, 'sine', 0.05, 0.18);
+      return;
+    }
+    if (kind === 'remove' || kind === 'bad') {
+      feedTone(392, 0.12, 'sine', 0.05);
+      feedTone(262, 0.2, 'sine', 0.05, 0.08);
+      return;
+    }
+    feedTone(360 + Math.min(level, 6) * 70, 0.12, 'triangle', 0.07);
   }
 
   function pushFeed(text, tone, level, side = 'center') {
@@ -313,6 +176,7 @@ export function initEffects() {
     slowMoFactor = 1;
     slowMoElapsed = 0;
     slowMoPitch = 1;
+    if (G.audio) G.audio.setPitch(1);
     G.slowMoFactor = 1;
     updateSlowMoVisuals();
   }
@@ -362,6 +226,7 @@ export function initEffects() {
     }
     // Понижение тона звуков во время замедления (0.45…1.0)
     slowMoPitch = 0.45 + 0.55 * G.clamp(slowMoFactor, 0, 1);
+    if (G.audio) G.audio.setPitch(slowMoPitch);
     G.slowMoFactor = slowMoFactor;
     return slowMoFactor;
   }
@@ -369,36 +234,10 @@ export function initEffects() {
 
   // Низкий «вдох» при входе в замедление.
   function playSlowMoEnter() {
-    if (G.soundMuted) return;
-    try {
-      const ctx = ensureAudio();
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const sub = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1400, now);
-      filter.frequency.exponentialRampToValueAtTime(260, now + 0.9);
-      osc.type = 'sawtooth';
-      sub.type = 'sine';
-      osc.frequency.setValueAtTime(320, now);
-      osc.frequency.exponentialRampToValueAtTime(92, now + 0.9);
-      sub.frequency.setValueAtTime(160, now);
-      sub.frequency.exponentialRampToValueAtTime(46, now + 0.9);
-      osc.connect(filter);
-      sub.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.09, now + 0.06);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.0);
-      osc.start(now);
-      sub.start(now);
-      osc.stop(now + 1.0);
-      sub.stop(now + 1.0);
-    } catch {
-      // Аудио может быть заблокировано браузером — молча пропускаем
-    }
+    G.audio.playTone({
+      freq: 320, sweepTo: 92, dur: 1, type: 'sawtooth', level: 0.07,
+      filterFrom: 1400, filterTo: 260,
+    });
+    G.audio.playTone({ freq: 160, sweepTo: 46, dur: 1, type: 'sine', level: 0.05 });
   }
 }

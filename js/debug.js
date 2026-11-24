@@ -127,6 +127,7 @@ export function initDebug() {
       },
       repair: repairSnapshot(),
       repairEvent: repairSnapshot(),
+      audio: G.audio ? G.audio.snapshot() : null,
       split: G.splitState ? {
         active: !!G.splitState.active,
         zone: G.splitState.zone,

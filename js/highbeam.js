@@ -11,6 +11,7 @@ export function initHighbeam() {
     if (!G.started || G.ended || G.paused || G.uiModal || G.highBeamCooldown > 0) return;
     G.highBeamTimer = 0.42;
     G.highBeamCooldown = 0.85;
+    if (G.audio) G.audio.playSfx('high_beam');
     $('badge-beam').hidden = false;
 
     const riderLat = G.riderLatAt(G.playerS);

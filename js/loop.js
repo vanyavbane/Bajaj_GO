@@ -86,6 +86,7 @@ export function initLoop() {
 
   function finishJumpLanding() {
     G.endSlowMo();
+    if (G.audio) G.audio.playSfx('jump_land');
     const jumpDist = Math.max(0, G.playerS - G.jumpState.startS);
     const hardPitch = Math.abs(G.jumpState.pitch) > HARD_LANDING_PITCH;
 
@@ -525,6 +526,7 @@ export function initLoop() {
 
     // Редактор локаций: отдельный интерфейс, своя камера, симуляция не тикает.
     if (G.locationEditorActive) {
+      if (G.audio) G.audio.setGameplayActive(false);
       if (G.setRainSound) G.setRainSound(0);
       if (G.updateLocationEditor) G.updateLocationEditor(realDt, now);
       const ecam = G.editorCamera || G.camera;
@@ -534,6 +536,7 @@ export function initLoop() {
 
     // Пауза и открытые модальные окна останавливают симуляцию целиком.
     if (G.paused || G.uiModal) {
+      if (G.audio) G.audio.setGameplayActive(false);
       if (G.setRainSound) G.setRainSound(0);
       if (G.renderFrame) G.renderFrame(realDt);
       else G.renderer.render(G.scene, G.camera);
@@ -547,6 +550,16 @@ export function initLoop() {
     G.applyWearToStats(effStats);
     G.frameStats = effStats;
     const isQute = effStats.isQute;
+
+    if (G.audio) {
+      G.audio.setGameplayActive(G.started && !G.ended);
+      G.audio.update(realDt, {
+        speed: G.speed,
+        maxSpeed: effStats.maxSpeed,
+        gas: !!(G.keys.gas || (G.controlMode === 'stick' && G.stickGas)),
+        night: !!G.todIsNight,
+      });
+    }
 
     if (!G.started && !G.ended) advanceMenuDemo(dt, now);
     if (G.started && !G.ended) {

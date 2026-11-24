@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { button, callout, check, choiceGrid, currency, field, heading, icon, iconButton, inline, logo, menuScreen, note, panel, slider, stats, swatch, swatchRow, tabs, tag } from '@bajajgo/design';
 import { creditRun, rubles, runDistance, shortfall } from './engine/money.js';
+import { DEFAULT_AUDIO_SETTINGS, isNightish } from './engine/audio.ts';
 import { resetRun } from './engine/rules.js';
 import { G } from './state.js';
 import { bikePaint } from './engine/vehicle.js';
@@ -66,37 +67,17 @@ export function initUi() {
   }
 
   function playAchievementSound() {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      const ctx = G.audioCtx || new Ctx();
-      if (!G.audioCtx) G.audioCtx = ctx;
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-      const now = ctx.currentTime;
-      // Короткая фанфара на "трубах": два слоя sawtooth с фильтром.
-      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-      notes.forEach((freq, i) => {
-        const t = now + i * 0.08;
-        const dur = i === notes.length - 1 ? 0.45 : 0.12;
-        const osc = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        osc.type = 'sawtooth';
-        osc2.type = 'square';
-        osc.frequency.value = freq;
-        osc2.frequency.value = freq * 1.002;
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1800, t);
-        filter.frequency.exponentialRampToValueAtTime(900, t + dur);
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        osc.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-        osc.start(t); osc2.start(t);
-        osc.stop(t + dur + 0.02); osc2.stop(t + dur + 0.02);
+    if (!G.audio) return;
+    // Короткая фанфара на «трубах» через шину ui, чтобы слушалась громкость интерфейса.
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+    notes.forEach((freq, i) => {
+      const dur = i === notes.length - 1 ? 0.45 : 0.12;
+      G.audio.playTone({
+        freq, dur, type: 'sawtooth', level: 0.12, delay: i * 0.08,
+        bus: 'ui', filterFrom: 1800, filterTo: 900,
       });
-    } catch {}
+      G.audio.playTone({ freq: freq * 1.002, dur, type: 'square', level: 0.03, delay: i * 0.08, bus: 'ui' });
+    });
   }
 
   function showNextAchievement() {
@@ -315,17 +296,32 @@ export function initUi() {
         ` : ''}
       `;
     } else if (tab === 'sound') {
-      const muted = !!G.soundMuted;
+      const audioSettings = G.audio ? G.audio.settings : { ...DEFAULT_AUDIO_SETTINGS };
+      const volumeSlider = (bus, label, hint, accent) => `
+        <div class="ds-slider audio-slider audio-slider--${accent}">
+          <div class="ds-slider-head">
+            <span>${label}</span>
+            <b><span id="vol-${bus}-val">${audioSettings[bus]}</span>%</b>
+          </div>
+          <input id="vol-${bus}" class="audio-range" type="range" min="0" max="100" step="1" value="${audioSettings[bus]}">
+          <p class="ds-slider-hint">${hint}</p>
+        </div>
+      `;
       body = `
-        ${inline('Звук', button({
+        ${inline('Весь звук', button({
           id: 'sound-mute',
           variant: 'compact',
-          label: muted ? 'Выключен' : 'Включён',
-          pressed: !muted
+          label: audioSettings.soundOn ? 'Включён' : 'Выключен',
+          pressed: audioSettings.soundOn
         }))}
-        ${note(muted
-          ? 'Беззвучный режим: прыжки, съезды, дождь, гром и очки не звучат.'
-          : 'Игровые звуки включены. Беззвучный режим выключает их все сразу.')}
+        ${volumeSlider('engine', 'Громкость мотора мотоцикла', 'Двигатель выбранного байка.', 'engine')}
+        ${volumeSlider('ambient', 'Громкость окружения (город + ветер)', 'Город днём и ночью, ветер на скорости.', 'ambient')}
+        ${volumeSlider('sfx', 'Громкость эффектов (SFX)', 'Прыжки, аварии, заказы, покупки.', 'sfx')}
+        ${volumeSlider('weather', 'Громкость погоды (дождь, гром)', 'Дождь звучит только в активном заезде.', 'weather')}
+        ${volumeSlider('ui', 'Громкость интерфейса (клики)', 'Кнопки меню, магазина и паузы.', 'ui')}
+        ${volumeSlider('master', 'Общая громкость', 'Обнуляет весь звук, не сбрасывая ползунки.', 'master')}
+        ${button({ id: 'sound-reset', variant: 'compact', icon: 'arrow-counterclockwise', label: 'СБРОС К ЗНАЧЕНИЯМ ПО УМОЛЧАНИЮ' })}
+        ${note('Значения сохраняются в браузере и применяются сразу. Если папка sounds/ пуста, игра работает тихо и продолжается без ошибок.')}
       `;
     } else if (tab === 'debug') {
       body = `
@@ -495,7 +491,32 @@ export function initUi() {
     const soundMute = owned('sound-mute');
     if (soundMute) {
       soundMute.addEventListener('click', () => {
-        if (G.setSoundMuted) G.setSoundMuted(!G.soundMuted);
+        if (G.audio) G.audio.toggleSound();
+        else if (G.setSoundMuted) G.setSoundMuted(!G.soundMuted);
+        renderSettings('sound', from);
+      });
+    }
+    for (const bus of ['engine', 'ambient', 'sfx', 'weather', 'ui', 'master']) {
+      const range = /** @type {HTMLInputElement|null} */ (owned(`vol-${bus}`));
+      if (!range) continue;
+      const valueEl = owned(`vol-${bus}-val`);
+      range.addEventListener('input', () => {
+        const value = G.clamp(Number(range.value), 0, 100);
+        if (valueEl) valueEl.textContent = String(Math.round(value));
+        if (G.audio) G.audio.setVolume(bus, value);
+      });
+      if (valueEl) {
+        valueEl.addEventListener('dblclick', () => {
+          range.value = String(DEFAULT_AUDIO_SETTINGS[bus] || 0);
+          valueEl.textContent = range.value;
+          if (G.audio) G.audio.setVolume(bus, Number(range.value));
+        });
+      }
+    }
+    const soundReset = owned('sound-reset');
+    if (soundReset) {
+      soundReset.addEventListener('click', () => {
+        if (G.audio) G.audio.reset();
         renderSettings('sound', from);
       });
     }
@@ -1024,6 +1045,7 @@ export function initUi() {
     if (G.clearFeed) G.clearFeed();
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
+    if (G.audio) G.audio.stopRun();
 
     const overlay = $('overlay');
     overlay.style.display = 'block';
@@ -1048,6 +1070,12 @@ export function initUi() {
           label: 'Настройки',
           trail: G.graphicsLabel,
           trailOn: G.graphics.preset === 'sharp'
+        }),
+        button({
+          id: 'mm-sound',
+          icon: 'vinyl',
+          label: 'Настройки звука',
+          trail: G.audio && !G.audio.settings.soundOn ? 'Выкл' : `${G.audio ? G.audio.settings.master : 80}%`
         })
       ].join(''),
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
@@ -1065,6 +1093,7 @@ export function initUi() {
     $('mm-outfit').addEventListener('click', renderOutfit);
     $('mm-achievements').addEventListener('click', renderAchievements);
     $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
+    $('mm-sound').addEventListener('click', () => renderSettings('sound', 'menu'));
     $('mm-cam-settings').addEventListener('click', () => {
       G.renderCameraSettings(renderMainMenu);
     });
@@ -1260,6 +1289,7 @@ export function initUi() {
         G.ownedBikes.push(bike.id);
         G.selectedBikeId = bike.id;
         G.shopPreviewId = bike.id;
+        if (G.audio) G.audio.playSfx('purchase');
         G.saveGarage();
         if (G.trackBikeBought) G.trackBikeBought();
         G.syncVehicleAndCameraVisibility(true);
@@ -1297,6 +1327,7 @@ export function initUi() {
     G.currentScreen = 'playing';
     G.started = true;
     G.ended = false;
+    if (G.audio) G.audio.startRun(G.selectedBikeId, isNightish(G.todCycleTime));
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
     // Биом продолжается с сохранённого пробега: конфиг полос и профиль
@@ -1380,6 +1411,10 @@ export function initUi() {
     G.started = false;
     G.runIntro = 0;
     G.currentScreen = 'crash';
+    if (G.audio) {
+      G.audio.playSfx('crash');
+      G.audio.stopRun();
+    }
     G.resetSlowMo();
     if (G.resetWeather) G.resetWeather();
     if (G.stopTilt) G.stopTilt();

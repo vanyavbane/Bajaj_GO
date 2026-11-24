@@ -6,6 +6,7 @@ import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 const adManagerDir = fileURLToPath(new URL('./AdManager', import.meta.url));
+const soundsDir = fileURLToPath(new URL('./sounds', import.meta.url));
 
 // AdManager/ лежит рядом с исходным index.html и должна оказаться рядом
 // с собранным dist/bajaj-go.html: владелец кладёт туда свои файлы.
@@ -26,6 +27,24 @@ function copyAdManager() {
   };
 }
 
+// sounds/ лежит рядом со собранной игрой: владелец заменяет MP3, не трогая HTML.
+function copySounds() {
+  /** @type {import('vite').ResolvedConfig | null} */
+  let config = null;
+  return {
+    name: 'bajaj-go-copy-sounds',
+    apply: 'build',
+    configResolved(resolved) {
+      config = resolved;
+    },
+    closeBundle() {
+      if (!config || !existsSync(soundsDir)) return;
+      const outDir = resolve(config.root, config.build.outDir);
+      cpSync(soundsDir, join(outDir, 'sounds'), { recursive: true });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   define: {
     __BUILD_TIME__: JSON.stringify(command === 'build' ? new Date().toISOString() : ''),
@@ -33,6 +52,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     viteSingleFile({ useRecommendedBuildConfig: true, outputFileName: 'bajaj-go.html' }),
     copyAdManager(),
+    copySounds(),
   ],
   server: {
     port: 5173,

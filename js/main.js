@@ -1,4 +1,5 @@
 import { initAdManager } from './adManager.js';
+import { initAudio } from './audio.js';
 import { initAtmosphere } from './atmosphere.js';
 import { initBike } from './bike.js';
 import { initBiome, initBiomeWorld } from './biome.js';
@@ -37,6 +38,8 @@ import { initTraffic } from './traffic.js';
 import { initUi } from './ui.js';
 import { initWeather } from './weather.js';
 
+// AudioManager ленив: слушатели жестов вешаются до инициализации остальных систем.
+initAudio();
 initGraphics();
 initCatalog();
 initMileage();

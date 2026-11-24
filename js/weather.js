@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { thunderDelay } from './engine/audio.ts';
 import { G } from './state.js';
 
 /* =========================================================================
@@ -119,7 +120,7 @@ export function initWeather() {
 
   function triggerFlash() {
     flashT = 0;
-    thunderAt = 0.65 + Math.random() * 1.7;
+    thunderAt = thunderDelay();
   }
 
   function updateFlash(dt) {
@@ -261,7 +262,7 @@ export function initWeather() {
     if (applyWeatherHold()) {
       updateDrops(dt);
       applyRoadWetness();
-      if (G.setRainSound) G.setRainSound(state.rain * 0.055);
+      if (G.setRainSound) G.setRainSound(state.rain);
       return;
     }
 
@@ -296,7 +297,7 @@ export function initWeather() {
     updateFlash(dt);
     applyRoadWetness();
 
-    if (G.setRainSound) G.setRainSound(state.rain * 0.055);
+    if (G.setRainSound) G.setRainSound(state.rain);
   }
   G.updateWeather = updateWeather;
 }
