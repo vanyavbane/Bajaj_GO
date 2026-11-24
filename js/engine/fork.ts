@@ -881,17 +881,11 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   const onExit = riding && exitHalf > 0.5;
   let minEdge: number;
   let maxEdge: number;
+  const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
   if (onExit) {
-    const joined = exitGap(edge) < ATTACHED_GAP;
-    const center = exitRibbonCenter(edge) ?? 0;
-    // Пока асфальт один, съезд — правая лента: держим байк на ней.
-    if (joined) {
-      minEdge = (edge.rightInner + RIBBON_MARGIN - center) / span;
-      maxEdge = (edge.rightOuter - RIBBON_MARGIN - center) / span;
-    } else {
-      minEdge = (-exitHalf + RIBBON_MARGIN) / span;
-      maxEdge = (exitHalf - RIBBON_MARGIN) / span;
-    }
+    // Лента съезда — часть той же дороги, поэтому пределы в координатах roadMid.
+    minEdge = (edge.rightInner + RIBBON_MARGIN - roadMid) / span;
+    maxEdge = (edge.rightOuter - RIBBON_MARGIN - roadMid) / span;
   } else {
     // Полоса байка считается от центра его дороги, не от нуля сплайна.
     const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
