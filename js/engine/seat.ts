@@ -11,6 +11,7 @@ import {
   landOnCarriage,
   laneAnchor,
   onExitRibbon,
+  roadsJoined,
   type RoadFrame,
 } from './fork.ts';
 
@@ -88,11 +89,14 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
     return { kind: 'road', lane: (world - laneAnchor(frame)) / scale };
   }
   const axis = laneAnchor(frame);
+  const lane = (world - axis) / scale;
+  // Пока +1 полоса прижата, это одно полотно: байк не дёргается к её левому
+  // краю в момент перестроения. Кромка ленты ещё не ограничение руля.
+  if (roadsJoined(frame.local)) return { kind: 'exit', lane };
   const center = (frame.origin + ribbon - axis) / scale;
   const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
   const limit = Math.max(0, (halfW - 0.7) / Math.max(scale, 0.05));
-  let lane = (world - axis) / scale;
-  if (lane < center - limit) lane = center - limit;
-  if (lane > center + limit) lane = center + limit;
+  if (lane < center - limit) return { kind: 'exit', lane: center - limit };
+  if (lane > center + limit) return { kind: 'exit', lane: center + limit };
   return { kind: 'exit', lane };
 }

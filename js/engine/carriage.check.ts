@@ -75,7 +75,7 @@ assert(early.lanes.count === city.count + 1 && early.way === 'two-way', 'пол�
 assert(Math.abs(early.axis) < 0.2 && Math.abs(mid.axis) < 0.2, 'старая дорога сужается на своей оси');
 const earlyRibbon = exitRibbonCenter(earlySeal.local);
 const midRibbon = exitRibbonCenter(midReturn.local);
-assert(earlyRibbon != null && midRibbon != null && Math.abs(midRibbon - earlyRibbon) < 0.5, 'въезд остаётся на своей линии');
+assert(earlyRibbon != null && midRibbon != null && midRibbon > earlyRibbon, 'въезд плавно уходит с +1 полосы на линию курса');
 assert(midReturn.local.leftInner - midReturn.local.leftOuter < half * 2 - 1, 'старая дорога на въезде уже уже');
 const grown = riderCarriage(early, earlySeal, 'exit');
 assert(grown.lanes.lanes.some((lane) => lane.exit) && grown.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');

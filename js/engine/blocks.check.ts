@@ -17,16 +17,16 @@ function rejects(recipe: ExitRecipe): boolean {
 }
 
 const plan = compileExit(RIGHT_EXIT);
-assert(plan.diverge === 80 && plan.run === 480 && plan.seal === 160 && plan.margin === 180, 'блоки правого съезда: короткий отход, длинный участок рядом');
+assert(plan.diverge === 50 && plan.run === 140 && plan.seal === 120 && plan.margin === 80, 'блоки правого съезда: короткий отход, участок рядом, чистое отделение');
 const noseBlock = placedBlock(plan, 0, 0);
 assert(noseBlock != null && noseBlock.kind === 'split' && noseBlock.u === 0, 'ноль метров от носа — это начало отхода');
 const noseEdges = frameAt(0, 0).world;
-assert(noseEdges.rightOuter - noseEdges.rightInner < 0.05, 'на носе съезд ещё не отдельная полоса');
-assert(Math.abs(noseEdges.rightInner - noseEdges.leftInner) < 0.05, 'на носе съезд лежит на кромке дороги');
+assert(Math.abs(noseEdges.rightOuter - noseEdges.rightInner - EXIT_LANE_HALF * 2) < 0.05, '+1 полоса уже полной ширины от носа');
+assert(Math.abs(noseEdges.rightInner - noseEdges.leftInner) < 0.05, '+1 полоса прижата к кромке дороги');
 const growing = frameAt(12, 0).world;
-assert(growing.rightOuter - growing.rightInner > 1, 'сразу после носа съезд растёт из кромки');
-assert(growing.rightInner - growing.leftInner < 0.5, 'пока он растёт, он ещё держится за дорогу');
-assert(plan.choiceAt === 560 && plan.length === 900, 'выбор стоит в конце общего подхода, рецепт кончается у границы зоны');
+assert(Math.abs(growing.rightOuter - growing.rightInner - EXIT_LANE_HALF * 2) < 0.05, '+1 полоса не растёт каждый кадр');
+assert(Math.abs(growing.rightInner - growing.leftInner) < 0.05, 'до выбора полоса остаётся прижатой');
+assert(plan.choiceAt === 190 && plan.length === 390, 'выбор стоит в конце общего подхода, рецепт кончается у границы зоны');
 assert(plan.straight[0]?.start === plan.exit[0]?.start && plan.straight[1]?.length === plan.exit[1]?.length, 'стык двух цепочек на одной метке');
 const clock = exitClock();
 const seal = plan.exit.find((span) => span.kind === 'seal');
@@ -102,14 +102,14 @@ assert(
 );
 const openFork = frameAt(plan.choiceAt - 10, 1).world;
 const midSeal = frameAt(plan.choiceAt + plan.seal * 0.5, 1).world;
-const arrived = frameAt(clock.ownAfter + 10, 1).world;
+const arrived = frameAt(clock.ownAfter + 2, 1).world;
 assert(openFork.leftOuter === -10 && openFork.leftInner === 10, 'до закрытия старая дорога ещё своей ширины');
 const oldWidth = midSeal.leftInner - midSeal.leftOuter;
 assert(oldWidth < 16 && oldWidth > 1, 'на закрытии старая дорога сужается');
 assert(Math.abs((midSeal.leftOuter + midSeal.leftInner) * 0.5) < 0.2, 'старая дорога сужается на месте');
-assert(Math.abs(exitRibbonMid(midSeal) - exitRibbonMid(openFork)) < 0.5, 'въезд остаётся на своей линии');
+assert(exitRibbonMid(midSeal) > exitRibbonMid(openFork), 'въезд плавно уходит с +1 полосы на линию курса');
 assert(midSeal.rightOuter > midSeal.rightInner + 1, 'на закрытии въезд ещё отдельная лента');
-const home = exitRibbonMid(openFork);
+const home = exitRibbonMid(frameAt(clock.ownAfter - 0.02, 1).world);
 assert(Math.abs((arrived.leftOuter + arrived.leftInner) * 0.5 - home) < 1, 'сразу после въезда дорога на линии съезда');
 assert(arrived.rightInner === arrived.leftInner && arrived.rightOuter === arrived.rightInner, 'после въезда старой ленты нет');
 const declinedBefore = frameAt(clock.ownAfter - 0.02, -1).local;
@@ -121,13 +121,15 @@ assert(
 );
 
 let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
-let entrance = 40;
+let entrance: number | null = null;
 for (let distance = plan.choiceAt - 10; distance <= plan.length - 2; distance += 2) {
   tracks = followAsphalt(tracks, frameAt(distance, 1).world);
   const spans = tracks.filter((span): span is AsphaltSpan => span != null);
   const right = spans.reduce((best, span) => (span.left + span.right > best.left + best.right ? span : best));
   const mid = (right.left + right.right) * 0.5;
-  assert(mid <= entrance + 0.05, 'въезд не прыгает обратно на старую дорогу');
+  // +1 полоса прижата к кромке, на закрытии уходит на линию курса, а после
+  // въезда возвращается к центру. Всё это плавно: скачок за 2 м быть не должен.
+  if (entrance != null) assert(Math.abs(mid - entrance) < 1.5, 'въезд не прыгает между дорогами');
   entrance = mid;
 }
 const left = tracks.find((span) => span != null);

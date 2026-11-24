@@ -143,7 +143,7 @@ const oldSpan = returning.local.leftInner - returning.local.leftOuter;
 assert(oldSpan < 20 && oldSpan > 1, 'старая дорога сужается, пока въезд ещё идёт');
 const fullRibbon = exitRibbonMid(branchEdges(10, FORK_SPREAD));
 const backRibbon = exitRibbonMid(returning.local);
-assert(Math.abs(backRibbon - fullRibbon) < 0.5, 'въезд остаётся на своей линии, пока старая дорога сужается');
+assert(backRibbon >= 10 + EXIT_LANE_HALF - 0.5 && backRibbon <= fullRibbon + 0.5, 'въезд плавно уходит с прижатой +1 полосы на свою линию');
 const sealStart = sampleRoad({
   forkDistance: clock.choiceAt + 0.01,
   half: 10,
@@ -176,7 +176,7 @@ assert(
   Math.abs((arrived.local.leftOuter + arrived.local.leftInner) * 0.5 - homeLine) < 1,
   'сразу после закрытия новая дорога стоит на линии въезда',
 );
-assert(Math.abs(exitRibbonMid(sealStart.local) - backRibbon) < 0.5, 'въезд на закрытии не съезжает с своей линии');
+assert(exitRibbonMid(sealStart.local) <= backRibbon + 0.5 && backRibbon <= exitRibbonMid(sealEnd.local) + 0.5, 'въезд плавно переходит с +1 полосы на линию курса');
 assert(exitRibbonMid(sealEnd.local) > 12, 'до конца закрытия въезд ещё лента на своей линии');
 assert(sealEnd.local.leftInner - sealEnd.local.leftOuter < 1, 'к концу закрытия старая дорога уже сошла');
 const straightEnd = sampleRoad({
@@ -247,7 +247,10 @@ assert(exitEntryPull(splitRoad.leftInner + 2, splitRoad) === 0, 'открыты�
 assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) === 0, 'через пустоту довоз не идёт');
 assert(exitEntryPull(splitRoad.rightInner + 1, splitRoad) === 0, 'на ленте догонять уже нечего');
 assert(exitEntryPull(0, splitRoad) === 0, 'с прямой в клин не вытягивает');
-assert(Math.abs(riding.max - plainLimits.max) < 1e-6 && Math.abs(riding.min - plainLimits.min) < 1e-6, 'на съезде те же пределы руля, что на прямой дороге той же ширины');
+assert(
+  Math.abs((riding.max - riding.min) - (plainLimits.max - plainLimits.min)) < 1e-6 && riding.min > splitRoad.leftInner,
+  'на съезде тот же размах руля, что на прямой дороге той же ширины, но на её правой полосе',
+);
 const arrivedLimits = logicalRoadLimits(arrived.local, 1, false, true);
 assert(Math.abs(arrivedLimits.min + arrivedLimits.max) < 0.2, 'после въезда стены руля стоят вокруг центра новой дороги');
 assert(arrivedLimits.max < EXIT_LANE_HALF, 'стена руля не остаётся на старой оси сплайна');

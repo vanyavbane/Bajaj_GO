@@ -218,17 +218,21 @@ function entranceHome(road: number): number {
  * путь подхватывает её в тот же метр, и полотно не рвётся.
  */
 function takenEntrance(road: number, arrive: number, t: number): AsphaltEdges {
+  // Старт — та же прижатая +1 полоса, что была на подходе. К концу закрытия
+  // она приходит на линию курса, а старая дорога сходит на нет.
+  const fromMid = road + EXIT_LANE_HALF;
   const home = entranceHome(road);
-  const fromHalf = exitWidth(branchEdges(road, FORK_SPREAD)) * 0.5;
+  const fromHalf = EXIT_LANE_HALF;
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : fromHalf);
   const u = Math.max(0, Math.min(1, t));
   const oldHalf = road * (1 - u);
   const entranceHalf = fromHalf + (dest - fromHalf) * u;
+  const mid = fromMid + (home - fromMid) * u;
   return {
     leftOuter: -oldHalf,
     leftInner: oldHalf,
-    rightInner: home - entranceHalf,
-    rightOuter: home + entranceHalf,
+    rightInner: mid - entranceHalf,
+    rightOuter: mid + entranceHalf,
   };
 }
 
@@ -238,12 +242,11 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
   if (!block.built) return branchEdges(road, FORK_SPREAD);
-  if (block.kind === 'split') return branchEdges(road, splitSpread(block.u));
-  if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
+  if (block.kind === 'split' || block.kind === 'fork') return attachedEdges(road);
   if (block.kind === 'seal') {
     const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
     if (chosen === 1) return takenEntrance(road, dest, t);
-    const edge = branchEdges(road, FORK_SPREAD);
+    const edge = attachedEdges(road);
     // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
     if (chosen === -1) {
       const away = t * FORK_SPREAD * 1.5;
@@ -258,6 +261,20 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   // Прямой ход оставляет старую.
   if (chosen === 1) return roadAt(entranceHome(road) * (1 - smooth01(block.u)), dest);
   return branchEdges(road, 0);
+}
+
+/**
+ * +1 полоса на подходе: уже полной ширины и плотно прижата к правой кромке.
+ * Пока выбор открыт, она едет параллельно основной и не растёт каждый кадр.
+ * Отделяется только после выбора, блоком seal.
+ */
+function attachedEdges(road: number): AsphaltEdges {
+  return {
+    leftOuter: -road,
+    leftInner: road,
+    rightInner: road,
+    rightOuter: road + EXIT_LANE_HALF * 2,
+  };
 }
 
 /** Середина правой ленты. Одна формула и для полос, и для курса. */
@@ -882,20 +899,20 @@ export function logicalRoadLimits(edge: AsphaltEdges, scale: number, riding = fa
   let minEdge: number;
   let maxEdge: number;
   const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
-  if (onExit) {
+  const joined = roadsJoined(edge);
+  // Пока +1 полоса прижата, руль видит одно полотно целиком, независимо от
+  // того, в какой полосе сидит байк. Границы не прыгают при перестроении.
+  if (joined && (enter || exitGap(edge) <= 0.01)) {
+    minEdge = (edge.leftOuter + RIBBON_MARGIN - roadMid) / span;
+    maxEdge = (edge.rightOuter - RIBBON_MARGIN - roadMid) / span;
+  } else if (onExit) {
     // Лента съезда — часть той же дороги, поэтому пределы в координатах roadMid.
     minEdge = (edge.rightInner + RIBBON_MARGIN - roadMid) / span;
     maxEdge = (edge.rightOuter - RIBBON_MARGIN - roadMid) / span;
   } else {
     // Полоса байка считается от центра его дороги, не от нуля сплайна.
-    const roadMid = (edge.leftOuter + edge.leftInner) * 0.5;
     minEdge = (edge.leftOuter + RIBBON_MARGIN - roadMid) / span;
     maxEdge = (edge.leftInner - RIBBON_MARGIN - roadMid) / span;
-    const gap = exitGap(edge);
-    const joined = gap < ATTACHED_GAP;
-    if (joined && (enter || gap <= 0.01) && exitWidth(edge) > RIDEABLE) {
-      maxEdge = Math.max(maxEdge, (edge.rightOuter - RIBBON_MARGIN - roadMid) / span);
-    }
   }
   if (!Number.isFinite(minEdge) || !Number.isFinite(maxEdge)) return { min: 0, max: 0 };
   if (maxEdge < minEdge) {
