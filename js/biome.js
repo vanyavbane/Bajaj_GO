@@ -34,6 +34,9 @@ const PLAN_KEY = 'bajajGO_biomePlan';
 const SCENERY_SLOTS = 20;
 const SCENERY_STEP = 28;
 const SCENERY_SPAN = SCENERY_SLOTS * SCENERY_STEP;
+// Половина окна смены декора: новый биом виден за SCENERY_PREVIEW_M до границы,
+// старый держится ещё SCENERY_PREVIEW_M после неё и уходит только за кадром.
+const SCENERY_PREVIEW_M = 900;
 
 const CITY = biomeIndexOf('city');
 const MKAD = biomeIndexOf('mkad');
@@ -206,6 +209,15 @@ function zoneBiomeAt(zone) {
     for (let i = Math.max(1, anchor); i <= z; i++) ensureZonePlan(i);
   }
   return biomeIndex(zoneBiomes[z] ?? G.currentBiome ?? 0);
+}
+
+/** Биом, который уже можно показывать за развилкой. До выбора смотрим на сторону байка. */
+function previewBiomeAt(zone) {
+  const z = Math.max(0, Math.round(zone));
+  if (chosenZones.has(z) || G.pendingBiome != null) return zoneBiomeAt(z + 1);
+  const choices = splitChoices[z] || getBiomeChoices(zoneBiomeAt(z), G.visitCounts || ZERO_VISITS());
+  const side = G.splitState && G.splitState.zone === z ? G.splitState.side : 0;
+  return biomeIndex(choices[side === 1 ? 1 : 0]);
 }
 
 function persistBiome() {
@@ -888,23 +900,47 @@ function fillWeights(live) {
   return weights;
 }
 
-function biomeWeightsAtS(s) {
-  const w = fillWeights(liveAtMeters(blendMetersAt(s)));
-  // Preview next biome before zone boundary so decor doesn't pop in at the fork.
-  const m = blendMetersAt(s);
-  const local = m - Math.floor(m / ZONE_M) * ZONE_M;
-  const pre = ZONE_M - ROAD_FADE_M;
-  if (local > pre) {
-    const u = (local - pre) / Math.max(1, ROAD_FADE_M);
-    const t = u * u * (3 - 2 * u);
-    const nb = zoneBiomeAt(Math.floor(m / ZONE_M) + 1);
-    if (t > w[nb]) {
-      const scale = (1 - t) / Math.max(1e-6, 1 - w[nb]);
-      for (let i = 0; i < w.length; i++) w[i] *= scale;
-      w[nb] = t;
-    }
+/**
+ * Веса декора. В отличие от профиля дороги, смена идёт симметрично вокруг
+ * границы зоны: новый биом виден издалека, а старый не пропадает сразу за
+ * границей — он живёт, пока не уйдёт из поля зрения.
+ */
+function sceneryMixAtMeters(meters) {
+  const m = Math.max(0, meters);
+  const zone = Math.floor(m / ZONE_M);
+  const local = m - zone * ZONE_M;
+  const half = Math.max(1, SCENERY_PREVIEW_M);
+  const span = half * 2;
+  // До первой границы нечего смешивать: в начале зоны всегда её собственный биом.
+  if (zone === 0 && local <= ZONE_M - half) return { a: zoneBiomeAt(0), b: zoneBiomeAt(0), t: 0 };
+  if (local > ZONE_M - half) {
+    return {
+      a: zoneBiomeAt(zone),
+      b: previewBiomeAt(zone),
+      t: smooth01((local - (ZONE_M - half)) / span),
+    };
   }
-  return w;
+  if (local < half) {
+    return {
+      a: zoneBiomeAt(zone - 1),
+      b: zoneBiomeAt(zone),
+      t: smooth01((local + half) / span),
+    };
+  }
+  return { a: zoneBiomeAt(zone), b: zoneBiomeAt(zone), t: 0 };
+}
+
+function biomeWeightsAtS(s) {
+  const live = sceneryMixAtMeters(blendMetersAt(s));
+  const weights = new Array(BIOMES.length);
+  for (let i = 0; i < weights.length; i++) weights[i] = 0;
+  if (live.a === live.b) {
+    weights[live.a] = 1;
+    return weights;
+  }
+  weights[live.a] = 1 - live.t;
+  weights[live.b] = live.t;
+  return weights;
 }
 
 /* ---------- Материалы декораций ---------- */

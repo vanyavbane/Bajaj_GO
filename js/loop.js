@@ -15,6 +15,15 @@ export function initLoop() {
   let jumpLineShown = '';
   let oncomingShown = false;
   let medianCooldown = 0;
+
+  /** Байк держится правой ленты от носа съезда и почти до самого биома. */
+  function onExitApproach() {
+    const fork = G.splitState;
+    if (!fork || fork.d < -2 || fork.d > 760) return false;
+    if (fork.chosenSide === 1) return true;
+    if (fork.chosen) return false;
+    return !!G.riderLatAt && G.riderLatAt(G.playerS) > 0;
+  }
   G.stunt = G.stunt || blankStuntState();
   G.driftSmoke = G.driftSmoke || [];
 
@@ -252,9 +261,9 @@ export function initLoop() {
     const fork = G.splitState;
     const forkOpen = fork && fork.active && !fork.chosen;
     const forkTaken = fork && fork.active && fork.chosenSide === 1;
-    // Весь подход по +1 полосе, а не только момент после выбора: именно там
-    // байк чаще всего чувствует боковую тягу кривизны старой дороги.
-    const onExit = !!(G.onExitLane && G.onExitLane());
+    // Тяга появляется сразу с носом ленты, когда сиденье ещё числится дорожным,
+    // и держится до перехода в новый биом. Поэтому гасим кривизну на всём подходе.
+    const onExit = !!(G.onExitLane && G.onExitLane()) || onExitApproach();
     if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen && !forkTaken) {
       const assist = G.laneAssistTarget - G.laneOffset;
       G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
