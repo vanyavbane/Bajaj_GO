@@ -1103,8 +1103,6 @@ export function initUi() {
     const previewEff = G.getBikeEffectiveStats(previewBike.id);
     const previewColor = bikePaint(previewBike, G.customColors);
     const previewMissing = shortfall(previewBike.price, G.bankPoints);
-    const previewLockReason = bikeLockReason(previewBike);
-
     const pStats = G.getPlayerStats ? G.getPlayerStats() : {};
     const courierLevel = Array.isArray(pStats.achievements)
       ? (pStats.achievements.find(a => a.id === 'courier')?.level || 0)
@@ -1119,6 +1117,7 @@ export function initUi() {
       }
       return '';
     }
+    const previewLockReason = bikeLockReason(previewBike);
 
     /* ---------- левая колонка: компактные строки ---------- */
 
