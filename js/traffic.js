@@ -2,6 +2,7 @@ import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbo
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { besideWithLane, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
+import { repairStopS } from './engine/repair.js';
 import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
 import { G } from './state.js';
@@ -133,7 +134,8 @@ export function initTraffic() {
       nearMissAwarded: false,
       jumpedInCurrentJump: false,
       active: true,
-      retiring: false
+      retiring: false,
+      repairQueued: false
     };
   }
 
@@ -251,20 +253,29 @@ export function initTraffic() {
 
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
-    if (!ev || !ev.active || oncoming || car.changingLane) return;
+    if (!ev || !ev.active || oncoming || car.changingLane) {
+      car.repairQueued = false;
+      return;
+    }
     const holeOnExit = G.drivenIsExitAt(ev.s);
     const carOnExit = !!(car.onExit && exitLaneOf(G.roadsAt(car.s).main.lanes));
-    if (!repairQueue(carOnExit, holeOnExit)) return;
+    if (!repairQueue(carOnExit, holeOnExit)) {
+      car.repairQueued = false;
+      return;
+    }
     const hole = G.holdDrivenLane(ev.s, ev.laneOffset);
-    if (!sameLaneOffset(car.lateralOffset, hole)) return;
-    if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
+    if (!sameLaneOffset(car.lateralOffset, hole) || car.s > ev.s + 2 || car.s < ev.s - 80) {
+      car.repairQueued = false;
+      return;
+    }
     let rank = 0;
     for (const other of G.trafficPool) {
       const otherOnExit = !!(other.onExit && exitLaneOf(G.roadsAt(other.s).main.lanes));
       if (other !== car && other.active && repairQueue(otherOnExit, holeOnExit) && sameLaneOffset(other.lateralOffset, hole) && other.s > car.s && other.s < ev.s) rank++;
     }
-    const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
-    if (car.s > stop) {
+    const stop = repairStopS(ev.s, ev.length, rank);
+    car.repairQueued = true;
+    if (car.s >= stop - 0.5) {
       car.s = stop;
       car.speedKmh = 0;
     } else if (car.s > stop - 14) {
@@ -276,6 +287,7 @@ export function initTraffic() {
         car.changingLane = true;
         car.targetLaneIdx = alt.index;
         car.speedKmh = 22;
+        car.repairQueued = false;
       }
     }
   }
@@ -322,7 +334,7 @@ export function initTraffic() {
     for (let i = 0; i < G.trafficPool.length; i++) {
       const car = G.trafficPool[i];
       const where = car.active ? car.s : G.playerS + 240;
-      const wantActive = (activeMask[G.roadBiomeAtS(where)] || mask)[i] === 1;
+      const wantActive = car.repairQueued || (activeMask[G.roadBiomeAtS(where)] || mask)[i] === 1;
 
       if (!car.active) {
         if (!wantActive || choosing) continue;
@@ -330,7 +342,7 @@ export function initTraffic() {
         car.active = true;
         car.retiring = false;
         resetTrafficVehicle(car, G.playerS + 230 + Math.random() * 130);
-      } else if (!wantActive) {
+      } else if (!wantActive && !car.repairQueued) {
         car.retiring = true;
       }
 
@@ -374,7 +386,7 @@ export function initTraffic() {
         }
       }
 
-      const recycle = trafficRecycle(car.s, G.playerS);
+      const recycle = car.repairQueued ? null : trafficRecycle(car.s, G.playerS);
       if (recycle && !choosing) resetTrafficVehicle(car, recycle.base + Math.random() * recycle.spread);
 
       if (car.joiningExit) slideOntoExit(car, dt);

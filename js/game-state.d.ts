@@ -121,6 +121,32 @@ export interface TrafficCar {
   jumpedInCurrentJump: boolean;
   active: boolean;
   retiring: boolean;
+  /** Машина стоит в очереди перед ремонтом и не рециклится. */
+  repairQueued?: boolean;
+}
+
+/** Активный участок дорожных работ. */
+export interface RepairEvent {
+  active: boolean;
+  s: number;
+  laneIdx: number;
+  length: number;
+  laneOffset: number;
+  biome: string;
+}
+
+/** Переиспользуемая модель ремонта: дальний LOD, ближняя сцена и анимация. */
+export interface RepairSlot {
+  group: THREE.Group;
+  far: THREE.Group;
+  near: THREE.Group;
+  workers: Array<{ head: THREE.Object3D; arm: THREE.Object3D }>;
+  digger: { boom: THREE.Object3D; bucket: THREE.Object3D };
+  active: boolean;
+  s: number;
+  laneIdx: number;
+  lateralOffset: number;
+  length: number;
 }
 
 export interface WeatherState {
@@ -479,6 +505,25 @@ export interface GameState {
   syncControlUi: () => void;
   jumpState: JumpState;
   trafficPool: TrafficCar[];
+  accidentCooldown: number;
+  handleAccident: (car: TrafficCar | null) => void;
+  resetTrafficVehicle: (car: TrafficCar, newS: number, forcedLane?: number | null) => void;
+  REPAIR_MIN_DIST: number;
+  REPAIR_SPREAD: number;
+  REPAIR_ALLOWED_BIOMES: string[];
+  repairEvent: RepairEvent;
+  repairPool: RepairSlot[];
+  repairProgress: number;
+  repairNextS: number;
+  spawnRepair: (options?: {
+    s?: number;
+    laneIdx?: number;
+    length?: number;
+    force?: boolean;
+  }) => boolean;
+  updateRepair: (dt: number, now: number) => void;
+  checkRepairCollision: (s: number, lateralOffset: number, halfW?: number) => boolean;
+  resetRepair: () => void;
   weather: WeatherState;
   updateWeather: (dt: number) => void;
   resetWeather: () => void;

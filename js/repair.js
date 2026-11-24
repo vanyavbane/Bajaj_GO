@@ -1,6 +1,17 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
-import { playerHalfWidth } from './engine/motion.js';
+import { playerHalfWidth, worldMeters } from './engine/motion.js';
+import {
+  REPAIR_ALLOWED_BIOMES,
+  REPAIR_MIN_DIST,
+  REPAIR_SPREAD,
+  repairAllowed,
+  repairCollision,
+  repairMark,
+  repairQueueCount,
+  repairQueueTargets,
+  repairSiteClear,
+} from './engine/repair.js';
 import { G } from './state.js';
 
 /**
@@ -10,9 +21,9 @@ import { G } from './state.js';
  */
 export function initRepair() {
   const POOL = 2;
-  G.REPAIR_MIN_DIST = 3500;
-  G.REPAIR_SPREAD = 500;
-  G.REPAIR_ALLOWED_BIOMES = ['city', 'mkad'];
+  G.REPAIR_MIN_DIST = REPAIR_MIN_DIST;
+  G.REPAIR_SPREAD = REPAIR_SPREAD;
+  G.REPAIR_ALLOWED_BIOMES = [...REPAIR_ALLOWED_BIOMES];
   G.repairProgress = 0;
   G.repairNextS = nextMark();
   G.repairEvent = emptyEvent();
@@ -189,7 +200,7 @@ export function initRepair() {
   }
 
   function nextMark() {
-    return G.REPAIR_MIN_DIST + (Math.random() * 2 - 1) * G.REPAIR_SPREAD;
+    return repairMark();
   }
 
   function biomeId() {
@@ -204,47 +215,106 @@ export function initRepair() {
   }
 
   function allowedHere() {
-    return G.REPAIR_ALLOWED_BIOMES.includes(biomeId());
+    return repairAllowed(biomeId());
   }
 
   function allowedAt(s) {
-    return G.REPAIR_ALLOWED_BIOMES.includes(biomeIdAt(s));
+    return repairAllowed(biomeIdAt(s));
   }
 
   function siteBlocked(s) {
-    const split = G.splitAmountAtS;
-    if (split && (split(s) > 0.05 || split(s - 100) > 0.05 || split(s + 100) > 0.05)) return true;
-    if (!allowedAt(s)) return true;
-    for (const ms of G.megaStructures || []) {
-      if (ms.visible && Math.abs(ms.userData.s - s) < 80) return true;
-    }
-    for (const ramp of G.rampsPool || []) {
-      if (Math.abs(ramp.s - s) < 45) return true;
-    }
-    for (const exit of G.exitPool || []) {
-      if (Math.abs(exit.s - s) < 55) return true;
-    }
-    for (const other of G.repairPool) {
-      if (other.active && Math.abs(other.s - s) < 120) return true;
-    }
-    return false;
+    return !repairSiteClear(s, {
+      splitAt: G.splitAmountAtS || (() => 0),
+      allowedAt,
+      structures: (G.megaStructures || []).map((ms) => ({
+        s: ms.userData ? ms.userData.s : NaN,
+        visible: ms.visible !== false,
+      })),
+      ramps: G.rampsPool || [],
+      exits: G.exitPool || [],
+      repairs: G.repairPool || [],
+    });
   }
 
-  function spawnRepair() {
-    if (G.repairEvent.active || !allowedHere()) return false;
-    if (G.jumpState && G.jumpState.airborne) return false;
-    let s = G.playerS + 200;
-    for (let attempt = 0; attempt < 6 && siteBlocked(s); attempt++) s += 90;
-    if (siteBlocked(s)) return false;
+  /** Машины пробки берутся из общего пула, а не создаются заново. */
+  function seedRepairQueue(s, length, laneIdx, laneOffset) {
+    if (!Array.isArray(G.trafficPool) || !G.resetTrafficVehicle) return 0;
+    const targets = repairQueueTargets(s, length, laneIdx, repairQueueCount());
+    if (!targets.length) return 0;
+    const candidates = (G.trafficPool || []).filter((car) => {
+      if (!car || !car.model || car.repairQueued) return false;
+      if (car.model.type === 'qute_traffic') return false;
+      // Не трогаем машины в кадре: только невидимые впереди или позади игрока.
+      return !car.active || car.s > G.playerS + 180 || car.s < G.playerS - 60;
+    });
+    const middle = s - 25;
+    candidates.sort((a, b) => Math.abs(a.s - middle) - Math.abs(b.s - middle));
+    const used = Math.min(targets.length, candidates.length);
+    for (let i = 0; i < used; i++) {
+      const car = candidates[i];
+      const target = targets[i];
+      G.resetTrafficVehicle(car, target.s, target.laneIdx);
+      car.repairQueued = true;
+      car.lateralOffset = laneOffset;
+      car.laneIdx = target.laneIdx;
+      car.targetLaneIdx = target.laneIdx;
+      car.speedKmh = 0;
+      car.changingLane = false;
+      car.onExit = false;
+      car.joiningExit = false;
+      car.heading = 0;
+      car.heldLat = NaN;
+      car.nearMissAwarded = false;
+      car.jumpedInCurrentJump = false;
+      car.retiring = false;
+    }
+    return used;
+  }
+
+  function releaseRepairQueue() {
+    for (const car of G.trafficPool || []) {
+      if (car) car.repairQueued = false;
+    }
+  }
+
+  /** options нужны только отладке: точная точка, полоса и длина зоны. */
+  function spawnRepair(options = {}) {
+    const opts = options || {};
+    if (G.repairEvent.active) return false;
+    const forcedS = Number(opts.s);
+    const hasForcedS = Number.isFinite(forcedS) && forcedS > 0;
+    let s = hasForcedS ? forcedS : G.playerS + 200;
+    if (!opts.force && !hasForcedS && !allowedHere()) return false;
+    if (!opts.force && G.jumpState && G.jumpState.airborne) return false;
+    if (!opts.force) {
+      // Первая свободная площадка вперёд, а не только фиксированные +200 м.
+      for (let attempt = 0; attempt < 6 && siteBlocked(s); attempt++) s += 90;
+      if (siteBlocked(s)) return false;
+    }
+    if (!allowedAt(s)) return false;
+
     const cfg = G.drivenLanesAt(s);
-    const laneIdx = G.randomRunLane(s);
-    const length = 6 + Math.random() * 4;
+    let laneIdx = G.randomRunLane(s);
+    const forcedLane = opts.laneIdx == null ? NaN : Number(opts.laneIdx);
+    if (Number.isInteger(forcedLane)) {
+      const lane = cfg.lanes.find((item) => item.index === forcedLane && item.direction === 'with');
+      if (lane) laneIdx = lane.index;
+    }
+    const laneOffset = Number.isFinite(cfg.offsets[laneIdx])
+      ? cfg.offsets[laneIdx]
+      : G.holdDrivenLane(s, 0);
+
+    const forcedLength = opts.length == null ? NaN : Number(opts.length);
+    const length = Number.isFinite(forcedLength)
+      ? Math.max(6, Math.min(10, forcedLength))
+      : 6 + Math.random() * 4;
     const slot = G.repairPool.find((item) => !item.active);
     if (!slot) return false;
+
     slot.active = true;
     slot.s = s;
     slot.laneIdx = laneIdx;
-    slot.lateralOffset = cfg.offsets[laneIdx];
+    slot.lateralOffset = laneOffset;
     slot.length = length;
     slot.group.visible = true;
     slot.group.scale.set(1, 1, length / 8);
@@ -253,27 +323,28 @@ export function initRepair() {
       s,
       laneIdx,
       length,
-      laneOffset: slot.lateralOffset,
+      laneOffset,
       biome: biomeIdAt(s)
     };
+    seedRepairQueue(s, length, laneIdx, laneOffset);
     if (G.pushFeed) G.pushFeed('ВПЕРЕДИ РЕМОНТ ДОРОГИ', 'combo', 1, 'center');
     return true;
   }
   G.spawnRepair = spawnRepair;
 
-/** Попадание в яму в мировых метрах поперёк дороги, как и сама отрисовка. */
-function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
-  const ev = G.repairEvent;
-  if (!ev.active) return false;
-  const siteLat = G.drivenLaneAt(ev.s, G.holdDrivenLane(ev.s, ev.laneOffset));
-  const along = Math.abs(playerS - ev.s) < ev.length * 0.5 + 1;
-  return along && Math.abs(playerWorldLat - siteLat) < halfW;
-}
+  /** Попадание в яму в мировых метрах поперёк дороги, как и сама отрисовка. */
+  function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
+    const ev = G.repairEvent;
+    if (!ev || !ev.active) return false;
+    const siteLat = G.drivenLaneAt(ev.s, G.holdDrivenLane(ev.s, ev.laneOffset));
+    return repairCollision(playerS, playerWorldLat, ev.s, siteLat, ev.length, halfW);
+  }
   G.checkRepairCollision = checkRepairCollision;
 
   function updateRepair(dt, now) {
     if (G.started && !G.ended && allowedHere()) {
-      G.repairProgress += G.speed * dt / 3.6;
+      // Считаем те же метры, что проехал байк: со скоростью мира, а не спидометра.
+      G.repairProgress += worldMeters(G.speed, dt);
     }
     if (G.started && !G.ended && !G.repairEvent.active && allowedHere() && G.repairProgress >= G.repairNextS) {
       if (spawnRepair()) {
@@ -289,6 +360,7 @@ function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
     if (slot.s < G.playerS - 100) {
       slot.active = false;
       slot.group.visible = false;
+      releaseRepairQueue();
       G.repairEvent = emptyEvent();
       return;
     }
@@ -305,7 +377,7 @@ function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
     slot.digger.boom.rotation.x = Math.sin(now * 0.0005) * 0.18;
 
     if (!G.started || G.ended || (G.jumpState && G.jumpState.airborne)) return;
-    if (G.speed <= 8 || G.accidentCooldown > 0 || G.uiModal) return;
+    if (G.accidentCooldown > 0 || G.uiModal) return;
     const bikeLat = G.riderLatAt(G.playerS);
     const half = playerHalfWidth(!!(G.frameStats && G.frameStats.isQute));
     if (!checkRepairCollision(G.playerS, bikeLat, 1.7 + half)) return;
@@ -319,6 +391,7 @@ function checkRepairCollision(playerS, playerWorldLat, halfW = 1.7) {
       slot.active = false;
       slot.group.visible = false;
     }
+    releaseRepairQueue();
     G.repairEvent = emptyEvent();
     G.repairProgress = 0;
     G.repairNextS = nextMark();

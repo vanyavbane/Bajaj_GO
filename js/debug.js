@@ -79,6 +79,21 @@ export function initDebug() {
     return { meshes, visible, lights };
   }
 
+  function repairSnapshot() {
+    const ev = G.repairEvent;
+    if (!ev) return null;
+    return {
+      active: !!ev.active,
+      s: round(ev.s, 1),
+      laneIdx: ev.laneIdx,
+      length: round(ev.length, 1),
+      biome: ev.biome || '',
+      progress: round(G.repairProgress, 1),
+      next: round(G.repairNextS, 1),
+      queue: G.trafficPool ? G.trafficPool.filter((car) => car && car.repairQueued).length : 0
+    };
+  }
+
   function snapshot() {
     const info = G.renderer && G.renderer.info;
     const bike = G.selectedBike ? G.selectedBike() : null;
@@ -110,15 +125,8 @@ export function initDebug() {
         visits: Array.isArray(G.visitCounts) ? G.visitCounts.slice() : null,
         pending: G.pendingBiome
       },
-      repair: G.repairEvent ? {
-        active: !!G.repairEvent.active,
-        s: round(G.repairEvent.s, 1),
-        laneIdx: G.repairEvent.laneIdx,
-        length: round(G.repairEvent.length, 1),
-        biome: G.repairEvent.biome || '',
-        progress: round(G.repairProgress, 1),
-        next: round(G.repairNextS, 1)
-      } : null,
+      repair: repairSnapshot(),
+      repairEvent: repairSnapshot(),
       split: G.splitState ? {
         active: !!G.splitState.active,
         zone: G.splitState.zone,
@@ -307,9 +315,40 @@ export function initDebug() {
     };
   }
 
+  /** Принудительный ремонт в заданной точке: s — центр зоны, не позиция байка. */
+  function forceRepair(options = {}) {
+    if (!G.started && G.startGame) G.startGame();
+    const opts = options || {};
+    const targetS = Number(opts.s);
+    if (Number.isFinite(targetS) && targetS > 0) G.playerS = Math.max(0, targetS - 200);
+    if (Number.isFinite(G.accidentCooldown)) G.accidentCooldown = 0;
+    const spawned = G.spawnRepair ? G.spawnRepair(opts) : false;
+    return { spawned, ...repairSnapshot() };
+  }
+
+  /** Ставит байка перед ямой, чтобы проверить объезд, ДТП или перелёт. */
+  function repairApproach(offset = -20, lane) {
+    const ev = G.repairEvent;
+    if (!ev || !ev.active) return null;
+    const shift = Number(offset);
+    G.playerS = Math.max(0, ev.s + (Number.isFinite(shift) ? shift : -20));
+    if (lane != null && Number.isFinite(Number(lane))) G.laneOffset = Number(lane);
+    else G.laneOffset = ev.laneOffset;
+    G.lateralVelocity = 0;
+    G.slipDriftVel = 0;
+    G.accidentCooldown = 0;
+    if (G.debugStampExitTrack) G.debugStampExitTrack();
+    return {
+      playerS: round(G.playerS, 1),
+      lane: round(G.laneOffset, 2),
+      repair: repairSnapshot()
+    };
+  }
+
   window.__bajaj = {
     snapshot, ride, setKeys, frame, errors, feed, placeAtExit, exitHint,
     replayAfterMenu, teleport, probe, forceWeather, view, startAt,
+    forceRepair, repairApproach, repairSnapshot,
     restoreStats: () => (G.debugRestoreStats ? G.debugRestoreStats() : null),
     // Только в режиме `?debug`: живое состояние. В обычном собранном файле
     // объекта нет, поэтому на игру это не влияет.
