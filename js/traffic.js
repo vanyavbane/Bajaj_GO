@@ -1,4 +1,4 @@
-import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, carriageLat, repairQueue, ribbonDirection } from './engine/carriage.js';
+import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, repairQueue, ribbonDirection } from './engine/carriage.js';
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
 import { besideWithLane, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
@@ -34,22 +34,22 @@ export function initTraffic() {
   const POOL_SIZE = Math.max(...G.BIOMES.map((biome) => biome.traffic.count));
 
   /** Новая машина рождается на дороге байка. На ленте съезда — только когда байк уже на ней. */
-  function spawnRoad(s) {
-    const roads = G.roadsAt(s);
-    if (G.drivenIsExitAt(s) && roads.exit) {
-      return { lanes: roads.exit.lanes, onExit: true };
-    }
-    return { lanes: roads.main.lanes, onExit: false };
+  function exitLaneOf(road) {
+    return road.lanes.find((lane) => lane.exit) || null;
   }
 
-  /** Полосы той дороги, по которой машина уже едет. Смена полос байка её не пересаживает. */
+  function spawnRoad(s) {
+    const lanes = G.roadsAt(s).main.lanes;
+    return { lanes, onExit: G.drivenIsExitAt(s) && !!exitLaneOf(lanes) };
+  }
+
+  /** Полосы той дороги, по которой машина уже едет. Съезд — её правая полоса. */
   function carLanes(car) {
-    const roads = G.roadsAt(car.s);
-    return car.onExit && roads.exit ? roads.exit.lanes : roads.main.lanes;
+    return G.roadsAt(car.s).main.lanes;
   }
 
   function quteLane(cfg) {
-    const forward = cfg.lanes.filter((lane) => lane.direction === 'with');
+    const forward = cfg.lanes.filter((lane) => lane.direction === 'with' && !lane.exit);
     if (forward.length === 0) return 0;
     const pick = forward.length >= 2 ? forward[forward.length - 2] : forward[0];
     return pick ? pick.index : 0;
@@ -58,6 +58,8 @@ export function initTraffic() {
   function pickLane(cfg, model, forcedLane, onRibbon) {
     if (model.type === 'qute_traffic') return quteLane(cfg);
     if (onRibbon) {
+      const exit = exitLaneOf(cfg);
+      if (exit) return exit.index;
       const roll = forcedLane == null ? Math.random() * cfg.count : forcedLane;
       return birthLane(cfg, true, roll);
     }
@@ -209,58 +211,56 @@ export function initTraffic() {
 
   /** Крайняя попутная начинает переезд, только пока съезд ещё прижат к шоссе. */
   function beginExitJoin(car, roads) {
-    const ribbon = roads.exit;
-    if (!ribbon || car.onExit) return false;
+    const exit = exitLaneOf(roads.main.lanes);
+    if (!exit || car.onExit) return false;
     const gate = outerLane(roads.main.lanes, 'right', 'with');
     if (!gate) return false;
+    const center = roads.main.axis + exit.offset * (roads.main.scale || 1);
     return canStartExitJoin({
       changingLane: !!car.changingLane,
       lane: car.laneIdx,
       lastLane: gate.index,
       roadRight: roads.main.axis + roads.main.half,
-      ribbonLeft: ribbon.axis - ribbon.half,
+      ribbonLeft: center - roads.main.exitHalf,
     });
   }
 
   /** Доезд до асфальта съезда. Пока его нет, машина остаётся в мире шоссе. */
   function slideOntoExit(car, dt) {
     const roads = G.roadsAt(car.s);
-    const ribbon = roads.exit;
-    if (!ribbon) {
+    const exit = exitLaneOf(roads.main.lanes);
+    if (!exit) {
       car.joiningExit = false;
       return;
     }
+    const center = roads.main.axis + exit.offset * (roads.main.scale || 1);
     const world = G.trafficLatAt(car.s, car.lateralOffset, false);
-    const moved = approachExit(world, ribbon.axis - ribbon.half, ribbon.axis + ribbon.half, dt);
+    const moved = approachExit(world, center - roads.main.exitHalf, center + roads.main.exitHalf, dt);
     if (!moved.arrived) {
       const scale = roads.main.scale || 1;
       car.lateralOffset = (moved.lat - roads.main.axis) / scale;
       return;
     }
-    const scale = ribbon.scale || 1;
-    const logical = (moved.lat - ribbon.axis) / scale;
-    const idx = nearestLaneIndex(ribbon.lanes.offsets, logical);
     car.onExit = true;
     car.joiningExit = false;
-    car.laneIdx = idx;
-    car.targetLaneIdx = idx;
-    car.lateralOffset = logical;
-    car.changingLane = Math.abs(ribbon.lanes.offsets[idx] - logical) > 0.06;
-    if (!car.changingLane) car.lateralOffset = ribbon.lanes.offsets[idx];
+    car.laneIdx = exit.index;
+    car.targetLaneIdx = exit.index;
+    car.lateralOffset = exit.offset;
+    car.changingLane = false;
   }
 
   function holdForRepair(car, oncoming) {
     const ev = G.repairEvent;
     if (!ev || !ev.active || oncoming || car.changingLane) return;
     const holeOnExit = G.drivenIsExitAt(ev.s);
-    const carOnExit = !!(car.onExit && G.roadsAt(car.s).exit);
+    const carOnExit = !!(car.onExit && exitLaneOf(G.roadsAt(car.s).main.lanes));
     if (!repairQueue(carOnExit, holeOnExit)) return;
     const hole = G.holdDrivenLane(ev.s, ev.laneOffset);
     if (!sameLaneOffset(car.lateralOffset, hole)) return;
     if (car.s > ev.s + 2 || car.s < ev.s - 80) return;
     let rank = 0;
     for (const other of G.trafficPool) {
-      const otherOnExit = !!(other.onExit && G.roadsAt(other.s).exit);
+      const otherOnExit = !!(other.onExit && exitLaneOf(G.roadsAt(other.s).main.lanes));
       if (other !== car && other.active && repairQueue(otherOnExit, holeOnExit) && sameLaneOffset(other.lateralOffset, hole) && other.s > car.s && other.s < ev.s) rank++;
     }
     const stop = ev.s - ev.length * 0.5 - 4 - rank * 8;
@@ -284,16 +284,15 @@ export function initTraffic() {
   function assignCarRoad(car) {
     const roads = G.roadsAt(car.s);
     const highway = roads.main.lanes;
-    const ribbon = roads.exit;
+    const exit = exitLaneOf(highway);
     const wasOnExit = !!car.onExit;
-    car.onExit = carFollowsRibbon({ hasExit: ribbon != null, following: wasOnExit });
+    car.onExit = carFollowsRibbon({ hasExit: exit != null, following: wasOnExit });
     if (!car.onExit && !wasOnExit && beginExitJoin(car, roads)) car.joiningExit = true;
-    if (car.onExit || !ribbon) car.joiningExit = false;
+    if (car.onExit || !exit) car.joiningExit = false;
     let departed = false;
     if (wasOnExit && !car.onExit) {
-      const from = G.sideRibbonAt(car.s);
-      const world = from
-        ? carriageLat(from.axis, from.scale, car.lateralOffset)
+      const world = Number.isFinite(car.heldLat)
+        ? car.heldLat
         : G.trafficLatAt(car.s, car.lateralOffset, false);
       const axis = roads.main.axis;
       const scale = roads.main.scale || 1;
@@ -309,8 +308,7 @@ export function initTraffic() {
         car.changingLane = moved.changing;
       }
     }
-    const onRibbon = !!(car.onExit && ribbon);
-    return { lanes: onRibbon ? ribbon.lanes : highway, onRibbon, departed };
+    return { lanes: highway, onRibbon: !!car.onExit, departed };
   }
 
   function updateTraffic(dt, now, isQute) {

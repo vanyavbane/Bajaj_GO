@@ -1,12 +1,12 @@
 /**
  * Проезжая часть в одной точке.
  * Фазу читает кадр дороги. Полосы, встречные и ось выходят из этой фазы.
- * Лента сбоку не подменяет полосы старой дороги.
- * Въезд становится новой дорогой, когда старая уже сошла. До этого съезд остаётся съездом.
+ * Съезд — правая полоса этой дороги. Когда лента кончается, полосы нет:
+ * на её месте уже новая дорога, без второй проезжей части.
  */
 
-import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
-import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, nearestLaneOffset, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
+import { exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
+import { carriageLanes, directionEdge, laneGapOffsets, nearestLaneOffset, withExitLane, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
 
@@ -25,6 +25,8 @@ export interface LiveCarriage {
   scale: number;
   /** Полуширина живого асфальта этой проезжей части, метры. */
   half: number;
+  /** Полуширина асфальта полосы съезда. 0, если этой полосы нет. */
+  exitHalf: number;
   way: RoadWay;
 }
 
@@ -60,21 +62,26 @@ export function carriagePhase(frame: RoadFrame): CarriagePhase {
   return 'road';
 }
 
-function finish(phase: CarriagePhase, lanes: CarriageLayout, frame: RoadFrame, half: number): LiveCarriage {
+/** Полосы, встречные, ось и ширина одной точки. Съезд дописывается правой полосой. */
+export function carriageAt(query: CarriageQuery): LiveCarriage {
+  const frame = query.frame;
+  const phase = carriagePhase(frame);
+  const half = carriageHalf(frame);
+  const base = carriageLanes(query.biome, 'two-way');
+  const axis = laneAnchor(frame);
+  const scale = laneFit(half, base.offsets);
+  const ribbon = exitRibbonCenter(frame.local);
+  const span = scale !== 0 ? scale : 1;
+  const lanes = ribbon == null ? base : withExitLane(base, (frame.origin + ribbon - axis) / span);
   return {
     phase,
     lanes,
-    axis: laneAnchor(frame),
-    scale: laneFit(half, lanes.offsets),
+    axis,
+    scale,
     half,
+    exitHalf: ribbon == null ? 0 : Math.max(0, exitWidth(frame.local) * 0.5),
     way: lanes.way,
   };
-}
-
-/** Полосы, встречные, ось и ширина одной точки. */
-export function carriageAt(query: CarriageQuery): LiveCarriage {
-  const phase = carriagePhase(query.frame);
-  return finish(phase, carriageLanes(query.biome, 'two-way'), query.frame, carriageHalf(query.frame));
 }
 
 /** Штрих между полосами проезжей части. lat — мировая точка её оси. */
@@ -84,16 +91,16 @@ export interface LaneMark {
 }
 
 /**
- * Боковая лента как своя проезжая часть.
- * Пока она склеена с шоссе, штрихов у неё нет: это ещё не отдельная дорога.
- * Когда съезд уже пришёл в дорогу, отдельной ленты нет.
+ * Второй дороги у съезда нет.
+ * Его полоса уже лежит на основной дороге, справа.
  */
 export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage | null {
-  if (road.phase !== 'ribbon' || !exitLaneOpen(frame.local)) return null;
-  return riderCarriage(road, frame, 'exit');
+  void road;
+  void frame;
+  return null;
 }
 
-/** Дороги в точке. main есть всегда. exit — боковая лента, пока она ещё не пришла в дорогу. */
+/** Дороги в точке. main есть всегда. exit пуст: съезд — полоса main, не вторая дорога. */
 export interface DriveRoads {
   main: LiveCarriage;
   exit: LiveCarriage | null;
@@ -314,26 +321,15 @@ export function solidMarks(road: LiveCarriage): LaneMark[] {
 }
 
 /**
- * Проезжая часть байка.
- * Пока он сидит на боковой ленте, его полосы — съезд, а ось — середина ленты.
- * Дорога вокруг этого не меняется: её по-прежнему описывает carriageAt.
+ * Проезжая часть байка — та же дорога.
+ * Съезд уже её правая полоса, отдельной оси у сиденья нет.
  */
 export function riderCarriage(
   road: LiveCarriage,
   frame: RoadFrame,
   seat: SeatKind,
 ): LiveCarriage {
-  if (seat !== 'exit') return road;
-  const ribbon = exitRibbonCenter(frame.local);
-  if (ribbon == null) return road;
-  const half = Math.max(0, exitWidth(frame.local) * 0.5);
-  const lanes = exitCarriage(road.lanes.id);
-  return {
-    phase: 'ribbon',
-    lanes,
-    axis: frame.origin + ribbon,
-    scale: laneFit(half, lanes.offsets),
-    half,
-    way: lanes.way,
-  };
+  void frame;
+  void seat;
+  return road;
 }

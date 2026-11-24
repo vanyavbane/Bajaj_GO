@@ -1199,8 +1199,8 @@ function exitLane(s, side) {
         // это её продолжение, не полосы оставшейся прямой.
         const roads = G.roadsAt(pendingAccidentCar.s);
         const wasOnExit = !!pendingAccidentCar.onExit;
-        const stay = !!(wasOnExit && roads.exit);
-        const lanes = stay ? roads.exit.lanes : roads.main.lanes;
+        const lanes = roads.main.lanes;
+        const stay = !!(wasOnExit && lanes.lanes.some((lane) => lane.exit));
         const seat = accidentArrival(wasOnExit, stay, lanes, pendingAccidentCar.lateralOffset);
         const idx = nearestLaneIndex(lanes.offsets, seat);
         pendingAccidentCar.onExit = stay;

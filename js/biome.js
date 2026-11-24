@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, drivenIsExit, laneMarks, ribbonApproachLat, ribbonTrailLat, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
+import { carriageAt, carriageLat, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
@@ -648,9 +648,6 @@ function asphaltSpanAt(s) {
  * После прихода въезда в новую дорогу лента исчезает, и проезжей частью становится новая дорога.
  */
 function drivenCarriageAt(s) {
-  const frame = frameAt(s);
-  const arrived = frame.chosen === 1 && exitRibbonCenter(frame.local) == null;
-  if (riderSeat.kind === 'exit' || arrived) return ribbonHere(s) || roadCarriageAt(s);
   return roadCarriageAt(s);
 }
 
@@ -666,11 +663,10 @@ function drivenSpanAt(s) {
   };
 }
 
-/** Байк на ленте съезда. Единственное сравнение осей в игре. */
+/** Байк на полосе съезда. Это правая полоса его дороги, пока лента ещё есть. */
 function drivenIsExitAt(s) {
-  const roads = roadsHere(s);
-  const span = drivenSpanAt(s);
-  return drivenIsExit(roads.exit ? roads.exit.axis : null, span.mid);
+  if (riderSeat.kind !== 'exit') return false;
+  return roadCarriageAt(s).lanes.lanes.some((lane) => lane.exit);
 }
 
 /** Полоса этой проезжей части в мировых метрах. */
@@ -795,40 +791,19 @@ function roadsHere(s) {
   return roadsAt(roadCarriageAt(s), frame);
 }
 
-/** Мир машины. Полоса — смещение той дороги, по которой она едет. */
-function trafficLatAt(s, offset, onExit) {
-  const roads = roadsHere(s);
-  const road = onExit && roads.exit ? roads.exit : roads.main;
+/** Мир машины. Смещение — от оси одной дороги, съезд в том числе. */
+function trafficLatAt(s, offset, _onExit) {
+  const road = roadsHere(s).main;
   return carriageLat(road.axis, road.scale, Number.isFinite(offset) ? offset : 0);
 }
 
-/** Полоса байка или камеры. Ось берётся из кадра: дорога или середина ленты съезда. */
+/** Полоса байка или камеры. Съезд — смещение правой полосы от оси этой дороги. */
 function riderLatAt(s, laneOffset) {
   const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
   const frame = frameAt(s);
-  const player = frameAt(G.playerS);
-  const arrived = player.chosen === 1 && exitRibbonCenter(player.local) == null;
-  const ribbon = frame.chosen === 1 ? sideRibbon(roadCarriageAt(s), frame) : null;
-  const approach = ribbonApproachLat(arrived, ribbon != null, lane, ribbon ? ribbon.axis : 0, ribbon ? ribbon.scale : 1);
-  if (approach != null) return approach;
-  const playerRibbon = exitRibbonCenter(player.local);
-  const playerAxis = playerRibbon == null ? 0 : player.origin + playerRibbon;
-  const trail = ribbonTrailLat(
-    playerRibbon != null,
-    exitRibbonCenter(frame.local) != null,
-    laneAnchor(frame),
-    frame.origin,
-    playerAxis,
-    lane,
-    riderLaneScaleAt(G.playerS),
-  );
-  if (trail != null) return trail;
   const seat = riderFrameSeat(s, lane);
-  const span = seat.kind === 'exit'
-    ? riderCarriage(roadCarriageAt(s), frame, 'exit').scale
-    : laneSpanAt(s);
-  const scale = Number.isFinite(span) && span !== 0 ? span : 1;
-  return seatWorld(frame, seat, scale);
+  const scale = laneSpanAt(s);
+  return seatWorld(frame, seat, Number.isFinite(scale) && scale !== 0 ? scale : 1);
 }
 
 /** Доминирующий биом в точке s (без массива весов). */

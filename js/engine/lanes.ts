@@ -41,6 +41,8 @@ export interface Lane {
   /** Направление при сборке дороги. */
   home: LaneDirection;
   side: LaneSide;
+  /** Правая полоса съезда. Пока лента есть, она принадлежит этой дороге. Когда лента кончается, полосы нет: на её месте уже новая дорога. */
+  exit: boolean;
 }
 
 /** Полоса до сборки: где стоит, как быстро, куда едет. Индекс и сторону назначает дорога. */
@@ -91,6 +93,31 @@ export function exitCarriage(id: BiomeId): CarriageLayout {
   return { id, ...road, biomeOncoming: 0 };
 }
 
+/** Скорость правой полосы съезда, км/ч. */
+const EXIT_LANE_SPEED = 65;
+
+/**
+ * Дорога с новой полосой справа.
+ * Это и есть съезд: полоса той же дороги, не вторая дорога.
+ * `offset` — метры от оси этой дороги до середины ленты.
+ */
+export function withExitLane(layout: CarriageLayout, offset: number): CarriageLayout {
+  const pieces: LanePiece[] = [];
+  for (const lane of layout.lanes) {
+    if (lane.exit) continue;
+    pieces.push({ offset: lane.offset, speed: lane.speed, direction: lane.home });
+  }
+  pieces.push({ offset, speed: EXIT_LANE_SPEED, direction: 'with' });
+  const road = roadFrom(pieces, layout.laneWidth);
+  for (const lane of road.lanes) lane.exit = lane.offset === offset;
+  return {
+    ...layout,
+    ...road,
+    startLane: layout.startLane,
+    biomeOncoming: layout.biomeOncoming,
+  };
+}
+
 function laneDirection(value: LaneDirection | undefined): LaneDirection {
   if (value !== 'against' && value !== 'with') throw new Error('У полосы нет направления');
   return value;
@@ -128,6 +155,7 @@ export function roadFrom(pieces: readonly LanePiece[], laneWidth: number): Road 
       direction,
       home: direction,
       side: piece.offset < 0 ? 'left' : 'right',
+      exit: false,
     });
   }
   let oncomingCount = 0;
@@ -215,7 +243,7 @@ export function besideWithLane(road: Road, index: number): Lane | null {
 export function outerLane(road: Road, side: LaneSide, direction: LaneDirection): Lane | null {
   let found: Lane | null = null;
   for (const lane of road.lanes) {
-    if (lane.side !== side || lane.direction !== direction) continue;
+    if (lane.exit || lane.side !== side || lane.direction !== direction) continue;
     if (!found || Math.abs(lane.offset) > Math.abs(found.offset)) found = lane;
   }
   return found;
@@ -317,7 +345,7 @@ export function laneGapOffsets(road: Road): number[] {
   for (let i = 0; i < lanes.length - 1; i++) {
     const left = lanes[i];
     const right = lanes[i + 1];
-    if (!left || !right || left.direction !== right.direction) continue;
+    if (!left || !right || left.exit || right.exit || left.direction !== right.direction) continue;
     marks.push((left.offset + right.offset) * 0.5);
   }
   return marks;

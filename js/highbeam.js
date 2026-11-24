@@ -14,18 +14,12 @@ export function initHighbeam() {
     $('badge-beam').hidden = false;
 
     const riderLat = G.riderLatAt(G.playerS);
-    const bikeOnExit = G.drivenIsExitAt(G.playerS);
     for (const car of G.trafficPool) {
-      const roads = G.roadsAt(car.s);
-      const onExit = !!(car.onExit && roads.exit);
-      const road = onExit ? roads.exit : roads.main;
-      const carLat = G.trafficLatAt(car.s, car.lateralOffset, onExit);
+      const road = G.roadsAt(car.s).main;
+      const carLat = G.trafficLatAt(car.s, car.lateralOffset, car.onExit);
       if (Math.abs(carLat - riderLat) >= road.lanes.laneWidth) continue;
-      // На одной дороге номер полосы общий. На другой ленте место байка
-      // переводится в её кадр: номера шоссе и съезда сами по себе не совпадают.
-      const sameRoad = onExit === bikeOnExit;
       const scale = road.scale || 1;
-      const playerLane = sameRoad ? G.laneOffset : (riderLat - road.axis) / scale;
+      const playerLane = (riderLat - road.axis) / scale;
       const lane = highbeamYieldLane(car, G.playerS, playerLane, road.lanes);
       if (lane == null) continue;
       car.changingLane = true;

@@ -1,8 +1,7 @@
 /**
  * Сиденье байка на кадре дороги.
- * Дорога и съезд — два сиденья. Ось каждого читается из RoadFrame.
- * Полоса — смещение от этой оси. Второй оси в игре нет.
- * Когда въезд стал дорогой или лента сошла на нет, байк садится на ту дорогу, что осталась.
+ * Ось одна — ось дороги. Съезд это её правая полоса, не вторая ось.
+ * Когда лента кончилась, байк садится на ту дорогу, что осталась.
  * Отказ сажает на край прямой, не оставляет байка в стороне.
  */
 
@@ -30,15 +29,10 @@ function spanOf(span: number): number {
 
 /**
  * Ось сиденья в мировых метрах.
- * На дороге это её центр. На съезде это середина ленты.
- * Когда ленты уже нет, ось совпадает с центром дороги.
+ * Съезд — полоса этой дороги, поэтому ось та же, что у остальных полос.
  */
 export function seatAxis(frame: RoadFrame, kind: SeatKind): number {
-  if (kind === 'exit') {
-    const ribbon = exitRibbonCenter(frame.local);
-    if (ribbon != null) return frame.origin + ribbon;
-  }
-  return laneAnchor(frame);
+  return kind === 'exit' ? laneAnchor(frame) : laneAnchor(frame);
 }
 
 /** Мировая точка сиденья. Камера, байк и проверка вливания читают её. */
@@ -91,12 +85,14 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
   const hold = onRibbon || (seat.kind === 'exit' && !canReleaseExit(logical, frame.local));
   if (!hold) {
     if (seat.kind !== 'exit') return seat;
-    return { kind: 'road', lane: (world - frame.origin) / scale };
+    return { kind: 'road', lane: (world - laneAnchor(frame)) / scale };
   }
-  let lane = (world - (frame.origin + ribbon)) / scale;
+  const axis = laneAnchor(frame);
+  const center = (frame.origin + ribbon - axis) / scale;
   const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
   const limit = Math.max(0, (halfW - 0.7) / Math.max(scale, 0.05));
-  if (lane < -limit) lane = -limit;
-  if (lane > limit) lane = limit;
+  let lane = (world - axis) / scale;
+  if (lane < center - limit) lane = center - limit;
+  if (lane > center + limit) lane = center + limit;
   return { kind: 'exit', lane };
 }
