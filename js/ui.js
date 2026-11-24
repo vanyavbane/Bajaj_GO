@@ -1309,6 +1309,7 @@ export function initUi() {
     if (G.resetRunMileage) G.resetRunMileage();
     if (G.creditRunBiomeDistance) G.creditRunBiomeDistance();
     if (G.resetRunPlayerStats) G.resetRunPlayerStats();
+    if (G.resetDriftSmoke) G.resetDriftSmoke();
     resetRun(G, G.START_LANE);
     G.laneAssistTarget = null;
     if (G.updateBiome) G.updateBiome(0);

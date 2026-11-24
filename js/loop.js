@@ -4,6 +4,8 @@ import { defaultRunOffset, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
 import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
+import * as THREE from 'three';
+import { STUNT, blankStuntState, stepStunt } from './engine/stunts.ts';
 import { G } from './state.js';
 
 export function initLoop() {
@@ -12,6 +14,60 @@ export function initLoop() {
   const lerp = G.lerp;
   let jumpLineShown = '';
   let oncomingShown = false;
+  G.stunt = G.stunt || blankStuntState();
+  G.driftSmoke = G.driftSmoke || [];
+
+  function ensureDriftSmoke() {
+    if (G.driftSmoke.length) return;
+    const geo = new THREE.SphereGeometry(0.28, 7, 6);
+    for (let i = 0; i < 18; i++) {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xdedede, transparent: true, opacity: 0, depthWrite: false }));
+      m.visible = false;
+      m.userData.life = 0;
+      m.userData.vx = 0; m.userData.vy = 0; m.userData.vz = 0;
+      G.scene.add(m);
+      G.driftSmoke.push(m);
+    }
+  }
+
+  function spawnDriftSmoke() {
+    ensureDriftSmoke();
+    const p = G.driftSmoke.find(x => x.userData.life <= 0);
+    if (!p) return;
+    const back = G.bikeRoot.getWorldDirection(new THREE.Vector3()).multiplyScalar(1.1);
+    const base = G.bikeRoot.position.clone().add(back);
+    base.y = Math.max(G.roadY(G.playerS) + 0.15, base.y - 0.45);
+    p.position.copy(base);
+    p.position.x += (Math.random() - 0.5) * 0.5;
+    p.position.z += (Math.random() - 0.5) * 0.5;
+    p.scale.setScalar(0.4 + Math.random() * 0.4);
+    p.material.opacity = 0.35;
+    p.visible = true;
+    p.userData.life = 0.7 + Math.random() * 0.5;
+    p.userData.vy = 0.6 + Math.random() * 0.6;
+    p.userData.vx = (Math.random() - 0.5) * 0.8;
+    p.userData.vz = (Math.random() - 0.5) * 0.8;
+  }
+
+  function resetDriftSmoke() {
+    for (const p of G.driftSmoke) { p.visible = false; p.userData.life = 0; if (p.material) p.material.opacity = 0; }
+  }
+  G.resetDriftSmoke = resetDriftSmoke;
+
+  function updateDriftSmoke(dt, active) {
+    if (!G.driftSmoke.length) { if (active) ensureDriftSmoke(); return; }
+    if (active && Math.random() < dt * 18) spawnDriftSmoke();
+    for (const p of G.driftSmoke) {
+      if (p.userData.life <= 0) { p.visible = false; continue; }
+      p.userData.life -= dt;
+      p.position.x += p.userData.vx * dt;
+      p.position.y += p.userData.vy * dt;
+      p.position.z += p.userData.vz * dt;
+      p.scale.multiplyScalar(1 + dt * 1.2);
+      p.material.opacity = Math.max(0, p.userData.life * 0.35);
+      if (p.userData.life <= 0) { p.visible = false; p.material.opacity = 0; }
+    }
+  }
 
   /* =========================================================================
    * 17. ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ, ФИЗИКА ТЮНИНГА, ТРАМПЛИНОВ И РЕНДЕРИНГ
@@ -145,22 +201,49 @@ export function initLoop() {
     const stickDrive = G.controlMode === 'stick';
     const gasOn = G.keys.gas || (stickDrive && G.stickGas);
     const brakeOn = G.keys.brake || (stickDrive && G.stickBrake);
+
+    // Stunt step before speed so stoppie can boost braking on trigger frame.
+    G.stunt = stepStunt(G.stunt || blankStuntState(), {
+      dt,
+      speed: prevSpeed,
+      gas: gasOn,
+      brake: brakeOn,
+      airborne: G.jumpState.airborne,
+      bike: { id: bike.id, maxSpeed: effStats.maxSpeed, vType: bike.vType }
+    });
+
+    let brakeDecel = effStats.brakeDecel * (1 - 0.15 * (G.weather ? G.weather.wet : 0));
+    if (G.stunt.mode === 'stoppie') brakeDecel *= STUNT.STOPPIE_BRAKE_MULTIPLIER;
+
     const stepped = stepSpeed(G.speed, dt, {
       gas: gasOn,
       brake: brakeOn,
       maxSpeed: effectiveMaxSpeed,
       accel: effStats.accel,
-      brakeDecel: effStats.brakeDecel * (1 - 0.15 * (G.weather ? G.weather.wet : 0)),
+      brakeDecel,
       isQute: effStats.isQute
     });
     G.speed = stepped.speed;
+
+    // Second pass with actual speed for hold/fall transitions.
+    G.stunt = stepStunt(G.stunt, {
+      dt: 0,
+      speed: G.speed,
+      gas: gasOn,
+      brake: brakeOn,
+      airborne: G.jumpState.airborne,
+      bike: { id: bike.id, maxSpeed: effStats.maxSpeed, vType: bike.vType }
+    });
 
     for (const fl of G.yuraFlames) {
       fl.visible = effStats.isYura && gasOn && G.speed > 40 && (Math.floor(now / 60) % 2 === 0);
       fl.scale.z = 0.7 + Math.random() * 0.9;
     }
 
-    G.accelPitchOffset = lerp(G.accelPitchOffset, clamp((stepped.speed - prevSpeed) / Math.max(dt, 0.001) * 0.0008, -0.04, 0.05), dt * 6);
+    updateDriftSmoke(dt, G.stunt.mode === 'drift' && G.stunt.smoke > 0.05);
+
+    const stuntDamp = 1 - clamp(Math.abs(G.stunt.pitch) / 0.5, 0, 0.85);
+    G.accelPitchOffset = lerp(G.accelPitchOffset, clamp((stepped.speed - prevSpeed) / Math.max(dt, 0.001) * 0.0008, -0.04, 0.05) * stuntDamp, dt * 6);
 
     // Lane-assist: после развилки мягко возвращает байк в попутную полосу.
     // Пока выбор открыт и пока взятый въезд ещё не кончился, он не тянет на старую дорогу.
@@ -175,6 +258,17 @@ export function initLoop() {
       || (G.controlMode === 'tilt' && !G.swipeActive && G.tiltSmoothed > 0.2)
       || (G.controlMode === 'stick' && G.stickHeld && G.stickSteer > 0.2);
 
+    let steerInput = G.controlMode === 'tilt' && !G.swipeActive
+      ? G.tiltSmoothed
+      : (G.controlMode === 'stick' && G.stickHeld ? G.stickSteer : undefined);
+    const stuntSteerMult = G.stunt.mode === 'wheelie' ? STUNT.WHEELIE_STEER_SENSITIVITY
+      : (G.stunt.mode === 'drift' ? STUNT.DRIFT_STEER_SENSITIVITY : 1);
+    if (typeof steerInput === 'number') steerInput *= stuntSteerMult;
+    else if (stuntSteerMult !== 1) {
+      const dir = (G.keys.right ? 1 : 0) - (G.keys.left ? 1 : 0);
+      steerInput = dir * stuntSteerMult;
+    }
+
     const steered = stepSteer({
       laneOffset: G.laneOffset,
       lateralVelocity: G.lateralVelocity,
@@ -184,11 +278,7 @@ export function initLoop() {
     }, dt, now, {
       left: G.keys.left,
       right: G.keys.right,
-      // Наклон передаётся аналогом: чем сильнее крен, тем сильнее поворот.
-      // Свайп по экрану по-прежнему работает дискретными keys.
-      steer: G.controlMode === 'tilt' && !G.swipeActive
-        ? G.tiltSmoothed
-        : (G.controlMode === 'stick' && G.stickHeld ? G.stickSteer : undefined),
+      steer: steerInput,
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,
@@ -218,6 +308,7 @@ export function initLoop() {
     }
     G.steerVisual = steered.steerVisual;
     G.slipDriftVel = steered.slipDriftVel;
+    if (G.stunt.mode === 'drift') G.slipDriftVel += G.stunt.slip * (G.steerVisual || 0.15) * 4.2;
     G.jumpState.wobbleTimer = steered.wobbleTimer;
     if (steered.scraped) G.speed = scrapeSpeed(G.speed, dt);
 
@@ -346,14 +437,16 @@ export function initLoop() {
   function placePlayer(isQute) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
+    const stuntPitch = G.stunt ? G.stunt.pitch : 0;
+    const driftYaw = (G.stunt && G.stunt.mode === 'drift') ? G.stunt.slip * 0.45 * (G.steerVisual !== 0 ? Math.sign(G.steerVisual) : 1) : 0;
     const worldLat = G.riderLatAt(G.playerS);
     G.placeOnRoad(
       G.bikeRoot,
       G.playerS,
       worldLat,
       G.jumpState.height,
-      -G.steerVisual * 0.035,
-      G.jumpState.pitch,
+      -G.steerVisual * 0.035 + driftYaw,
+      G.jumpState.pitch + stuntPitch,
       leanRoll
     );
   }
