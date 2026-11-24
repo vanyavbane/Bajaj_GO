@@ -1,6 +1,6 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { besidePoint, branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
-import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, zoneNose } from './vectors.ts';
+import { EXIT_LANE_HALF, besidePoint, branchEdges, exitClock, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
+import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, vectorSpawnOf, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -38,6 +38,28 @@ assert(openCourse(RIGHT_FORK, nose + 20, layout).length === 1, 'после но�
 assert(openCourse(RIGHT_FORK, nose - 5, layout).length === 0, 'до носа ответвлений нет');
 assert(openCourse(RIGHT_FORK, nose + clock.ownAfter, layout).length === 1, 'пришедший съезд остаётся ответвлением, а не дорогой');
 assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд односторонний, прямая наследует дорогу биома');
+
+const approachSpawn = vectorSpawnOf(0, EXIT_RIGHT, layout);
+assert(approachSpawn != null && approachSpawn.turnAt === nose + clock.choiceAt, 'вектор ждёт выбора, а не поворачивает в носу');
+assert(approachSpawn != null && approachSpawn.ownsFrom === nose + clock.ownAfter, 'вектор входит в дорогу в конце закрытия');
+const approachBorn = 10 + EXIT_LANE_HALF;
+const startField = createVectorField();
+const beforeTurn = startField.frame([{ ...approachSpawn!, born: approachBorn }], nose + clock.choiceAt - 1, straight, layout.turn);
+assert(Math.abs(beforeTurn.x) < 1e-6 && Math.abs(beforeTurn.fx) < 1e-6, 'путь съезда начинает поворот только на отделении');
+const approachFrame = sampleRoad({ forkDistance: 100, half: 10, chosen: 1, baseOrigin: 0 });
+const approachPose = startField.embed({
+  s: nose + 100,
+  lat: exitRibbonMid(approachFrame.local),
+  y: 0,
+  nose,
+  edges: approachFrame.local,
+  owned: [],
+  branches: [{ ...approachSpawn!, born: approachBorn }],
+  origin: 0,
+  turn: layout.turn,
+  ownedHere: false,
+}, straight);
+assert(Math.abs(approachPose.fx) < 1e-6 && Math.abs(approachPose.fz + 1) < 1e-6, 'пока +1 полоса прижата, байк едет вдоль дороги');
 
 const carried = exitRibbonMid(branchEdges(10, 22));
 const localRibbon = branchEdges(10, 22);
@@ -164,7 +186,9 @@ const seamSpawn: VectorSpawn = {
   key: 'seam',
   nose: 0,
   yaw: EXIT_RIGHT.yaw,
+  turnAt: seamClock.choiceAt,
   ownsFrom: seamClock.ownAfter,
+  born: 10 + EXIT_LANE_HALF,
 };
 const seamRoad = (distance: number) => sampleRoad({
   forkDistance: distance,

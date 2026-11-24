@@ -250,6 +250,7 @@ export function initLoop() {
     const fork = G.splitState;
     const forkOpen = fork && fork.active && !fork.chosen;
     const forkTaken = fork && fork.active && fork.chosenSide === 1;
+    const onExit = forkTaken && G.onExitLane && G.onExitLane();
     if (G.laneAssistTarget != null && !G.jumpState.airborne && !forkOpen && !forkTaken) {
       const assist = G.laneAssistTarget - G.laneOffset;
       G.lateralVelocity = lerp(G.lateralVelocity, clamp(assist * 2.6, -5.5, 5.5), dt * 2.6);
@@ -282,7 +283,9 @@ export function initLoop() {
       brake: G.keys.brake,
       speed: G.speed,
       airborne: G.jumpState.airborne,
-      curvature: G.roadCurvature(G.playerS),
+      // На дуге +1 полосы не гасим совсем, но не даём центробежной силе
+      // уносить байк к левому краю, пока он ещё на самой полосе.
+      curvature: G.roadCurvature(G.playerS) * (onExit ? 0.35 : 1),
       isYura: effStats.isYura,
       wideTires: effStats.wideTires,
       upgradedBrakes: effStats.upgradedBrakes,
@@ -292,6 +295,20 @@ export function initLoop() {
     });
     G.laneOffset = steered.laneOffset;
     G.lateralVelocity = steered.lateralVelocity;
+    // Мягкое удержание центра +1 полосы без резкого доворота: байк сам едет
+    // по своей ленте, но руль игрока по-прежнему может увести в любую сторону.
+    if (onExit && !G.jumpState.airborne && G.exitLaneCenterOffset) {
+      const steerNow = typeof steerInput === 'number'
+        ? steerInput
+        : (G.keys.right ? 1 : 0) - (G.keys.left ? 1 : 0);
+      if (Math.abs(steerNow) < 0.15) {
+        const center = G.exitLaneCenterOffset();
+        if (Number.isFinite(center)) {
+          const pull = clamp((center - G.laneOffset) * 1.8, -2.4, 2.4);
+          G.lateralVelocity = lerp(G.lateralVelocity, pull, Math.min(1, dt * 2.4));
+        }
+      }
+    }
     // Рулевой расчёт сглаживает скорость к обычной. В клине удержание вправо
     // остаётся довозом до ленты и не гасится этим сглаживанием.
     // У кромки довоз спадает, и запас скорости на ленту не переносится.

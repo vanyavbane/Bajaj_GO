@@ -58,14 +58,33 @@ export function rescaleSeat(seat: RiderSeat, from: number, to: number, axis: num
 
 /**
  * Чужой кадр не тащит ось съезда, если ленты там нет.
- * Пока центр тот же, сиденье остаётся съездом: посадку делает stepSeat.
+ * Сравнивается именно ось полос (laneAnchor): frame.origin стоит на месте,
+ * а центр живой дороги уезжает вместе с въездом.
  */
-export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: number): RiderSeat {
+export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeAxis: number): RiderSeat {
   if (seat.kind !== 'exit') return seat;
   if (exitRibbonCenter(frame.local) != null) return seat;
-  const home = Number.isFinite(homeOrigin) ? homeOrigin : 0;
-  if (Math.abs(frame.origin - home) < 0.5) return seat;
+  const home = Number.isFinite(homeAxis) ? homeAxis : 0;
+  if (Math.abs(laneAnchor(frame) - home) < 0.5) return seat;
   return { kind: 'road', lane: seat.lane };
+}
+
+/**
+ * Посадка на чужом кадре без прыжка по миру.
+ * Когда лента съезда кончилась, laneOffset пересчитывается от новой оси так,
+ * чтобы камера, байк и разметка смотрели в ту же точку, где они были на исходном кадре.
+ */
+export function seatOnFrameWorld(
+  frame: RoadFrame,
+  seat: RiderSeat,
+  homeFrame: RoadFrame,
+  fromSpan: number,
+  toSpan: number,
+): RiderSeat {
+  const adapted = seatOnFrame(frame, seat, laneAnchor(homeFrame));
+  if (adapted.kind === seat.kind) return adapted;
+  const world = seatWorld(homeFrame, seat, spanOf(fromSpan));
+  return { kind: adapted.kind, lane: (world - laneAnchor(frame)) / spanOf(toSpan) };
 }
 
 /**

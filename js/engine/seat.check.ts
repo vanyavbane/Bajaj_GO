@@ -4,7 +4,7 @@
  */
 import { exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
 import { exitCarriage } from './lanes.ts';
-import { rescaleSeat, seatWorld, stepSeat, type RiderSeat } from './seat.ts';
+import { rescaleSeat, seatOnFrameWorld, seatWorld, stepSeat, type RiderSeat } from './seat.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -57,6 +57,16 @@ assert(
   landedAt > mergeFrame.local.leftOuter + 0.2 && landedAt < mergeFrame.local.leftInner - 0.2,
   'байк остаётся на новой дороге, а не на кромке старой',
 );
+
+// Камера смотрит на 46 м вперёд: её точка должна остаться на той же мировой
+// линии, даже когда впереди лента уже кончилась и стала новой дорогой.
+const fromFrame = frameAt(clock.choiceAt + 40, 1);
+const toFrame = frameAt(clock.ownAfter + 5, 1);
+const lookWorld = 25;
+const lookSeat: RiderSeat = { kind: 'exit', lane: lookWorld / span };
+const carriedLook = seatOnFrameWorld(toFrame, lookSeat, fromFrame, span, span);
+assert(carriedLook.kind === 'road', 'взгляд вперёд пересаживается на новую дорогу вместе с байком');
+assert(Math.abs(seatWorld(toFrame, carriedLook, span) - lookWorld) < 1e-6, 'взгляд вперёд не прыгает в сторону на стыке ленты');
 
 const declined = frameAt(clock.ownAfter + 5, -1);
 assert(exitRibbonCenter(declined.local) == null, 'отказанная лента к концу зоны исчезла');

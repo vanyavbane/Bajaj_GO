@@ -326,6 +326,10 @@ export interface GameState {
   roadBlockAt: (s: number) => PlacedBlock | null;
   /** Полоса байка или камеры в метрах от оси, уже со съездом. */
   riderLatAt: (s: number, laneOffset?: number) => number;
+  /** Байк сидит именно на полосе съезда. */
+  onExitLane: () => boolean;
+  /** Центр живой +1 полосы в единицах G.laneOffset. */
+  exitLaneCenterOffset: () => number;
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
