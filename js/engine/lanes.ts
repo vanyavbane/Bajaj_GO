@@ -356,6 +356,26 @@ export function sameLaneOffset(a: number, b: number): boolean {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1.6;
 }
 
+/**
+ * Ближайшая полоса заданного направления.
+ * На осевой чётной дороги это попутная, а не встречная слева.
+ */
+export function nearestLaneIndexIn(road: Road, lateral: number, direction: LaneDirection): number {
+  const pool = lanesGoing(road, direction);
+  const use = pool.length > 0 ? pool : road.lanes;
+  let best = use[0]?.index ?? 0;
+  let bestDist = Infinity;
+  const target = Number.isFinite(lateral) ? lateral : 0;
+  for (const lane of use) {
+    const dist = Math.abs(lane.offset - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = lane.index;
+    }
+  }
+  return best;
+}
+
 /** Индекс полосы, чей центр ближе всего к смещению. Номер из другого биома не переносится. */
 export function nearestLaneIndex(offsets: number[], lateral: number): number {
   let best = 0;

@@ -3,7 +3,7 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { accidentArrival, approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageAt, carriageHolds, carriagePhase, drivenIsExit, forwardArrival, laneFit, laneMarks, repairQueue, ribbonApproachLat, ribbonDirection, ribbonTrailLat, riderCarriage, sameCarriage, sideRibbon, solidMarks } from './carriage.ts';
+import { accidentArrival, approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageAt, carriageHolds, carriagePhase, drivenIsExit, forwardArrival, laneAtWorld, laneFit, laneMarks, repairQueue, ribbonApproachLat, ribbonDirection, ribbonTrailLat, riderCarriage, sameCarriage, sideRibbon, solidMarks } from './carriage.ts';
 import { EXIT_LANE_HALF, exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
 import { EXIT_LANE_WIDTH, laneGapOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
@@ -79,7 +79,8 @@ assert(earlyRibbon != null && midRibbon != null && midRibbon > earlyRibbon, 'в�
 assert(midReturn.local.leftInner - midReturn.local.leftOuter < half * 2 - 1, 'старая дорога на въезде уже уже');
 const grown = riderCarriage(early, earlySeal, 'exit');
 assert(grown.lanes.lanes.some((lane) => lane.exit) && grown.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');
-assert(grown.scale === 1, 'полосы старой дороги не сжимаются из-за съезда');
+const cityEdge = Math.max(...city.offsets.map((offset) => Math.abs(offset))) + city.laneWidth * 0.5;
+assert(Math.abs(grown.scale - Math.min(1, grown.half / cityEdge)) < 1e-9, 'полосы старой дороги держит её кромка, не съезд');
 assert(exitRibbonCenter(lateSeal.local) == null && late.phase === 'road', 'к концу закрытия полоса съезда кончилась');
 assert(late.lanes.count === city.count && !late.lanes.lanes.some((lane) => lane.exit) && late.way === 'two-way', 'на месте съезда новая дорога без отдельной полосы');
 assert(Math.abs(late.half - EXIT_LANE_HALF) < 1e-6 && late.axis > half, 'новая дорога стоит на линии въезда и на его ширине');
@@ -98,7 +99,12 @@ assert(carriagePhase(frameAt(-10, 0)) === 'road', 'до развилки съе�
 
 const plain = carriageAt({ frame: frameAt(-10, 0), biome: city });
 assert(plain.phase === 'road' && plain.scale === 1, 'обычная дорога не сжимает полосы');
-assert(laneFit(5, [-10, 10]) === 0.5, 'масштаб — это кромка, делённая на крайнее смещение');
+assert(laneFit(5, [-10, 10]) === 0.25, 'масштаб держит внешний край крайней полосы на кромке');
+assert(laneFit(9.5, [-7.125, -2.375, 2.375, 7.125]) === 1, 'полная ширина не сжимает свои полосы');
+assert(Math.abs(laneFit(4.6, [-7.125, -2.375, 2.375, 7.125]) - 4.6 / 9.5) < 1e-9, 'сужение сажает край полосы на кромку');
+assert(laneFit(0, [-7.125, 7.125]) === 0.001, 'сошедшая дорога сжимает полосы к оси');
+assert(laneAtWorld(4.6, 0, 1) === 4.6, 'мировая точка на новой дороге остаётся своим смещением');
+assert(laneAtWorld(5, 12, 1) === -7, 'сдвиг оси вычитается из мировой точки');
 
 const field = createVectorField();
 const course = courseLayoutOf(clock, 1500, 0);

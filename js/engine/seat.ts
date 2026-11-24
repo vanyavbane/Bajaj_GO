@@ -1,13 +1,13 @@
 /**
  * Сиденье байка на кадре дороги.
- * Ось одна — ось дороги. Съезд это её правая полоса, не вторая ось.
- * Когда лента кончилась, байк садится на ту дорогу, что осталась.
+ * Ось одна — ось дороги из readExit. Съезд это смещение правой полосы, не вторая ось.
+ * Когда у чтения съезда нет ленты, байк садится на ту дорогу, что осталась.
  * Отказ сажает на край прямой, не оставляет байка в стороне.
  */
 
+import { readExit } from './exit.ts';
 import {
   canReleaseExit,
-  exitRibbonCenter,
   landOnCarriage,
   laneAnchor,
   onExitRibbon,
@@ -30,10 +30,11 @@ function spanOf(span: number): number {
 
 /**
  * Ось сиденья в мировых метрах.
- * Съезд — полоса этой дороги, поэтому ось та же, что у остальных полос.
+ * kind не двигает ось: съезд отличается полосой, а не центром дороги.
  */
 export function seatAxis(frame: RoadFrame, kind: SeatKind): number {
-  return kind === 'exit' ? laneAnchor(frame) : laneAnchor(frame);
+  void kind;
+  return laneAnchor(frame);
 }
 
 /** Мировая точка сиденья. Камера, байк и проверка вливания читают её. */
@@ -62,7 +63,7 @@ export function rescaleSeat(seat: RiderSeat, from: number, to: number, axis: num
  */
 export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: number): RiderSeat {
   if (seat.kind !== 'exit') return seat;
-  if (exitRibbonCenter(frame.local) != null) return seat;
+  if (readExit(frame).ribbon != null) return seat;
   const home = Number.isFinite(homeOrigin) ? homeOrigin : 0;
   if (Math.abs(frame.origin - home) < 0.5) return seat;
   return { kind: 'road', lane: seat.lane };
@@ -76,7 +77,7 @@ export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: numbe
 export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): RiderSeat {
   const scale = spanOf(span);
   const world = seatWorld(frame, seat, scale);
-  const ribbon = exitRibbonCenter(frame.local);
+  const ribbon = readExit(frame).ribbon?.center ?? null;
   if (ribbon == null) {
     if (seat.kind !== 'exit') return seat;
     return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, world, scale) };

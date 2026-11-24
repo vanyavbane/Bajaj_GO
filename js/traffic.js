@@ -1,5 +1,5 @@
-import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, repairQueue, ribbonDirection } from './engine/carriage.js';
-import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
+import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, laneAtWorld, repairQueue, ribbonDirection } from './engine/carriage.js';
+import { clampLaneIndex, nearestLaneIndexIn, sameLaneOffset } from './engine/lanes.js';
 import { besideWithLane, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { repairStopS } from './engine/repair.js';
@@ -121,6 +121,8 @@ export function initTraffic() {
       model,
       laneIdx: idx,
       targetLaneIdx: idx,
+      laneDir: ribbonDirection(road.onExit, facing && facing.direction),
+      laneKey: laneSetKey(cfg),
       lateralOffset: cfg.offsets[idx],
       s,
       speedKmh: model.type === 'qute_traffic' ? QUTE_TRAFFIC_SPEED : cfg.speeds[idx],
@@ -149,10 +151,41 @@ export function initTraffic() {
   }
   G.resetTrafficVehicle = resetTrafficVehicle;
 
-  /** Полоса машины — ближайший центр в биоме её точки, не старый номер. */
+  /** Ключ набора полос без скользящего смещения съезда: смена биома его меняет, ход ленты — нет. */
+  function laneSetKey(cfg) {
+    const body = [];
+    let exit = 0;
+    const lanes = cfg.lanes || [];
+    for (let i = 0; i < lanes.length; i++) {
+      const lane = lanes[i];
+      if (lane.exit) exit = 1;
+      else body.push(lane.offset);
+    }
+    return `${exit}|${body.join(',')}`;
+  }
+
+  /**
+   * Смена набора полос оставляет машину в мировой точке.
+   * Точка уже не на этой дороге — машина с неё уходит, а не прыгает на новую ось.
+   */
+  function adoptLaneSet(car, road) {
+    const key = laneSetKey(road.lanes);
+    if (car.joiningExit) return false;
+    if (car.laneKey != null && car.laneKey !== key && Number.isFinite(car.heldLat)) {
+      if (!carriageHolds(car.heldLat, road.axis, road.half)) return true;
+      car.lateralOffset = laneAtWorld(car.heldLat, road.axis, road.scale);
+    }
+    car.laneKey = key;
+    return false;
+  }
+
+  /** Полоса машины — ближайший центр её направления. Осевая не сажает попутную во встречную. */
   function settleCarLane(car, cfg) {
     if (car.joiningExit) return;
-    const idx = nearestLaneIndex(cfg.offsets, car.lateralOffset);
+    const dir = car.laneDir === 'against' ? 'against' : 'with';
+    const idx = nearestLaneIndexIn(cfg, car.lateralOffset || 0, dir);
+    const lane = cfg.lanes[idx];
+    if (lane) car.laneDir = lane.direction === 'against' ? 'against' : 'with';
     const target = cfg.offsets[idx];
     const jump = Math.abs((car.lateralOffset || 0) - target);
     if (idx === car.laneIdx && jump < 0.05) {
@@ -177,7 +210,16 @@ export function initTraffic() {
 
   G.remapTrafficLanes = () => {
     for (const car of G.trafficPool) {
-      const cfg = carLanes(car);
+      if (!car.active) continue;
+      const roads = G.roadsAt(car.s);
+      const live = roads.main;
+      if (adoptLaneSet(car, live)) {
+        car.active = false;
+        car.retiring = false;
+        car.model.root.visible = false;
+        continue;
+      }
+      const cfg = live.lanes;
       if (car.model.type === 'qute_traffic') {
         const q = quteLane(cfg);
         const target = cfg.offsets[q];
@@ -245,6 +287,7 @@ export function initTraffic() {
     }
     car.onExit = true;
     car.joiningExit = false;
+    car.laneDir = 'with';
     car.laneIdx = exit.index;
     car.targetLaneIdx = exit.index;
     car.lateralOffset = exit.offset;
@@ -292,28 +335,30 @@ export function initTraffic() {
     }
   }
 
-  /** Одна дорога машины на этот кадр: остаётся, переезжает или садится на новую. */
+  /** Одна дорога машины на этот кадр. Съезд — полоса main, пока у чтения есть лента. */
   function assignCarRoad(car) {
-    const roads = G.roadsAt(car.s);
-    const highway = roads.main.lanes;
+    const road = G.roadsAt(car.s).main;
+    const ribbon = road.spot && road.spot.ribbon;
+    const highway = road.lanes;
     const exit = exitLaneOf(highway);
     const wasOnExit = !!car.onExit;
-    car.onExit = carFollowsRibbon({ hasExit: exit != null, following: wasOnExit });
-    if (!car.onExit && !wasOnExit && beginExitJoin(car, roads)) car.joiningExit = true;
+    car.onExit = carFollowsRibbon({ hasExit: ribbon != null, following: wasOnExit });
+    if (!car.onExit && !wasOnExit && beginExitJoin(car, { main: road })) car.joiningExit = true;
     if (car.onExit || !exit) car.joiningExit = false;
     let departed = false;
     if (wasOnExit && !car.onExit) {
       const world = Number.isFinite(car.heldLat)
         ? car.heldLat
         : G.trafficLatAt(car.s, car.lateralOffset, false);
-      const axis = roads.main.axis;
-      const scale = roads.main.scale || 1;
-      if (!carriageHolds(world, axis, roads.main.half)) {
+      const axis = road.axis;
+      const scale = road.scale || 1;
+      if (!carriageHolds(world, axis, road.half)) {
         departed = true;
       } else {
-        const moved = arrivalMove(highway, (world - axis) / scale);
-        const here = nearestLaneIndex(highway.offsets, moved.offset);
-        const dest = nearestLaneIndex(highway.offsets, moved.target);
+        const moved = arrivalMove(highway, laneAtWorld(world, axis, scale));
+        car.laneDir = 'with';
+        const here = nearestLaneIndexIn(highway, moved.offset, 'with');
+        const dest = nearestLaneIndexIn(highway, moved.target, 'with');
         car.laneIdx = moved.changing ? here : dest;
         car.targetLaneIdx = dest;
         car.lateralOffset = moved.offset;
@@ -353,7 +398,14 @@ export function initTraffic() {
         car.model.root.visible = false;
         continue;
       }
-      const road = seat.lanes;
+      const live = G.roadsAt(car.s).main;
+      if (adoptLaneSet(car, live)) {
+        car.active = false;
+        car.retiring = false;
+        car.model.root.visible = false;
+        continue;
+      }
+      const road = live.lanes;
       const onRibbon = seat.onRibbon;
       settleCarLane(car, road);
       const targetSpeed = car.model.type === 'qute_traffic'

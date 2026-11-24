@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
-import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
+import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, nearestLaneIndexIn, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
 import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, roadLateral, sampleRoad, splitPick } from './fork.ts';
 
@@ -290,6 +290,7 @@ assert(back.lanes[0]?.direction === 'against' && back.lanes[0]?.side === 'left',
 assert(defaultRunOffset(city) === city.lanes.find((lane) => lane.direction === 'with')?.offset, 'попутная по умолчанию — ближайшая к оси, не встречная');
 assert(defaultRunOffset(exitRoad) === 0, 'на съезде попутная полоса — его единственная');
 assert(nearestLaneOffset(city, -100, 'with') === defaultRunOffset(city), 'поиск попутной не сажает байка на встречную');
+assert(nearestLaneIndexIn(city, 0, 'with') === city.lanes.find((lane) => lane.direction === 'with')?.index, 'осевая сажает машину на попутную, не на встречную');
 assert(besideWithLane(city, 2)?.index === 3 && besideWithLane(city, 3)?.index === 2, 'попутная уступает соседу своего направления');
 assert(besideWithLane(city, 0) == null, 'встречная от дальнего света не перестраивается');
 assert(offsetDirection(city, -8) === 'against' && offsetDirection(city, 8) === 'with', 'левее границы ход встречный, правее попутный');

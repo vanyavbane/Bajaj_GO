@@ -5,7 +5,8 @@
  * на её месте уже новая дорога, без второй проезжей части.
  */
 
-import { exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
+import { readExit, type ExitRead } from './exit.ts';
+import { laneAnchor, type RoadFrame } from './fork.ts';
 import { carriageLanes, directionEdge, laneGapOffsets, nearestLaneOffset, withExitLane, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
@@ -27,6 +28,8 @@ export interface LiveCarriage {
   half: number;
   /** Полуширина асфальта полосы съезда. 0, если этой полосы нет. */
   exitHalf: number;
+  /** Съезд этой точки. Лента есть только у spot.ribbon. */
+  spot: ExitRead;
   way: RoadWay;
 }
 
@@ -45,20 +48,45 @@ function carriageHalf(frame: RoadFrame): number {
   return mainHalf(frame);
 }
 
-/** Сжать смещения, только если крайняя полоса уже за кромкой. */
+/**
+ * Сжать смещения, чтобы внешний край крайней полосы не вылезал за кромку.
+ * Край — это центр плюс полшага до соседней полосы. На своей ширине масштаб 1.
+ * Сошедшая дорога сжимает полосы к оси, а не возвращает их на полный шаг.
+ */
 export function laneFit(half: number, offsets: readonly number[]): number {
+  const sorted: number[] = [];
   let maxAbs = 0;
   for (const off of offsets) {
-    if (typeof off === 'number' && Number.isFinite(off)) maxAbs = Math.max(maxAbs, Math.abs(off));
+    if (typeof off !== 'number' || !Number.isFinite(off)) continue;
+    sorted.push(off);
+    maxAbs = Math.max(maxAbs, Math.abs(off));
   }
   const span = Math.max(0, Number.isFinite(half) ? half : 0);
-  if (maxAbs <= 0.001 || span <= 0.001) return 1;
-  return Math.min(1, span / maxAbs);
+  if (maxAbs <= 0.001) return 1;
+  sorted.sort((a, b) => a - b);
+  let pitch = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i]! - sorted[i - 1]!;
+    if (gap > pitch) pitch = gap;
+  }
+  const edge = maxAbs + pitch * 0.5;
+  if (!(edge > 0.001)) return 1;
+  if (span <= 0.001) return 0.001;
+  return Math.min(1, span / edge);
 }
 
-/** Фаза кадра. Пока у съезда есть лента, она сбоку. Дорогу она не заменяет. */
+/** Смещение от оси, в котором мировая точка остаётся на месте. Нулевой масштаб сажает на ось. */
+export function laneAtWorld(world: number, axis: number, scale: number): number {
+  const span = Number.isFinite(scale) ? scale : 1;
+  if (Math.abs(span) < 1e-4) return 0;
+  const at = Number.isFinite(world) ? world : 0;
+  const origin = Number.isFinite(axis) ? axis : 0;
+  return (at - origin) / span;
+}
+
+/** Фаза кадра. Пока у чтения съезда есть лента, она сбоку. Дорогу она не заменяет. */
 export function carriagePhase(frame: RoadFrame): CarriagePhase {
-  if (exitRibbonCenter(frame.local) != null) return 'ribbon';
+  if (readExit(frame).ribbon != null) return 'ribbon';
   return 'road';
 }
 
@@ -70,16 +98,18 @@ export function carriageAt(query: CarriageQuery): LiveCarriage {
   const base = carriageLanes(query.biome, 'two-way');
   const axis = laneAnchor(frame);
   const scale = laneFit(half, base.offsets);
-  const ribbon = exitRibbonCenter(frame.local);
+  const spot = readExit(frame);
   const span = scale !== 0 ? scale : 1;
-  const lanes = ribbon == null ? base : withExitLane(base, (frame.origin + ribbon - axis) / span);
+  const ribbon = spot.ribbon;
+  const lanes = ribbon == null ? base : withExitLane(base, (frame.origin + ribbon.center - axis) / span);
   return {
     phase,
     lanes,
     axis,
     scale,
     half,
-    exitHalf: ribbon == null ? 0 : Math.max(0, exitWidth(frame.local) * 0.5),
+    exitHalf: ribbon == null ? 0 : ribbon.half,
+    spot,
     way: lanes.way,
   };
 }

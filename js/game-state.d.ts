@@ -421,6 +421,8 @@ export interface GameState {
   exitLaneCenterOffset: () => number;
   /** Боковая точка следа камеры на съезде/новой дороге в абсолютных метрах. */
   followLatAt: (s: number, factor?: number, extra?: number) => number;
+  /** Середина дороги байка в смещении полосы. На ленте это её середина. */
+  riddenCenterAt: (s: number) => number;
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
