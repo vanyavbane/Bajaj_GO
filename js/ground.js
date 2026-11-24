@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { outerRibbon, outwardFrom, shoulderLats, vergeAt } from './engine/fork.js';
+import { outwardFrom } from './engine/fork.js';
+import { outerRibbon, shoulderLats, vergeAt } from './engine/asphalt.js';
 import { stripSeam } from './engine/roadside.js';
 
 /* Земля — отдельный слой. Она начинается от кромки асфальта.

@@ -1,7 +1,7 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
-import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, nearestLaneIndexIn, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
+import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, nearestLaneIndexIn, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, roadLateral, sampleRoad, splitPick } from './fork.ts';
+import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
@@ -165,7 +165,7 @@ const arrived = sampleRoad({
   baseOrigin: 0,
   endWeight: 1,
 });
-assert(Math.abs(laneMeters(0, 1, sealStart, false)) < 0.05, 'полосы дороги остаются на её центре');
+assert(Math.abs(laneAnchor(sealStart)) < 0.05, 'полосы дороги остаются на её центре');
 assert(
   Math.abs(exitRibbonMid(sealEnd.local) - (arrived.local.leftOuter + arrived.local.leftInner) * 0.5) < 1,
   'линия въезда не прыгает, когда он становится дорогой',
@@ -186,7 +186,7 @@ const straightEnd = sampleRoad({
   baseOrigin: 0,
   endWeight: 1,
 });
-assert(Math.abs(laneMeters(2, 1, straightEnd, false) - 2) < 1e-6, 'прямой ход оставляет полосы на прямой');
+assert(Math.abs(laneAnchor(straightEnd)) < 1e-6, 'прямой ход оставляет полосы на прямой');
 const nose = branchEdges(10, 1.5);
 assert(nose.rightInner <= 10.01 && nose.rightOuter > nose.rightInner, 'на подходе съезд ещё соединён с правой кромкой');
 assert(nose.rightOuter - nose.rightInner > 2, 'соединённый съезд уже можно занять');
@@ -218,16 +218,11 @@ const declinedSettle = roadAt(afterSeal, -1);
 assert(declinedSettle.leftOuter === -10 && declinedSettle.leftInner === 10, 'после отказа прямая остаётся своей ширины');
 assert(declinedSettle.rightOuter === declinedSettle.rightInner && declinedSettle.rightInner === declinedSettle.leftInner, 'после отказа съезда уже нет, осталась одна прямая');
 const openRibbon = branchEdges(10, FORK_SPREAD);
-assert(roadLateral(9, openRibbon, false) === 9, 'вне съезда полоса и есть метры от оси');
-const ride = roadLateral(9, openRibbon, true);
-assert(ride > openRibbon.rightInner && ride < openRibbon.rightOuter, 'байк на ленте съезда, не в клине');
-const carriedRide = roadLateral(2, returning.local, true);
-assert(carriedRide > returning.local.rightInner && carriedRide < returning.local.rightOuter, 'на въезде байк остаётся на ленте');
 const narrow = sampleRoad({ forkDistance: clock.ownAfter, half: 10, chosen: 1, baseOrigin: 0, endWeight: 1, arriveHalf: 8 });
 const wide = sampleRoad({ forkDistance: clock.ownAfter + 20, half: 10, chosen: 1, baseOrigin: 0, endWeight: 1, arriveHalf: 14 });
 assert(roadCenter(narrow) === 0 && roadCenter(wide) === 0, 'ширина новой дороги не двигает центр пути');
 const wideMid = (wide.local.leftOuter + wide.local.leftInner) * 0.5;
-assert(Math.abs(laneMeters(0, 1, wide, false) - wideMid) < 1e-6, 'нулевая полоса остаётся на центре новой дороги');
+assert(Math.abs(laneAnchor(wide) - wideMid) < 1e-6, 'нулевая полоса остаётся на центре новой дороги');
 assert(Math.abs(narrow.local.leftInner - narrow.local.leftOuter - 16) < 1e-6, 'после въезда ширина — ширина новой дороги');
 assert(Math.abs(wide.local.leftInner - wide.local.leftOuter - 28) < 1e-6, 'более широкая новая дорога не берёт ширину старой');
 assert(onExitRibbon(32, openRibbon) && !onExitRibbon(0, openRibbon), 'байк на асфальте съезда узнаётся и при открытом клине');
@@ -248,8 +243,9 @@ assert(exitEntryPull(splitRoad.rightInner - 2, splitRoad) === 0, 'через п�
 assert(exitEntryPull(splitRoad.rightInner + 1, splitRoad) === 0, 'на ленте догонять уже нечего');
 assert(exitEntryPull(0, splitRoad) === 0, 'с прямой в клин не вытягивает');
 assert(
-  Math.abs((riding.max - riding.min) - (plainLimits.max - plainLimits.min)) < 1e-6 && riding.min > splitRoad.leftInner,
-  'на съезде тот же размах руля, что на прямой дороге той же ширины, но на её правой полосе',
+  Math.abs((riding.max - riding.min) - (plainLimits.max - plainLimits.min)) < 1e-6
+    && Math.abs((riding.min + riding.max) * 0.5) < 1e-6,
+  'на отделённом съезде тот же размах руля, что у прямой его ширины, и ноль — середина ленты',
 );
 const arrivedLimits = logicalRoadLimits(arrived.local, 1, false, true);
 assert(Math.abs(arrivedLimits.min + arrivedLimits.max) < 0.2, 'после въезда стены руля стоят вокруг центра новой дороги');
@@ -280,21 +276,21 @@ assert(back.way === 'two-way' && back.oncomingCount === 2, 'на двустор�
 assert(city.lanes.length === city.count, 'у города полоса на каждое смещение');
 assert(city.lanes.every((lane) => (lane.direction === 'against') === (lane.side === 'left')), 'встречные полосы города — его левая сторона');
 assert(city.lanes.every((lane) => (lane.direction === 'with') === (lane.side === 'right')), 'попутные полосы города — его правая сторона');
-const exitRoad = exitCarriage(city.id);
-assert(exitRoad.lanes.length === 1 && exitRoad.lanes[0]?.direction === 'with', 'съезд — одна полоса вперёд');
-assert(directionEdge(exitRoad) == null, 'у съезда нет границы встречного хода');
-assert(outerLane(exitRoad, 'right', 'with')?.offset === exitRoad.lanes[0]?.offset, 'единственная полоса съезда едет вперёд');
+const oneLane = roadFrom([{ offset: 0, speed: 65, direction: 'with' }], 9);
+assert(oneLane.lanes.length === 1 && oneLane.lanes[0]?.direction === 'with', 'одна полоса едет вперёд');
+assert(directionEdge(oneLane) == null, 'у одной попутной полосы нет границы встречного хода');
+assert(outerLane(oneLane, 'right', 'with')?.offset === oneLane.lanes[0]?.offset, 'единственная полоса едет вперёд');
 assert(oneWay.lanes.every((lane) => lane.direction === 'with'), 'односторонняя не оставляет встречного направления');
 assert(oneWay.lanes[0]?.side === 'left' && oneWay.lanes[oneWay.lanes.length - 1]?.side === 'right', 'стороны односторонней дороги остаются');
 assert(back.lanes[0]?.direction === 'against' && back.lanes[0]?.side === 'left', 'возврат двусторонней снова ставит левую полосу навстречу');
 assert(defaultRunOffset(city) === city.lanes.find((lane) => lane.direction === 'with')?.offset, 'попутная по умолчанию — ближайшая к оси, не встречная');
-assert(defaultRunOffset(exitRoad) === 0, 'на съезде попутная полоса — его единственная');
+assert(defaultRunOffset(oneLane) === 0, 'на одной попутной полосе она и есть ближайшая к оси');
 assert(nearestLaneOffset(city, -100, 'with') === defaultRunOffset(city), 'поиск попутной не сажает байка на встречную');
 assert(nearestLaneIndexIn(city, 0, 'with') === city.lanes.find((lane) => lane.direction === 'with')?.index, 'осевая сажает машину на попутную, не на встречную');
 assert(besideWithLane(city, 2)?.index === 3 && besideWithLane(city, 3)?.index === 2, 'попутная уступает соседу своего направления');
 assert(besideWithLane(city, 0) == null, 'встречная от дальнего света не перестраивается');
 assert(offsetDirection(city, -8) === 'against' && offsetDirection(city, 8) === 'with', 'левее границы ход встречный, правее попутный');
-assert(offsetDirection(exitRoad, -2) === 'with', 'на съезде левая полоса не даёт двойных очков встречки');
+assert(offsetDirection(oneLane, -2) === 'with', 'левее единственной попутной ход остаётся попутным');
 const meet = stepTrafficCar(
   { laneIdx: 0, targetLaneIdx: 0, lateralOffset: -6, s: 10, speedKmh: 36, changingLane: false, flashReactTimer: 0, steerAngle: 0 },
   0.5, laid,

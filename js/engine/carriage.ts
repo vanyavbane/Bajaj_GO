@@ -5,11 +5,10 @@
  * на её месте уже новая дорога, без второй проезжей части.
  */
 
-import { readExit, type ExitRead } from './exit.ts';
-import { laneAnchor, type RoadFrame } from './fork.ts';
+import { readExit, surfaceWorld, type ExitRead } from './exit.ts';
+import { laneAnchor, mainHalf, type RoadFrame } from './fork.ts';
 import { carriageLanes, directionEdge, laneGapOffsets, nearestLaneOffset, withExitLane, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
-import type { SeatKind } from './seat.ts';
 
 /**
  * ribbon — лента ещё сбоку, полосы старой дороги остаются её биомом.
@@ -37,15 +36,6 @@ export interface CarriageQuery {
   frame: RoadFrame;
   /** Полосы биома в этой точке. На стыке это доминирующий биом. */
   biome: LaneLayout;
-}
-
-function mainHalf(frame: RoadFrame): number {
-  return Math.max(0, frame.local.leftInner - frame.local.leftOuter) * 0.5;
-}
-
-/** Полуширина асфальта дороги. Лента съезда свою ширину считает отдельно. */
-function carriageHalf(frame: RoadFrame): number {
-  return mainHalf(frame);
 }
 
 /**
@@ -78,27 +68,21 @@ export function laneFit(half: number, offsets: readonly number[]): number {
 /** Смещение от оси, в котором мировая точка остаётся на месте. Нулевой масштаб сажает на ось. */
 export function laneAtWorld(world: number, axis: number, scale: number): number {
   const span = Number.isFinite(scale) ? scale : 1;
-  if (Math.abs(span) < 1e-4) return 0;
+  if (span === 0) return 0;
   const at = Number.isFinite(world) ? world : 0;
   const origin = Number.isFinite(axis) ? axis : 0;
   return (at - origin) / span;
 }
 
-/** Фаза кадра. Пока у чтения съезда есть лента, она сбоку. Дорогу она не заменяет. */
-export function carriagePhase(frame: RoadFrame): CarriagePhase {
-  if (readExit(frame).ribbon != null) return 'ribbon';
-  return 'road';
-}
-
 /** Полосы, встречные, ось и ширина одной точки. Съезд дописывается правой полосой. */
 export function carriageAt(query: CarriageQuery): LiveCarriage {
   const frame = query.frame;
-  const phase = carriagePhase(frame);
-  const half = carriageHalf(frame);
+  const spot = readExit(frame);
+  const phase: CarriagePhase = spot.ribbon != null ? 'ribbon' : 'road';
+  const half = mainHalf(frame.local);
   const base = carriageLanes(query.biome, 'two-way');
   const axis = laneAnchor(frame);
   const scale = laneFit(half, base.offsets);
-  const spot = readExit(frame);
   const span = scale !== 0 ? scale : 1;
   const ribbon = spot.ribbon;
   const lanes = ribbon == null ? base : withExitLane(base, (frame.origin + ribbon.center - axis) / span);
@@ -118,44 +102,6 @@ export function carriageAt(query: CarriageQuery): LiveCarriage {
 export interface LaneMark {
   lat: number;
   w: number;
-}
-
-/**
- * Второй дороги у съезда нет.
- * Его полоса уже лежит на основной дороге, справа.
- */
-export function sideRibbon(road: LiveCarriage, frame: RoadFrame): LiveCarriage | null {
-  void road;
-  void frame;
-  return null;
-}
-
-/** Дороги в точке. main есть всегда. exit пуст: съезд — полоса main, не вторая дорога. */
-export interface DriveRoads {
-  main: LiveCarriage;
-  exit: LiveCarriage | null;
-}
-
-/** Съезд остаётся второй дорогой, пока у него есть лента. Решение её из списка не вычёркивает. */
-export function roadsAt(main: LiveCarriage, frame: RoadFrame): DriveRoads {
-  return {
-    main,
-    exit: sideRibbon(main, frame),
-  };
-}
-
-/** Две оси ближе этого — одна проезжая часть. Порог меньше ширины полосы. */
-export const CARRIAGE_MATCH = 0.5;
-
-/** Оси одной дороги. Шоссе и съезд этим порогом не склеиваются. */
-export function sameCarriage(a: number, b: number): boolean {
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
-  return Math.abs(a - b) < CARRIAGE_MATCH;
-}
-
-/** Дорога байка — лента съезда, если её ось совпала с осью съезда. */
-export function drivenIsExit(exitAxis: number | null, drivenMid: number): boolean {
-  return exitAxis != null && sameCarriage(exitAxis, drivenMid);
 }
 
 /** Машина с ленты въезда садится на попутную полосу новой дороги и не разворачивается. */
@@ -229,18 +175,6 @@ export function ribbonDirection(
   return direction === 'against' ? 'against' : 'with';
 }
 
-/**
- * Машина едет по одной дороге из списка.
- * Кто уже на съезде, остаётся, пока эта дорога есть.
- * С шоссе на съезд одним кадром не садятся.
- */
-export function carFollowsRibbon(args: {
-  hasExit: boolean;
-  following: boolean;
-}): boolean {
-  return args.hasExit && args.following;
-}
-
 /** Пока клин ещё не раскрылся, крайняя попутная может начать переезд на съезд. */
 export function canStartExitJoin(args: {
   changingLane: boolean;
@@ -282,44 +216,40 @@ export function approachExit(
   return { lat: next, arrived: next >= left && next <= right };
 }
 
+/**
+ * Линейка той дороги, на которой сидят.
+ * Пока лента прижата к шоссе, это ось шоссе. Отделившись, съезд — другая
+ * дорога: ось на середине ленты, номер полосы в метрах от неё. Масштаб
+ * сходящей дороги сюда не входит. Когда лента кончилась, это уже новая дорога.
+ */
+export function rideRuler(frame: RoadFrame, onExit: boolean, mainScale: number): { axis: number; scale: number } {
+  const ribbon = readExit(frame).ribbon;
+  if (onExit && ribbon != null && !ribbon.joined) {
+    return { axis: frame.origin + ribbon.center, scale: 1 };
+  }
+  const scale = Number.isFinite(mainScale) && mainScale > 0 ? mainScale : 0.001;
+  return { axis: laneAnchor(frame), scale };
+}
+
+/**
+ * Мир машины. На отделившемся съезде смещение — метры от середины ленты.
+ * На шоссе это по-прежнему полоса его списка.
+ */
+export function vehicleLat(road: LiveCarriage, offset: number, onExit = false): number {
+  const ribbon = road.spot.ribbon;
+  const lane = Number.isFinite(offset) ? offset : 0;
+  if (onExit && ribbon != null && !ribbon.joined) {
+    return surfaceWorld(road.axis, road.spot, true) + lane;
+  }
+  return carriageLat(road.axis, road.scale, lane);
+}
+
 /** Мир полосы на оси проезжей части. offset — смещение из её списка полос. */
 export function carriageLat(axis: number, scale: number, offset: number): number {
   const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
   const lane = Number.isFinite(offset) ? offset : 0;
   const origin = Number.isFinite(axis) ? axis : 0;
   return origin + lane * span;
-}
-
-/**
- * Полоса уже пришедшего байка в точке, где въезд ещё лента.
- * Это та же дорога: камера позади не садится на старую ось.
- */
-export function ribbonApproachLat(arrived: boolean, ribbon: boolean, lane: number, axis: number, scale: number): number | null {
-  if (!arrived || !ribbon) return null;
-  return carriageLat(axis, scale, lane);
-}
-
-/**
- * Камера байка, который уже на ленте, в точке, где ленты ещё нет.
- * Это всё ещё старая дорога: её ось не подменяет боковое место байка.
- * Новая дорога после въезда свою ось сохраняет.
- */
-export function ribbonTrailLat(
-  onRibbon: boolean,
-  sampleHasRibbon: boolean,
-  sampleAxis: number,
-  sampleOrigin: number,
-  playerAxis: number,
-  lane: number,
-  scale: number,
-): number | null {
-  if (!onRibbon || sampleHasRibbon) return null;
-  const origin = Number.isFinite(sampleOrigin) ? sampleOrigin : 0;
-  const axis = Number.isFinite(sampleAxis) ? sampleAxis : origin;
-  const home = Number.isFinite(playerAxis) ? playerAxis : origin;
-  if (Math.abs(axis - home) <= 4) return null;
-  if (Math.abs(axis - origin) >= 0.5) return null;
-  return carriageLat(home, scale, lane);
 }
 
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */
@@ -348,18 +278,4 @@ export function solidMarks(road: LiveCarriage): LaneMark[] {
     { lat: mid - SOLID_GAP, w: 1 },
     { lat: mid + SOLID_GAP, w: 1 },
   ];
-}
-
-/**
- * Проезжая часть байка — та же дорога.
- * Съезд уже её правая полоса, отдельной оси у сиденья нет.
- */
-export function riderCarriage(
-  road: LiveCarriage,
-  frame: RoadFrame,
-  seat: SeatKind,
-): LiveCarriage {
-  void frame;
-  void seat;
-  return road;
 }

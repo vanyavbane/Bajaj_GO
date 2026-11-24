@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, asphaltShell, followAsphalt, innerTrackEdge, outerRibbon, pinchAsphalt, pinchShell, roadsJoined, walkCrossing } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, roadsJoined } from './engine/fork.js';
+import { asphaltShell, followAsphalt, innerTrackEdge, outerRibbon, pinchAsphalt, pinchShell, walkCrossing } from './engine/asphalt.js';
 import { stripSeam } from './engine/roadside.js';
 
 export function initRoadSurface() {
@@ -22,7 +23,6 @@ export function initRoadSurface() {
   const sampleY = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
   const solidLat = [new Float32Array(ROW), new Float32Array(ROW)];
-  const ribbonLat = [new Float32Array(ROW), new Float32Array(ROW)];
 
   const _laneDir = new THREE.Vector3();
   const _laneRight = new THREE.Vector3();
@@ -119,9 +119,6 @@ export function initRoadSurface() {
       const marks = G.solidMarksAtS(s);
       solidLat[0][r] = marks[0] ? marks[0].lat : NaN;
       solidLat[1][r] = marks[1] ? marks[1].lat : NaN;
-      const ribbon = G.ribbonSolidMarksAtS(s);
-      ribbonLat[0][r] = ribbon[0] ? ribbon[0].lat : NaN;
-      ribbonLat[1][r] = ribbon[1] ? ribbon[1].lat : NaN;
     }
   }
 
@@ -133,8 +130,6 @@ export function initRoadSurface() {
   }
   const solidAt0 = storedLat(solidLat[0]);
   const solidAt1 = storedLat(solidLat[1]);
-  const ribbonAt0 = storedLat(ribbonLat[0]);
-  const ribbonAt1 = storedLat(ribbonLat[1]);
 
   /* ---------------- Геометрия лент ---------------- */
   function shadeStrip(geo) {
@@ -196,8 +191,6 @@ export function initRoadSurface() {
   const curbRightMesh = makeRibbon(0.35, G.M.curbWhite);
   const centerDoubleLine1 = makeRibbon(0.13, G.M.lineYellow);
   const centerDoubleLine2 = makeRibbon(0.13, G.M.lineYellow);
-  const ribbonDoubleLine1 = makeRibbon(0.13, G.M.lineYellow);
-  const ribbonDoubleLine2 = makeRibbon(0.13, G.M.lineYellow);
   const edgeLineLeft = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineRight = makeRibbon(0.16, G.M.lineWhite);
   const edgeLineLeftB = makeRibbon(0.16, G.M.lineWhite);
@@ -323,7 +316,6 @@ export function initRoadSurface() {
       if (s < playerS - RIBBON_BEHIND + 2) continue;
       // Штрих стоит на оси той проезжей части, чьи полосы его породили.
       for (const mark of G.laneMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
-      for (const mark of G.ribbonMarksAtS(s)) paint(s, mark.lat, mark.lat, mark.w);
     }
     dashMesh.count = used;
     if (used > 0) dashMesh.instanceMatrix.needsUpdate = true;
@@ -884,8 +876,6 @@ export function initRoadSurface() {
     sampleMarkLats();
     updateLateralStrip(centerDoubleLine1, solidAt0, 0.13, 0.08);
     updateLateralStrip(centerDoubleLine2, solidAt1, 0.13, 0.08);
-    updateLateralStrip(ribbonDoubleLine1, ribbonAt0, 0.13, 0.08);
-    updateLateralStrip(ribbonDoubleLine2, ribbonAt1, 0.13, 0.08);
     updateLateralStrip(edgeLineLeft, (r) => trackEdge(0, r, -1), 0.16, 0.025);
     updateLateralStrip(edgeLineRight, (r) => trackEdge(0, r, 1), 0.16, 0.025);
     updateLateralStrip(edgeLineLeftB, (r) => trackEdge(1, r, -1), 0.16, 0.025);

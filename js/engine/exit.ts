@@ -7,10 +7,10 @@
  *
  * life идёт по блоку рецепта:
  *   plain    — съезда нет, одна дорога
- *   opening  — лента отходит от шоссе и ещё склеена с ним
- *   beside   — две ленты, между ними клин, здесь выбор
- *   sealing  — выбранная лента остаётся, чужая сходится
- *   arrived  — взятый въезд стал дорогой, отдельной ленты нет
+ *   opening  — справа нарастает +1 полоса, она ещё одно полотно с шоссе
+ *   beside   — полоса полной ширины и всё ещё прижата, здесь выбор
+ *   sealing  — выбранная полоса отделяется, чужая сходится
+ *   arrived  — взятый въезд стал дорогой и садится на ось пути, отдельной ленты нет
  *
  * ribbon — правая лента, пока у неё есть ширина. На plain и arrived её нет.
  * main — левый слот. На arrived это уже новая дорога, не остаток старой.
@@ -18,7 +18,7 @@
  * чинить надо здесь, а не в вызывающем коде.
  */
 
-import { exitRibbonCenter, exitWidth, roadsJoined, type ChosenSide, type ExitKind, type RoadFrame } from './fork.ts';
+import { exitRibbonCenter, exitWidth, mainCenter, mainHalf, roadsJoined, type ChosenSide, type ExitKind, type RoadFrame } from './fork.ts';
 
 export type ExitLife = 'plain' | 'opening' | 'beside' | 'sealing' | 'arrived';
 
@@ -54,48 +54,63 @@ function lifeOf(kind: ExitKind, chosen: ChosenSide): ExitLife {
   return 'plain';
 }
 
-/**
- * Середина дороги, по которой едут, в смещении от main.
- * На ленте это её середина. На шоссе и после въезда это ноль.
- * Камера тянется сюда, а не к нулю шоссе.
- */
-export function riddenCenter(spot: ExitRead, onRibbon: boolean, scale: number): number {
-  if (!onRibbon || spot.ribbon == null) return 0;
-  const span = Number.isFinite(scale) && Math.abs(scale) > 1e-4 ? scale : 1;
-  return (spot.ribbon.center - spot.main.center) / span;
+/** Байк на правой ленте, пока чтение съезда её ещё держит. */
+export function ridingRibbon(spot: ExitRead, kind: string): boolean {
+  return kind === 'exit' && spot.ribbon != null;
+}
+
+/** Мир середины дороги. axis — ось полос, в ней уже сидит середина main. */
+export function surfaceWorld(axis: number, spot: ExitRead, onRibbon: boolean): number {
+  const at = Number.isFinite(axis) ? axis : 0;
+  return at + rideCenter(spot, onRibbon) - rideCenter(spot, false);
+}
+
+/** Середина дороги, на которой сидит байк, в метрах кадра. */
+export function rideCenter(spot: ExitRead, onRibbon: boolean): number {
+  if (onRibbon && spot.ribbon != null) return spot.ribbon.center;
+  return spot.main.center;
 }
 
 /**
- * Полоса на оси этого кадра из прошлого мира.
- * Пока ось та же, полоса прежняя. На въезде ось переезжает на линию ленты,
- * и полоса собирается из мира, а не из старого смещения.
+ * Мир точки маршрута для байка, который сидит на своей дороге.
+ * Смещение берётся от середины его дороги и кладётся на середину дороги в этой точке.
+ * Пока точка ещё на закрытии, а байк уже на новой дороге, середина остаётся его.
  */
-export function carryLane(world: number, axis: number, scale: number, fallback: number): number {
-  if (!Number.isFinite(world) || !Number.isFinite(axis)) {
-    return Number.isFinite(fallback) ? fallback : 0;
+export function sampleRide(
+  sample: ExitRead,
+  player: ExitRead,
+  onRibbon: boolean,
+  playerWorld: number,
+  sampleOrigin: number,
+  playerOrigin: number,
+  factor = 1,
+): number {
+  const f = Number.isFinite(factor) ? factor : 1;
+  const playerCenter = playerOrigin + rideCenter(player, onRibbon);
+  const world = Number.isFinite(playerWorld) ? playerWorld : playerCenter;
+  const along = (world - playerCenter) * f;
+  if (player.life === 'arrived' && sample.life !== 'arrived') return playerCenter + along;
+  return sampleOrigin + rideCenter(sample, onRibbon && sample.ribbon != null) + along;
+}
+
+/**
+ * Байк едет со своей дорогой.
+ * Пока это та же дорога, смещение внутри неё сохраняется, даже если середина уехала.
+ * Смена дороги оставляет мир на месте: в этот метр середины совпадают.
+ */
+export function retargetRide(
+  steeredWorld: number,
+  previousCenter: number,
+  sameRoad: boolean,
+  nextCenter: number,
+): { along: number; world: number } {
+  const next = Number.isFinite(nextCenter) ? nextCenter : 0;
+  const worldIn = Number.isFinite(steeredWorld) ? steeredWorld : next;
+  if (!sameRoad || !Number.isFinite(previousCenter)) {
+    return { along: worldIn - next, world: worldIn };
   }
-  const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
-  return (world - axis) / span;
-}
-
-/**
- * Точка позади байка, который уже на новой дороге, пока сама точка ещё на закрытии.
- * Ось точки — старая. Мир остаётся на линии въезда.
- */
-export function arrivalTrail(
-  playerLife: ExitLife,
-  sampleHasRibbon: boolean,
-  playerAxis: number,
-  sampleAxis: number,
-  lane: number,
-  scale: number,
-): number | null {
-  if (playerLife !== 'arrived' || !sampleHasRibbon) return null;
-  if (!Number.isFinite(playerAxis) || !Number.isFinite(sampleAxis)) return null;
-  if (Math.abs(playerAxis - sampleAxis) <= 4) return null;
-  const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
-  const at = Number.isFinite(lane) ? lane : 0;
-  return playerAxis + at * span;
+  const along = worldIn - previousCenter;
+  return { along, world: next + along };
 }
 
 /** Единственное чтение съезда из кадра. */
@@ -109,10 +124,7 @@ export function readExit(frame: RoadFrame): ExitRead {
     life: lifeOf(frame.phase.kind, frame.chosen),
     chosen: frame.chosen,
     t: frame.phase.t,
-    main: {
-      center: (edges.leftOuter + edges.leftInner) * 0.5,
-      half: Math.max(0, edges.leftInner - edges.leftOuter) * 0.5,
-    },
+    main: { center: mainCenter(edges), half: mainHalf(edges) },
     ribbon,
   };
 }

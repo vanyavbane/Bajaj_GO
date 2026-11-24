@@ -1,7 +1,9 @@
 import { RIGHT_EXIT, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { EXIT_LANE_HALF, exitClock, exitRibbonMid, followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell, sampleRoad } from './fork.ts';
-import type { AsphaltEdges, AsphaltSpan, ChosenSide } from './fork.ts';
+import { EXIT_LANE_HALF, exitClock, exitRibbonMid, sampleRoad } from './fork.ts';
+import type { AsphaltEdges, ChosenSide } from './fork.ts';
+import { followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell } from './asphalt.ts';
+import type { AsphaltSpan } from './asphalt.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);

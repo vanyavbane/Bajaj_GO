@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
-import { carriageAt, carriageLat, laneMarks, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
+import { carriageAt, carriageLat, laneAtWorld, laneMarks, rideRuler, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
-import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
-import { keepInWindow } from './engine/stream.js';
-import { arrivalTrail, carryLane, readExit, riddenCenter } from './engine/exit.js';
-import { EXIT_LANE_HALF, asphaltSpan, besidePoint, branchPick, exitClock, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
+import { seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
+import { readExit, retargetRide, ridingRibbon, sampleRide, surfaceWorld } from './engine/exit.js';
+import { EXIT_LANE_HALF, besidePoint, branchPick, exitClock, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick, stayOnAsphalt } from './engine/fork.js';
+import { asphaltSpan, groundAt, groundEdge, shoulderHeight, shoulderLats, vergeAt } from './engine/asphalt.js';
 import { decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
-import { makeProfile, mixDeriv, mixSecond, mixValue } from './engine/profile.js';
+import { makeProfile, mixDeriv, mixSecond, mixValue, smooth01 } from './engine/profile.js';
 import { besidePose, spanEdges } from './engine/roadside.js';
 import { icon } from '@bajajgo/design';
 import { G } from './state.js';
@@ -22,6 +21,10 @@ import { G } from './state.js';
  * индексы. Замок зоны ставится в момент выбора ветки, не раньше: до выбора
  * профиль едет за стороной байка. Полосы на асфальте читают тот же индекс.
  * Развилка — прямой ход и необязательный съезд вправо. Взятый въезд сужает старую дорогу и приходит в новую.
+ *
+ * Кромки съезда — fork.js, чтение для езды — exit.js, одна проезжая часть —
+ * carriage.js, сиденье — seat.js, полотно и откос — asphalt.js.
+ * Слоты поля и МКАД — biomeScenery.js, лес, горы и набережная — свои модули.
  * ========================================================================= */
 
 const ZONE_M = 1500;              // длина одной локации
@@ -32,9 +35,6 @@ const CURRENT_KEY = 'bajajGO_currentBiome';
 const VISITS_KEY = 'bajajGO_visitCounts';
 const PENDING_KEY = 'bajajGO_pendingBiome';
 const PLAN_KEY = 'bajajGO_biomePlan';
-const SCENERY_SLOTS = 20;
-const SCENERY_STEP = 28;
-const SCENERY_SPAN = SCENERY_SLOTS * SCENERY_STEP;
 // Половина окна смены декора: новый биом виден за SCENERY_PREVIEW_M до границы,
 // старый держится ещё SCENERY_PREVIEW_M после неё и уходит только за кадром.
 const SCENERY_PREVIEW_M = 900;
@@ -312,6 +312,10 @@ let riderSeat = { kind: /** @type {'road' | 'exit'} */ ('road'), lane: 0 };
 let riderWorld = NaN;
 /** Ось, на которой посчитан riderWorld. */
 let riderAxis = NaN;
+/** Середина дороги, на которой байк сидел в прошлом кадре. */
+let riderSurface = NaN;
+/** Прошлый кадр байк был на ленте съезда. */
+let riderOnRibbon = false;
 /** Масштаб, которым посчитана текущая полоса байка. Пока неизвестен — полоса не пересчитывается. */
 let riderSpan = NaN;
 
@@ -566,8 +570,10 @@ function roadBiomeAtS(s) {
 }
 
 /** Масштаб разметки: живая полуширина кадра и смещения его полос. */
-function laneDisplayScaleAtS(s) {
-  return roadCarriageAt(s).scale;
+function laneSpanAt(s) {
+  const at = Number.isFinite(s) ? s : G.playerS;
+  const scale = roadCarriageAt(at).scale;
+  return Number.isFinite(scale) && scale !== 0 ? scale : 1;
 }
 
 /** Штрихи шоссе. Это промежутки его полос, на его оси. */
@@ -575,27 +581,9 @@ function laneMarksAtS(s) {
   return laneMarks(roadCarriageAt(s));
 }
 
-/** Штрихи съезда, пока он ещё боковая лента. */
-function ribbonHere(s) {
-  return sideRibbon(roadCarriageAt(s), frameAt(s));
-}
-
-function ribbonMarksAtS(s) {
-  const ribbon = ribbonHere(s);
-  return ribbon ? laneMarks(ribbon) : [];
-}
-
-/** Двойная сплошная проезжей части. Лента въезда рисует свою отдельно. */
+/** Двойная сплошная проезжей части. Съезд — её полоса, отдельной разметки у него нет. */
 function solidMarksAtS(s) {
   return solidMarks(roadCarriageAt(s));
-}
-
-/** Двойная сплошная взятого въезда, пока он ещё лента. */
-function ribbonSolidMarksAtS(s) {
-  const frame = frameAt(s);
-  if (frame.chosen !== 1) return [];
-  const ribbon = ribbonHere(s);
-  return ribbon ? solidMarks(ribbon) : [];
 }
 
 function markAxis(marks) {
@@ -608,14 +596,9 @@ function markAxis(marks) {
  * на пришедшую дорогу другого биома.
  */
 function medianLatsAt(s) {
-  const frame = frameAt(s);
   const lats = [];
-  if (carriageBiomeAt(s, frame) === MKAD) {
+  if (carriageBiomeAt(s, frameAt(s)) === MKAD) {
     const at = markAxis(solidMarksAtS(s));
-    if (at != null) lats.push(at);
-  }
-  if (frame.chosen === 1 && entranceBiome(s) === MKAD) {
-    const at = markAxis(ribbonSolidMarksAtS(s));
     if (at != null) lats.push(at);
   }
   return lats;
@@ -670,18 +653,9 @@ function asphaltSpanAt(s) {
   return asphaltSpan(frame.world);
 }
 
-/**
- * Проезжая часть байка.
- * Пока байк не переехал на ленту съезда, декор и портал остаются на его текущей дороге.
- * После прихода въезда в новую дорогу лента исчезает, и проезжей частью становится новая дорога.
- */
-function drivenCarriageAt(s) {
-  return roadCarriageAt(s);
-}
-
 /** Портал и мост накрывают эту проезжую часть, не обе ленты. */
 function drivenSpanAt(s) {
-  const road = drivenCarriageAt(s);
+  const road = roadCarriageAt(s);
   const half = road.half;
   return {
     left: road.axis - half,
@@ -693,20 +667,13 @@ function drivenSpanAt(s) {
 
 /** Байк на полосе съезда. Лента есть, пока чтение съезда её ещё держит. */
 function drivenIsExitAt(s) {
-  if (riderSeat.kind !== 'exit') return false;
-  return roadCarriageAt(s).spot.ribbon != null;
+  return ridingRibbon(roadCarriageAt(s).spot, riderSeat.kind);
 }
 
-/** Полоса этой проезжей части в мировых метрах. */
+/** Полоса этой проезжей части в мировых метрах. Съезд — та же ось. */
 function drivenLaneAt(s, offset) {
-  const road = drivenCarriageAt(s);
-  const lane = Number.isFinite(offset) ? offset : 0;
-  return carriageLat(road.axis, road.scale, lane);
-}
-
-function drivenLanesAt(s) {
-  const at = Number.isFinite(s) ? s : G.playerS;
-  return drivenCarriageAt(at).lanes;
+  const road = roadCarriageAt(s);
+  return carriageLat(road.axis, road.scale, offset);
 }
 
 /**
@@ -732,11 +699,6 @@ function drivenFrameAt(s) {
   const span = drivenSpanAt(s);
   const frame = frameAt(s);
   return { edges: spanEdges(span), origin: frame.origin };
-}
-
-function laneSpanAt(s) {
-  const scale = laneDisplayScaleAtS(s);
-  return Number.isFinite(scale) && scale !== 0 ? scale : 1;
 }
 
 /**
@@ -765,49 +727,40 @@ function roadWidthAtS(s) {
   return roadCarriageAt(s).half * 2;
 }
 
-/** Полосы под байком. На боковой ленте это съезд, иначе проезжая часть точки. */
-function playerLive(s) {
-  const frame = frameAt(s);
-  return riderCarriage(roadCarriageAt(s), frame, riderFrameSeat(s, G.laneOffset).kind);
-}
-
-/** Единственный перевод полосы в мировые метры. riding — байк ещё на боковой ленте. */
-function roadMetersAt(s, laneOffset, riding) {
-  return laneMeters(laneOffset, laneSpanAt(s), frameAt(s), riding);
-}
-
 /** Байк на дороге или на ленте съезда. В клине между ними его нет. */
 function updateExitHold() {
   const frame = frameAt(G.playerS);
-  const ridden = riderCarriage(roadCarriageAt(G.playerS), frame, riderSeat.kind);
-  const scale = Number.isFinite(ridden.scale) && ridden.scale !== 0 ? ridden.scale : 1;
-  const axis = seatAxis(frame, riderSeat.kind);
-  const jumped = Number.isFinite(riderWorld) && Number.isFinite(riderAxis) && Math.abs(axis - riderAxis) > 0.05;
-  const lane = jumped
-    ? carryLane(riderWorld, axis, scale, G.laneOffset)
-    : rescaleSeat({ kind: riderSeat.kind, lane: G.laneOffset }, riderSpan, scale, axis).lane;
+  const scale = laneSpanAt(G.playerS);
+  const axis = laneAnchor(frame);
+  const span = Number.isFinite(riderSpan) && riderSpan !== 0 ? riderSpan : scale;
+  const steeredWorld = Number.isFinite(riderAxis)
+    ? carriageLat(riderAxis, span, G.laneOffset)
+    : carriageLat(axis, scale, G.laneOffset);
+  const spot = readExit(frame);
+  const onRibbon = ridingRibbon(spot, riderSeat.kind);
+  const center = surfaceWorld(axis, spot, onRibbon);
+  const placed = retargetRide(steeredWorld, riderSurface, onRibbon === riderOnRibbon, center);
+  let seat;
   if (G.forkLabActive && Number.isFinite(G.forkLabLateral)) {
     const stick = riderSeat.kind === 'exit' ? 'exit' : 'road';
     const held = stayOnAsphalt(frame.local, G.forkLabLateral, stick);
     const kind = onExitRibbon(held, frame.local) ? 'exit' : 'road';
-    riderSeat = { kind, lane: (frame.origin + held - axis) / scale };
-    riderSpan = scale;
-    riderAxis = axis;
-    riderWorld = seatWorld(frame, riderSeat, scale);
-    G.laneOffset = riderSeat.lane;
-    return;
+    const ruler = rideRuler(frame, kind === 'exit', scale);
+    seat = { kind, lane: laneAtWorld(frame.origin + held, ruler.axis, ruler.scale) };
+  } else {
+    const local = placed.world - frame.origin;
+    const stick = onRibbon ? 'exit' : 'road';
+    const held = stayOnAsphalt(frame.local, local, stick);
+    const incoming = rideRuler(frame, riderSeat.kind === 'exit', scale);
+    const lane = laneAtWorld(frame.origin + held, incoming.axis, incoming.scale);
+    seat = stepSeat(frame, { kind: riderSeat.kind, lane }, scale);
   }
-  const seated = { kind: riderSeat.kind, lane };
-  const world = seatWorld(frame, seated, scale) - frame.origin;
-  const stick = seated.kind === 'exit' ? 'exit' : 'road';
-  const held = stayOnAsphalt(frame.local, world, stick);
-  const adjusted = {
-    kind: seated.kind,
-    lane: (frame.origin + held - axis) / scale,
-  };
-  riderSeat = stepSeat(frame, adjusted, scale);
-  riderSpan = scale;
-  riderAxis = axis;
+  const used = rideRuler(frame, seat.kind === 'exit', scale);
+  riderSeat = seat;
+  riderSpan = used.scale;
+  riderAxis = used.axis;
+  riderOnRibbon = ridingRibbon(spot, seat.kind);
+  riderSurface = surfaceWorld(axis, spot, riderOnRibbon);
   riderWorld = seatWorld(frame, riderSeat, scale);
   G.laneOffset = riderSeat.lane;
 }
@@ -818,50 +771,32 @@ function riderFrameSeat(s, lane) {
   return seatOnFrame(frame, { kind: riderSeat.kind, lane }, home);
 }
 
-/** Полоса машины или разметки: масштаб ширины, без съезда. */
-function laneWorldOffsetAtS(s, lateralOffset) {
-  return roadMetersAt(s, lateralOffset, false);
-}
-
-/** Дороги в точке s: основная и боковой съезд, если он ещё отдельный. */
-function roadsHere(s) {
+/** Точка той же дороги, что у байка, в метрах курса. */
+function rideAt(s, factor) {
   const frame = frameAt(s);
-  return roadsAt(roadCarriageAt(s), frame);
+  const player = frameAt(G.playerS);
+  const playerSpot = readExit(player);
+  return sampleRide(
+    readExit(frame),
+    playerSpot,
+    ridingRibbon(playerSpot, riderSeat.kind),
+    riderLatAt(G.playerS),
+    frame.origin,
+    player.origin,
+    factor,
+  );
 }
 
-/** Мир машины. Смещение — от оси одной дороги, съезд в том числе. */
-function trafficLatAt(s, offset, _onExit) {
-  const road = roadsHere(s).main;
-  return carriageLat(road.axis, road.scale, Number.isFinite(offset) ? offset : 0);
-}
-
-/** Полоса байка или камеры. Съезд — смещение правой полосы от оси этой дороги. */
+/** Полоса байка. Явное смещение и точка байка считаются сиденьем. Остальные точки — той же дорогой. */
 function riderLatAt(s, laneOffset) {
-  const lane = typeof laneOffset === 'number' ? laneOffset : G.laneOffset;
+  const explicit = typeof laneOffset === 'number';
+  const lane = explicit ? laneOffset : G.laneOffset;
   const frame = frameAt(s);
   const seat = riderFrameSeat(s, lane);
-  const scale = laneSpanAt(s);
-  const span = Number.isFinite(scale) && scale !== 0 ? scale : 1;
+  const span = laneSpanAt(s);
   const here = seatWorld(frame, seat, span);
-  if (s === G.playerS) return here;
-  const player = frameAt(G.playerS);
-  const trail = arrivalTrail(
-    readExit(player).life,
-    readExit(frame).ribbon != null,
-    laneAnchor(player),
-    laneAnchor(frame),
-    seat.lane,
-    span,
-  );
-  return trail == null ? here : trail;
-}
-
-/** Середина дороги байка в смещении полосы. Камера тянется к ней. */
-function riddenCenterAt(s) {
-  const frame = frameAt(s);
-  const road = roadCarriageAt(s);
-  const onRibbon = riderFrameSeat(s, G.laneOffset).kind === 'exit' && road.spot.ribbon != null;
-  return riddenCenter(road.spot, onRibbon, road.scale);
+  if (s === G.playerS || explicit) return here;
+  return rideAt(s, 1);
 }
 
 /** Байк реально сидит на полосе съезда, а не просто едет рядом с ней. */
@@ -869,41 +804,14 @@ function onExitLane() {
   return riderSeat.kind === 'exit';
 }
 
-/** Центр живой +1 полосы в тех же полосных единицах, что и G.laneOffset. */
-function exitLaneCenterOffset() {
-  const frame = frameAt(G.playerS);
-  const spot = readExit(frame);
-  if (spot.ribbon == null) return G.laneOffset;
-  return riddenCenter(spot, true, laneSpanAt(G.playerS));
-}
-
 /**
  * Боковая точка следа камеры в абсолютных метрах курса.
- * Сзади и спереди держимся оси той ленты, по которой едет байк: пока есть
- * съезд — его середины, а когда он стал новой дорогой — её оси. Так взгляд не
- * прыгает на 30 м в сторону на стыке полосы и биома.
+ * Сзади и спереди это та же дорога, что у байка.
  */
 function followLatAt(s, factor = 1, extra = 0) {
-  const frame = frameAt(s);
   const f = Number.isFinite(factor) ? Math.max(0, Math.min(1.5, factor)) : 1;
   const add = Number.isFinite(extra) ? extra : 0;
-  const span = laneSpanAt(G.playerS);
-  const scale = Number.isFinite(span) && span !== 0 ? span : 1;
-  const spot = readExit(frame);
-  const ribbon = spot.ribbon?.center ?? null;
-  const taken = riderSeat.kind === 'exit' || (frame.chosen === 1 && !!G.splitState && G.splitState.chosenSide === 1);
-  let relative;
-  if (riderSeat.kind === 'exit') {
-    const homeFrame = frameAt(G.playerS);
-    const homeSpot = readExit(homeFrame);
-    const homeRibbon = homeSpot.ribbon?.center ?? null;
-    const homeAxis = homeRibbon != null ? homeFrame.origin + homeRibbon : laneAnchor(homeFrame);
-    relative = (G.riderLatAt(G.playerS) - homeAxis) * f;
-  } else {
-    relative = G.laneOffset * scale * f;
-  }
-  const axis = ribbon != null && taken ? frame.origin + ribbon : laneAnchor(frame);
-  return axis + relative + add;
+  return rideAt(s, f) + add;
 }
 
 /** Доминирующий биом в точке s (без массива весов). */
@@ -914,7 +822,7 @@ function dominantBiomeAtS(s) {
 
 /** Ближайшая попутная полоса к логическому смещению. */
 function nearestRunLane(lateralOffset, cfg = null) {
-  const config = cfg || playerLive(G.playerS).lanes;
+  const config = cfg || lanesAtS(G.playerS);
   return nearestLaneOffset(config, lateralOffset, 'with');
 }
 
@@ -985,177 +893,6 @@ function biomeWeightsAtS(s) {
   return weights;
 }
 
-/* ---------- Материалы декораций ---------- */
-let MAT = null;
-
-function buildMaterials() {
-  MAT = {
-    hay: new THREE.MeshLambertMaterial({ color: 0xc9a34e, flatShading: true }),
-    hayDark: new THREE.MeshLambertMaterial({ color: 0x9d7a34, flatShading: true }),
-    wood: new THREE.MeshLambertMaterial({ color: 0x5b4129 }),
-    woodLight: new THREE.MeshLambertMaterial({ color: 0x7a5a38 }),
-    barnRed: new THREE.MeshLambertMaterial({ color: 0x8e3b2d }),
-    barnTrim: new THREE.MeshLambertMaterial({ color: 0xd9d2c2 }),
-    roof: new THREE.MeshLambertMaterial({ color: 0x3b3531 }),
-    silo: new THREE.MeshLambertMaterial({ color: 0x9aa3a8 }),
-    siloTop: new THREE.MeshLambertMaterial({ color: 0x767f85 }),
-    rockDark: new THREE.MeshLambertMaterial({ color: 0x525761, flatShading: true }),
-    mkadPanel: new THREE.MeshStandardMaterial({ color: 0x4b5665, roughness: 0.82 }),
-    mkadPanelLight: new THREE.MeshStandardMaterial({ color: 0x727f8e, roughness: 0.78 }),
-    mkadGlass: new THREE.MeshStandardMaterial({ color: 0x9fc4e0, emissive: 0x2d4f66, emissiveIntensity: 0.9, roughness: 0.35 }),
-    mkadConcrete: new THREE.MeshStandardMaterial({ color: 0x8d939b, roughness: 0.9 }),
-    mkadMetal: new THREE.MeshStandardMaterial({ color: 0x59636e, roughness: 0.55, metalness: 0.55 }),
-    mkadLight: new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffb74d, emissiveIntensity: 1.8 }),
-    wire: new THREE.MeshStandardMaterial({ color: 0x20262d, roughness: 0.7 })
-  };
-  G.mkadLightMat = MAT.mkadLight;
-  G.mkadGlassMat = MAT.mkadGlass;
-}
-
-function addBox(parent, mat, w, h, d, x, y, z) {
-  const mesh = new THREE.Mesh(box(w, h, d), mat);
-  mesh.position.set(x, y, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
-}
-
-/* ---------- Поле ---------- */
-function buildFieldVariant(variant) {
-  const g = new THREE.Group();
-  let lat = 26;
-  let spin = null;
-
-  if (variant === 0) {
-    lat = 24;
-    addBox(g, MAT.hay, 3.0, 1.3, 2.0, 0, 0.65, 0);
-    addBox(g, MAT.hayDark, 2.4, 1.1, 1.7, 0.2, 1.85, 0.1);
-    addBox(g, MAT.hay, 1.7, 0.9, 1.3, -0.3, 2.9, 0);
-    addBox(g, MAT.hayDark, 2.2, 0.8, 1.3, 2.6, 0.4, 1.6);
-  } else if (variant === 1) {
-    lat = 54;
-    const tower = new THREE.Mesh(cylinder(0.85, 1.55, 11.5, 8), MAT.woodLight);
-    tower.position.y = 5.75;
-    tower.castShadow = true;
-    g.add(tower);
-    addBox(g, MAT.roof, 2.6, 1.1, 2.6, 0, 11.6, 0);
-    const hub = new THREE.Group();
-    hub.position.set(0, 9.6, 1.05);
-    for (let i = 0; i < 4; i++) {
-      const blade = addBox(hub, MAT.barnTrim, 0.34, 4.6, 0.16, 0, 2.5, 0);
-      blade.rotation.z = i * Math.PI * 0.5;
-    }
-    g.add(hub);
-    spin = { mesh: hub, speed: 0.42 };
-    g.rotation.y = Math.PI * 0.5;
-  } else if (variant === 2) {
-    lat = 46;
-    addBox(g, MAT.barnRed, 8.0, 4.6, 10.0, 0, 2.3, 0);
-    addBox(g, MAT.barnTrim, 8.2, 0.32, 10.2, 0, 0.16, 0);
-    for (const side of [-1, 1]) {
-      const roof = addBox(g, MAT.roof, 4.9, 0.42, 10.6, side * 2.1, 5.5, 0);
-      roof.rotation.z = side * -0.62;
-    }
-    addBox(g, MAT.roof, 8.2, 0.5, 10.4, 0, 5.0, 0);
-    addBox(g, MAT.barnTrim, 3.0, 3.4, 0.22, 0, 1.75, -5.06);
-    addBox(g, MAT.barnRed, 1.1, 0.35, 0.3, -0.8, 2.2, -5.2);
-    addBox(g, MAT.barnRed, 1.1, 0.35, 0.3, 0.8, 2.2, -5.2);
-    addBox(g, MAT.barnTrim, 0.27, 2.7, 0.24, 0, 1.7, -5.24);
-  } else if (variant === 3) {
-    lat = 44;
-    const body = new THREE.Mesh(cylinder(1.65, 1.75, 11.5, 10), MAT.silo);
-    body.position.y = 5.75;
-    body.castShadow = true;
-    g.add(body);
-    addBox(g, MAT.siloTop, 3.7, 0.5, 3.7, 0, 11.6, 0);
-    addBox(g, MAT.siloTop, 2.6, 0.45, 2.6, 0, 12.05, 0);
-    for (let y = 1.2; y < 11; y += 1.5) {
-      addBox(g, MAT.rockDark, 0.28, 0.12, 0.7, 1.7, y, 0);
-    }
-    addBox(g, MAT.rockDark, 0.18, 10.4, 0.18, 1.7, 5.4, 0.42);
-  } else {
-    lat = 28;
-    for (let i = 0; i < 7; i++) {
-      addBox(g, MAT.wood, 0.24, 1.5, 0.24, 0, 0.75, (i - 3) * 2.4);
-    }
-    addBox(g, MAT.woodLight, 0.16, 0.22, 16.6, 0, 1.02, 0);
-    addBox(g, MAT.woodLight, 0.16, 0.22, 16.6, 0, 0.46, 0);
-  }
-
-  return { group: g, lat, spin };
-}
-
-function buildMkadVariant(variant) {
-  const g = new THREE.Group();
-  let lat = 42;
-
-  if (variant === 0) {
-    // Панельная высотка с лентами остекления.
-    lat = 46;
-    addBox(g, MAT.mkadPanel, 15, 46, 13, 0, 23, 0);
-    for (let y = 5; y < 43; y += 5.2) {
-      addBox(g, MAT.mkadGlass, 15.3, 1.0, 13.3, 0, y, 0);
-    }
-    addBox(g, MAT.mkadConcrete, 16.6, 1.3, 14.6, 0, 46.5, 0);
-    addBox(g, MAT.mkadConcrete, 5.2, 2.2, 5.2, 2.6, 47.8, 1.4);
-  } else if (variant === 1) {
-    // Опора ЛЭП с проводами вдоль трассы.
-    lat = 40;
-    for (const x of [-3.1, 3.1]) {
-      addBox(g, MAT.mkadMetal, 0.55, 29, 0.55, x, 14.5, -1.5).rotation.z = x * 0.022;
-      addBox(g, MAT.mkadMetal, 0.55, 29, 0.55, x, 14.5, 1.5).rotation.z = x * 0.022;
-    }
-    for (let y = 9; y <= 25; y += 5.2) {
-      addBox(g, MAT.mkadMetal, 15, 0.42, 0.42, 0, y, 0);
-      addBox(g, MAT.mkadMetal, 0.34, 3.4, 0.34, -7.2, y + 1.7, 0);
-      addBox(g, MAT.mkadMetal, 0.34, 3.4, 0.34, 7.2, y + 1.7, 0);
-    }
-    for (const x of [-7.2, -2.6, 2.6, 7.2]) {
-      addBox(g, MAT.wire, 0.07, 0.07, 34, x, 27.6, 0);
-    }
-  } else if (variant === 2) {
-    // Двойные мачты освещения.
-    lat = 36;
-    for (const x of [-3.4, 3.4]) {
-      const pole = new THREE.Mesh(cylinder(0.16, 0.22, 14, 7), MAT.mkadMetal);
-      pole.position.set(x, 7, 0);
-      pole.castShadow = true;
-      g.add(pole);
-      const arm = addBox(g, MAT.mkadMetal, 2.2, 0.16, 0.16, x + (x < 0 ? 1.1 : -1.1), 13.6, 0);
-      arm.rotation.z = 0;
-      addBox(g, MAT.mkadLight, 0.9, 0.16, 0.34, x + (x < 0 ? 2.1 : -2.1), 13.48, 0);
-    }
-    addBox(g, MAT.mkadMetal, 7.2, 0.2, 0.2, 0, 12.9, 0);
-  } else if (variant === 3) {
-    // Офисная башня с рекламной полосой.
-    lat = 52;
-    addBox(g, MAT.mkadPanelLight, 20, 34, 15, 0, 17, 0);
-    addBox(g, MAT.mkadGlass, 4.6, 2.4, 0.4, 0, 27.5, 7.6);
-    addBox(g, MAT.mkadLight, 12.8, 0.5, 0.3, 0, 31.5, 7.66);
-    addBox(g, MAT.mkadConcrete, 21.4, 0.9, 16.2, 0, 34.3, 0);
-    for (let x = -7; x <= 7; x += 3.5) {
-      addBox(g, MAT.mkadPanel, 0.35, 30, 0.35, x, 15, 7.7);
-    }
-  } else {
-    // Шумозащитный экран вдоль МКАД.
-    lat = 32;
-    addBox(g, MAT.mkadConcrete, 0.4, 4.4, 30, 0, 2.2, 0);
-    for (let z = -12; z <= 12; z += 6) {
-      addBox(g, MAT.mkadMetal, 0.55, 4.8, 0.55, 0, 2.4, z);
-    }
-    addBox(g, MAT.mkadGlass, 0.2, 2.4, 29.4, 0.16, 2.6, 0);
-  }
-
-  return { group: g, lat, spin: null };
-}
-
-function buildVariant(biome, variant) {
-  const id = BIOMES[biome] && BIOMES[biome].id;
-  if (id === 'field') return buildFieldVariant(variant);
-  if (id === 'mkad') return buildMkadVariant(variant);
-  throw new Error(`Для биома «${id || biome}» нет слота: лес, горы и набережная строятся своими модулями, город — в roadside.js`);
-}
 
 /* Профиль откоса. Те же точки рисует слой земли в ground.js через G.shoulder.
  * Ровная бровка под тротуар есть только у шоссе. Съезд начинается от асфальта. */
@@ -1170,11 +907,6 @@ const SHOULDER = {
 };
 
 /** Высота земли в мировой точке lat. Профиль тот же, что у откоса этой кромки. */
-function smooth01(v) {
-  const t = Math.max(0, Math.min(1, v));
-  return t * t * (3 - 2 * t);
-}
-
 function groundOffset(lat, s) {
   const frame = frameAt(s);
   const at = groundAt(frame.world, lat);
@@ -1208,7 +940,6 @@ let bannerTimer = 0;
 let lastRunZone = -1;
 let lastHudKey = '';
 let lastSplitKey = '';
-const spinners = [];
 const _terrain = new THREE.Color();
 const _terrainTmp = new THREE.Color();
 
@@ -1343,17 +1074,11 @@ function updateTerrainTint(weights) {
 let lastLaneBiome = -1;
 let lastExitLaneMode = false;
 
-function riderAxisAt(s) {
-  const frame = frameAt(s);
-  return seatAxis(frame, riderFrameSeat(s, G.laneOffset).kind);
-}
-
 function applyLaneConfig(playerS) {
-  const live = playerLive(playerS);
+  const live = roadCarriageAt(playerS);
   const cfg = live.lanes;
-  const isExit = riderSeat.kind === 'exit';
+  const isExit = onExitLane();
   const carriageBiome = biomeIndexOf(cfg.id);
-  const worldBefore = riderLatAt(playerS, G.laneOffset);
   const modeChanged = isExit !== lastExitLaneMode;
   const biomeChanged = carriageBiome !== lastLaneBiome;
 
@@ -1364,12 +1089,6 @@ function applyLaneConfig(playerS) {
   G.START_LANE = cfg.startLane;
 
   if (biomeChanged || modeChanged) {
-    // Сохраняем мировую позицию байка при смене конфига/режима полос.
-    const newSpan = Number.isFinite(live.scale) && live.scale !== 0 ? live.scale : 1;
-    const axis = riderAxisAt(playerS);
-    if (Number.isFinite(worldBefore) && newSpan > 0.001) {
-      G.laneOffset = (worldBefore - axis) / newSpan;
-    }
     lastLaneBiome = carriageBiome;
     lastExitLaneMode = isExit;
     const target = nearestRunLane(G.laneOffset, cfg);
@@ -1383,44 +1102,34 @@ function applyLaneConfig(playerS) {
   }
 
   const frame = frameAt(playerS);
-  const limits = logicalRoadLimits(frame.local, live.scale, riderSeat.kind === 'exit', frame.chosen !== -1);
+  const limits = logicalRoadLimits(frame.local, live.scale, onExitLane(), frame.chosen !== -1);
   G.roadEdgeMin = limits.min;
   G.roadEdgeMax = limits.max;
   G.ROAD_EDGE = Math.max(Math.abs(limits.min), limits.max);
 }
 
-function updateScenery() {
-  if (!G.updateBiomeScenery) return;
-  G.updateBiomeScenery();
+function updateScenery(dt) {
+  if (G.updateBiomeScenery) G.updateBiomeScenery(dt);
 }
 
-/** Полосы дороги в точке s. Без s — под байком. Сиденье байка полосы дороги не меняет.
+/** Полосы дороги в точке s. Без s — под байком. Съезд — правая полоса этой дороги.
  *  @returns {import('./engine/lanes.js').CarriageLayout} */
 function lanesAtS(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
   return roadCarriageAt(at).lanes;
 }
 
-/** Полосы той дороги, на которой сидит байк. На въезде это уже новая дорога. */
-function riderLanesAt(s) {
-  const at = Number.isFinite(s) ? s : G.playerS;
-  return playerLive(at).lanes;
-}
-
-function riderLaneScaleAt(s) {
-  const at = Number.isFinite(s) ? s : G.playerS;
-  const scale = playerLive(at).scale;
-  return Number.isFinite(scale) && scale !== 0 ? scale : 1;
-}
-
-/** Случайная попутная полоса дороги байка в точке s. */
+/** Случайная попутная полоса дороги. Полоса съезда не подходит: она уезжает вместе с лентой. */
 function randomRunLane(s) {
-  return laneIndexByRoll(drivenLanesAt(s), 'with', Math.random());
+  const road = lanesAtS(s);
+  const stable = road.lanes.filter((lane) => !lane.exit);
+  const use = stable.length > 0 ? { ...road, lanes: stable } : road;
+  return laneIndexByRoll(use, 'with', Math.random());
 }
 
 /** Смещение остаётся, если это попутная полоса дороги байка. Иначе ближайшая такая полоса. */
 function holdDrivenLane(s, offset) {
-  const road = drivenLanesAt(s);
+  const road = lanesAtS(s);
   const lane = Number.isFinite(offset) ? offset : 0;
   for (const item of road.lanes) {
     if (item.direction === 'with' && Math.abs(item.offset - lane) < 0.05) return item.offset;
@@ -1598,7 +1307,7 @@ function updateBiome(dt) {
   updateBiomeChip(G.currentBiome);
   applyLaneConfig(G.playerS);
 
-  if (G.started && !G.ended && riderSeat.kind === 'exit') G.laneAssistTarget = null;
+  if (G.started && !G.ended && onExitLane()) G.laneAssistTarget = null;
 
   updateTerrainTint(weights);
 
@@ -1612,11 +1321,7 @@ function updateBiome(dt) {
     chosen
   } : null);
 
-  for (const sp of spinners) {
-    sp.mesh.rotation.z += sp.speed * dt;
-  }
-
-  updateScenery();
+  updateScenery(dt);
   if (G.updateForest) G.updateForest();
   if (G.updateMountain) G.updateMountain();
   if (G.updateEmbankment) G.updateEmbankment(dt);
@@ -1646,6 +1351,8 @@ function resetBiomeRun() {
   riderSpan = NaN;
   riderWorld = NaN;
   riderAxis = NaN;
+  riderSurface = NaN;
+  riderOnRibbon = false;
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
   dropRoadCache();
@@ -1721,9 +1428,7 @@ export function initBiome() {
   G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
-  G.sideRibbonAt = (s) => ribbonHere(s);
-  G.roadsAt = roadsHere;
-  G.trafficLatAt = trafficLatAt;
+  G.roadsAt = roadCarriageAt;
   G.nominalRoadWidth = LANE_CONFIG[CITY].width;
   G.forkSpreadAtS = forkSpreadAtS;
   G.roadOriginAt = (s) => frameAt(s).origin;
@@ -1734,9 +1439,7 @@ export function initBiome() {
   G.roadBlockAt = (s) => frameAt(s).block;
   G.riderLatAt = riderLatAt;
   G.onExitLane = onExitLane;
-  G.exitLaneCenterOffset = exitLaneCenterOffset;
   G.followLatAt = followLatAt;
-  G.riddenCenterAt = riddenCenterAt;
   G.forkCloseAtS = forkCloseAtS;
   G.roadEdgesAt = roadEdgesAt;
   G.roadsideFrameAt = (s) => {
@@ -1748,7 +1451,6 @@ export function initBiome() {
   G.drivenSpanAt = drivenSpanAt;
   G.drivenIsExitAt = drivenIsExitAt;
   G.drivenFrameAt = drivenFrameAt;
-  G.drivenLanesAt = drivenLanesAt;
   G.drivenLaneAt = drivenLaneAt;
   G.holdDrivenLane = holdDrivenLane;
   G.flankAt = flankAt;
@@ -1757,15 +1459,10 @@ export function initBiome() {
   G.splitCenterS = splitCenterS;
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
-  G.laneDisplayScaleAtS = laneDisplayScaleAtS;
   G.laneMarksAtS = laneMarksAtS;
-  G.ribbonMarksAtS = ribbonMarksAtS;
   G.solidMarksAtS = solidMarksAtS;
-  G.ribbonSolidMarksAtS = ribbonSolidMarksAtS;
   G.medianLatsAt = medianLatsAt;
-  G.riderLanesAt = riderLanesAt;
-  G.riderLaneScaleAt = riderLaneScaleAt;
-  G.laneWorldOffsetAtS = laneWorldOffsetAtS;
+  G.laneSpanAt = laneSpanAt;
   G.dominantBiomeAtS = dominantBiomeAtS;
   G.forkView = 0;
   G.biomeState = null;
@@ -1824,85 +1521,3 @@ export function initBiome() {
   });
 }
 
-/* ---------- Мир декораций ---------- */
-export function initBiomeWorld() {
-  buildMaterials();
-
-  G.biomeScenery = [];
-  G.resetBiomeScenery = () => {
-    for (let i = 0; i < G.biomeScenery.length; i++) {
-      G.biomeScenery[i].s = i * SCENERY_STEP;
-      G.biomeScenery[i].placedS = NaN;
-    }
-  };
-
-  for (let i = 0; i < SCENERY_SLOTS; i++) {
-    /** @type {import('./game-state.d.ts').ScenerySlot} */
-    const slot = { s: i * SCENERY_STEP, placedS: NaN, left: [], right: [] };
-    for (const side of [-1, 1]) {
-      const list = side < 0 ? slot.left : slot.right;
-      for (let biome = 1; biome < BIOMES.length; biome++) {
-        if (BIOMES[biome].decor !== 'slots') continue;
-        const variant = ((i * 3 + (side > 0 ? 2 : 0) + biome) % 5 + 5) % 5;
-        const built = buildVariant(biome, variant);
-        const meshes = [];
-        built.group.traverse((obj) => {
-          if (obj.isMesh) meshes.push(obj);
-        });
-        built.group.visible = false;
-        G.scene.add(built.group);
-        list.push({
-          biome,
-          group: built.group,
-          meshes,
-          lodFar: false,
-          yaw: built.group.rotation.y,
-          lat: built.lat + ((i + biome) % 3) * 2.2,
-          ds: (((i * 7 + biome * 5 + (side > 0 ? 3 : 0)) % 9) - 4) * 1.4,
-          spin: built.spin
-        });
-        if (built.spin) spinners.push(built.spin);
-      }
-    }
-    G.biomeScenery.push(slot);
-  }
-
-  G.updateBiomeScenery = () => {
-    for (const slot of G.biomeScenery) {
-      slot.s = keepInWindow(slot.s, G.playerS, 90, Infinity, SCENERY_SPAN);
-      const w = G.biomeWeightsAtS(slot.s);
-      for (const side of [-1, 1]) {
-        const list = side < 0 ? slot.left : slot.right;
-        for (const entry of list) {
-          const bw = w[entry.biome] || 0;
-          const s = slot.s + entry.ds;
-          const visible = bw > 0.12;
-          entry.group.visible = visible;
-          if (!visible) continue;
-          const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;
-          entry.group.scale.setScalar(sceneryScale);
-          const sideSign = side < 0 ? -1 : 1;
-          const fullEdges = roadEdgesAt(s);
-          const origin = frameAt(s).origin;
-          const fullEdge = sideSign < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
-          const fullMid = (fullEdges.leftOuter + fullEdges.rightOuter) * 0.5;
-          const gap = Math.max(8, entry.lat - Math.abs(fullEdge - fullMid));
-          const pose = besidePose({ edges: fullEdges, origin }, { side: sideSign, gap, inset: 0 });
-          const far = Math.abs(s - G.playerS) > 165;
-          if (far !== entry.lodFar) {
-            entry.lodFar = far;
-            for (let k = 2; k < entry.meshes.length; k++) entry.meshes[k].visible = !far;
-          }
-          G.placeBeside(
-            entry.group,
-            s,
-            fullEdge,
-            pose.lateral,
-            groundOffset(pose.lateral, s),
-            entry.yaw
-          );
-        }
-      }
-    }
-  };
-}

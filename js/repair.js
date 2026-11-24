@@ -260,10 +260,13 @@ export function initRepair() {
       car.targetLaneIdx = target.laneIdx;
       car.speedKmh = 0;
       car.changingLane = false;
-      car.onExit = false;
+      const road = G.roadsAt(s);
+      const lane = road.lanes.lanes[laneIdx];
+      car.onExit = !!(lane && lane.exit);
       car.joiningExit = false;
       car.heading = 0;
       car.heldLat = NaN;
+      car.surface = NaN;
       car.nearMissAwarded = false;
       car.jumpedInCurrentJump = false;
       car.retiring = false;
@@ -293,7 +296,7 @@ export function initRepair() {
     }
     if (!allowedAt(s)) return false;
 
-    const cfg = G.drivenLanesAt(s);
+    const cfg = G.lanesAtS(s);
     let laneIdx = G.randomRunLane(s);
     const forcedLane = opts.laneIdx == null ? NaN : Number(opts.laneIdx);
     if (Number.isInteger(forcedLane)) {

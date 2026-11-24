@@ -1,4 +1,5 @@
-import { asphaltSpan, branchEdges, goreSpan, groundAt, roadsJoined, shellEdge, shoulderLats, vergeAt, walkCrossing } from './fork.ts';
+import { branchEdges, roadsJoined } from './fork.ts';
+import { asphaltSpan, goreSpan, groundAt, shellEdge, shoulderLats, vergeAt, walkCrossing } from './asphalt.ts';
 import { besidePose, spanEdges, stripSeam } from './roadside.ts';
 import type { AsphaltEdges, RoadsideFrame } from './roadside.ts';
 

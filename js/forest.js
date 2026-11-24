@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cylinder } from './geom.js';
 import { G } from './state.js';
+import { smooth01 } from './engine/profile.js';
 
 /* =========================================================================
  * 5c. ПЛОТНЫЙ ЛЕС
@@ -43,11 +44,6 @@ function makeRandom(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function smooth01(v) {
-  const t = Math.max(0, Math.min(1, v));
-  return t * t * (3 - 2 * t);
 }
 
 export function initForest() {

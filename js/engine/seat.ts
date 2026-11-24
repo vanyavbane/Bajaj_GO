@@ -1,21 +1,23 @@
 /**
  * Сиденье байка на кадре дороги.
- * Ось одна — ось дороги из readExit. Съезд это смещение правой полосы, не вторая ось.
- * Когда у чтения съезда нет ленты, байк садится на ту дорогу, что осталась.
+ * Пока лента прижата, съезд — правая полоса шоссе и считается от его оси.
+ * Отделившись, это другая дорога: номер полосы — метры от середины ленты.
+ * Когда ленты больше нет, байк уже на новой дороге, которая её продолжила.
  * Отказ сажает на край прямой, не оставляет байка в стороне.
  */
 
 import { readExit } from './exit.ts';
+import { carriageLat, laneAtWorld, rideRuler } from './carriage.ts';
 import {
+  RIBBON_MARGIN,
   canReleaseExit,
   landOnCarriage,
-  laneAnchor,
   onExitRibbon,
   roadsJoined,
   type RoadFrame,
 } from './fork.ts';
 
-/** road — ось кадра. exit — середина ленты съезда. */
+/** road — шоссе. exit — съезд: его полоса, пока ленты одно полотно, и его дорога после отрыва. */
 export type SeatKind = 'road' | 'exit';
 
 export interface RiderSeat {
@@ -28,33 +30,10 @@ function spanOf(span: number): number {
   return Number.isFinite(span) && span !== 0 ? span : 1;
 }
 
-/**
- * Ось сиденья в мировых метрах.
- * kind не двигает ось: съезд отличается полосой, а не центром дороги.
- */
-export function seatAxis(frame: RoadFrame, kind: SeatKind): number {
-  void kind;
-  return laneAnchor(frame);
-}
-
 /** Мировая точка сиденья. Камера, байк и проверка вливания читают её. */
 export function seatWorld(frame: RoadFrame, seat: RiderSeat, span: number): number {
-  return seatAxis(frame, seat.kind) + seat.lane * spanOf(span);
-}
-
-/**
- * Та же мировая точка при новом масштабе полосы.
- * Пока лента растёт, масштаб меняется каждый кадр. Полоса пересчитывается,
- * мир байка остаётся.
- * `from` не число и не ноль — масштаб ещё не запомнен, полоса не трогается.
- */
-export function rescaleSeat(seat: RiderSeat, from: number, to: number, axis: number): RiderSeat {
-  const toScale = spanOf(to);
-  const fromScale = Number.isFinite(from) && from !== 0 ? from : toScale;
-  if (fromScale === toScale) return seat;
-  const origin = Number.isFinite(axis) ? axis : 0;
-  const lane = Number.isFinite(seat.lane) ? seat.lane : 0;
-  return { kind: seat.kind, lane: (origin + lane * fromScale - origin) / toScale };
+  const ruler = rideRuler(frame, seat.kind === 'exit', span);
+  return carriageLat(ruler.axis, ruler.scale, seat.lane);
 }
 
 /**
@@ -77,7 +56,7 @@ export function seatOnFrame(frame: RoadFrame, seat: RiderSeat, homeOrigin: numbe
 export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): RiderSeat {
   const scale = spanOf(span);
   const world = seatWorld(frame, seat, scale);
-  const ribbon = readExit(frame).ribbon?.center ?? null;
+  const ribbon = readExit(frame).ribbon;
   if (ribbon == null) {
     if (seat.kind !== 'exit') return seat;
     return { kind: 'road', lane: landOnCarriage(frame.origin, frame.local, world, scale) };
@@ -85,19 +64,19 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
   const logical = world - frame.origin;
   const onRibbon = onExitRibbon(logical, frame.local);
   const hold = onRibbon || (seat.kind === 'exit' && !canReleaseExit(logical, frame.local));
+  const road = rideRuler(frame, false, scale);
+  const lane = laneAtWorld(world, road.axis, road.scale);
   if (!hold) {
     if (seat.kind !== 'exit') return seat;
-    return { kind: 'road', lane: (world - laneAnchor(frame)) / scale };
+    return { kind: 'road', lane };
   }
-  const axis = laneAnchor(frame);
-  const lane = (world - axis) / scale;
   // Пока +1 полоса прижата, это одно полотно: байк не дёргается к её левому
   // краю в момент перестроения. Кромка ленты ещё не ограничение руля.
   if (roadsJoined(frame.local)) return { kind: 'exit', lane };
-  const center = (frame.origin + ribbon - axis) / scale;
-  const halfW = (frame.local.rightOuter - frame.local.rightInner) * 0.5;
-  const limit = Math.max(0, (halfW - 0.7) / Math.max(scale, 0.05));
-  if (lane < center - limit) return { kind: 'exit', lane: center - limit };
-  if (lane > center + limit) return { kind: 'exit', lane: center + limit };
-  return { kind: 'exit', lane };
+  const exit = rideRuler(frame, true, scale);
+  const along = laneAtWorld(world, exit.axis, exit.scale);
+  const limit = Math.max(0, (ribbon.half - RIBBON_MARGIN) / exit.scale);
+  if (along < -limit) return { kind: 'exit', lane: -limit };
+  if (along > limit) return { kind: 'exit', lane: limit };
+  return { kind: 'exit', lane: along };
 }

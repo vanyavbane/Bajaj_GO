@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, iconPaths, listItem, panel, rows, stats, tag } from '@bajajgo/design';
-import { accidentArrival } from './engine/carriage.js';
+import { accidentArrival, vehicleLat } from './engine/carriage.js';
+import { surfaceWorld } from './engine/exit.js';
 import { nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
@@ -625,7 +626,7 @@ function exitSideAt(_s) {
 
 /** Попутная полоса у обочины дороги байка. Справа крайняя правая, слева крайняя левая попутная. */
 function exitLane(s, side) {
-  const road = G.drivenLanesAt(s);
+  const road = G.lanesAtS(s);
   if (side >= 0) return outerLane(road, 'right', 'with')?.offset ?? 0;
   const left = outerLane(road, 'left', 'with');
   if (left) return left.offset;
@@ -1204,22 +1205,34 @@ function exitLane(s, side) {
         pendingAccidentCar.s = G.playerS + 120;
         // Та же дорога, по которой машина ехала. Если въезд уже стал дорогой,
         // это её продолжение, не полосы оставшейся прямой.
-        const roads = G.roadsAt(pendingAccidentCar.s);
+        const road = G.roadsAt(pendingAccidentCar.s);
         const wasOnExit = !!pendingAccidentCar.onExit;
-        const lanes = roads.main.lanes;
+        const lanes = road.lanes;
         const stay = !!(wasOnExit && lanes.lanes.some((lane) => lane.exit));
-        const seat = accidentArrival(wasOnExit, stay, lanes, pendingAccidentCar.lateralOffset);
-        const idx = nearestLaneIndex(lanes.offsets, seat);
-        pendingAccidentCar.onExit = stay;
-        pendingAccidentCar.laneIdx = idx;
-        pendingAccidentCar.targetLaneIdx = idx;
-        pendingAccidentCar.lateralOffset = lanes.offsets[idx];
-        pendingAccidentCar.changingLane = false;
-        pendingAccidentCar.heldLat = NaN;
+        const ribbon = road.spot && road.spot.ribbon;
+        const own = !!(stay && ribbon && !ribbon.joined);
+        if (own) {
+          const exitLane = lanes.lanes.find((lane) => lane.exit);
+          pendingAccidentCar.onExit = true;
+          pendingAccidentCar.laneIdx = exitLane ? exitLane.index : pendingAccidentCar.laneIdx;
+          pendingAccidentCar.targetLaneIdx = pendingAccidentCar.laneIdx;
+          pendingAccidentCar.changingLane = false;
+          pendingAccidentCar.heldLat = vehicleLat(road, pendingAccidentCar.lateralOffset, true);
+          pendingAccidentCar.surface = surfaceWorld(road.axis, road.spot, true);
+        } else {
+          const seat = accidentArrival(wasOnExit, stay, lanes, pendingAccidentCar.lateralOffset);
+          const idx = nearestLaneIndex(lanes.offsets, seat);
+          pendingAccidentCar.onExit = stay;
+          pendingAccidentCar.laneIdx = idx;
+          pendingAccidentCar.targetLaneIdx = idx;
+          pendingAccidentCar.lateralOffset = lanes.offsets[idx];
+          pendingAccidentCar.changingLane = false;
+          pendingAccidentCar.heldLat = NaN;
+        }
       }
       const playerLat = G.riderLatAt(G.playerS);
       for (const c of G.trafficPool) {
-        const carLat = G.trafficLatAt(c.s, c.lateralOffset, c.onExit);
+        const carLat = vehicleLat(G.roadsAt(c.s), c.lateralOffset, !!c.onExit);
         if (Math.abs(c.s - G.playerS) < 32 && Math.abs(carLat - playerLat) < 6) {
           c.s = G.playerS + 130 + Math.random() * 40;
         }

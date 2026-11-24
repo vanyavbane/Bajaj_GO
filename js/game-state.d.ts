@@ -2,10 +2,11 @@ import type * as THREE from 'three';
 import type { AudioSettings } from './engine/audio.ts';
 import type { GearboxState } from './engine/gearbox.ts';
 import type { BiomeDef, TrafficModel } from './engine/biomes.js';
-import type { DriveRoads, LiveCarriage } from './engine/carriage.js';
+import type { LiveCarriage } from './engine/carriage.js';
 import type { CarriageLayout } from './engine/lanes.js';
 import type { RoadEmbed } from './engine/branch.js';
-import type { AsphaltEdges, BranchPick, PlacedBlock, ShoulderProfile, SplitPick } from './engine/fork.js';
+import type { ShoulderProfile } from './engine/asphalt.js';
+import type { AsphaltEdges, BranchPick, PlacedBlock, SplitPick } from './engine/fork.js';
 import type { BesideAsset, RoadsideFrame, RoadsidePose } from './engine/roadside.js';
 
 export interface ColorSwatch {
@@ -417,12 +418,8 @@ export interface GameState {
   riderLatAt: (s: number, laneOffset?: number) => number;
   /** Байк сидит именно на полосе съезда. */
   onExitLane: () => boolean;
-  /** Центр живой +1 полосы в единицах G.laneOffset. */
-  exitLaneCenterOffset: () => number;
-  /** Боковая точка следа камеры на съезде/новой дороге в абсолютных метрах. */
+  /** Боковая точка следа камеры на той же дороге, что и байк, в абсолютных метрах. */
   followLatAt: (s: number, factor?: number, extra?: number) => number;
-  /** Середина дороги байка в смещении полосы. На ленте это её середина. */
-  riddenCenterAt: (s: number) => number;
   forkCloseAtS: (s: number) => number;
   roadEdgesAt: (s: number) => AsphaltEdges;
   asphaltSpan: (s: number) => { left: number; right: number; mid: number; width: number };
@@ -431,8 +428,6 @@ export interface GameState {
   /** Дорога байка в этой точке — лента съезда. */
   drivenIsExitAt: (s: number) => boolean;
   drivenFrameAt: (s: number) => { edges: AsphaltEdges; origin: number };
-  /** Полосы проезжей части байка. На въезде это полосы новой дороги. */
-  drivenLanesAt: (s?: number) => CarriageLayout;
   /** Полоса этой проезжей части в мировых метрах. */
   drivenLaneAt: (s: number, offset: number) => number;
   /** Попутная полоса дороги байка: прежнее смещение или ближайшая полоса. */
@@ -449,7 +444,7 @@ export interface GameState {
   roadEdgeMax: number;
   biomeScenery: ScenerySlot[];
   resetBiomeScenery: () => void;
-  updateBiomeScenery: () => void;
+  updateBiomeScenery: (dt?: number) => void;
   roadY: (s: number) => number;
   roadDY: (s: number) => number;
 
@@ -463,24 +458,17 @@ export interface GameState {
   mkadWeightAtS: (s: number) => number;
   roadWidthAtS: (s: number) => number;
   splitAmountAtS: (s: number) => number;
-  laneWorldOffsetAtS: (s: number, lateralOffset: number) => number;
-  laneDisplayScaleAtS: (s: number) => number;
-  roadsAt: (s: number) => DriveRoads;
-  sideRibbonAt: (s: number) => LiveCarriage | null;
-  trafficLatAt: (s: number, offset: number, onExit: boolean) => number;
+  roadsAt: (s: number) => LiveCarriage;
   laneMarksAtS: (s: number) => { lat: number; w: number }[];
-  ribbonMarksAtS: (s: number) => { lat: number; w: number }[];
   solidMarksAtS: (s: number) => { lat: number; w: number }[];
-  ribbonSolidMarksAtS: (s: number) => { lat: number; w: number }[];
   /** Оси бетонного отбойника. Пусто, если в точке нет дороги МКАД. */
   medianLatsAt: (s: number) => number[];
-  /** Полосы дороги, на которой сидит байк. */
-  riderLanesAt: (s?: number) => CarriageLayout;
-  riderLaneScaleAt: (s?: number) => number;
+  /** Полосы дороги в точке. Съезд — её правая полоса. */
+  lanesAtS: (s?: number) => CarriageLayout;
+  /** Масштаб полос дороги. Ноль и пустое значение читаются как единица. */
+  laneSpanAt: (s?: number) => number;
   dominantBiomeAtS: (s: number) => number;
   randomRunLane: (s?: number) => number;
-  /** Полосы дороги в точке: биом плюс односторонний или двусторонний проезд. */
-  lanesAtS: (s?: number) => CarriageLayout;
   remapTrafficLanes: (cfg?: CarriageLayout | null) => void;
   currentBiome: number;
   visitCounts: number[];

@@ -1,5 +1,6 @@
-import { outwardFrom, shellEdge } from './fork.ts';
+import { outwardFrom } from './fork.ts';
 import type { AsphaltEdges } from './fork.ts';
+import { shellEdge } from './asphalt.ts';
 
 export type { AsphaltEdges };
 

@@ -17,12 +17,12 @@ export function initLoop() {
   let oncomingShown = false;
   let medianCooldown = 0;
 
-  /** Байк держится правой ленты от носа съезда и почти до самого биома. */
+  /** Байк держится правой ленты, пока съезд ещё его дорога. */
   function onExitApproach() {
     const fork = G.splitState;
-    if (!fork || fork.d < -2 || fork.d > 760) return false;
-    if (fork.chosenSide === 1) return true;
-    if (fork.chosen) return false;
+    if (!fork || fork.d < -2) return false;
+    if (G.onExitLane && G.onExitLane()) return true;
+    if (fork.chosen || !fork.active) return false;
     return !!G.riderLatAt && G.riderLatAt(G.playerS) > 0;
   }
   G.stunt = G.stunt || blankStuntState();
@@ -151,7 +151,7 @@ export function initLoop() {
 
     // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
     if (!G.jumpState.airborne) {
-      const demoTarget = defaultRunOffset(G.riderLanesAt(G.playerS));
+      const demoTarget = defaultRunOffset(G.lanesAtS(G.playerS));
       G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
@@ -310,22 +310,6 @@ export function initLoop() {
     });
     G.laneOffset = steered.laneOffset;
     G.lateralVelocity = steered.lateralVelocity;
-    // Очень мягкое возвращение к середине своей ленты. Ограничение в полосных
-    // единицах не даёт довороту разрастись, когда к концу закрытия масштаб
-    // полосы падает, а руль игрока всё ещё может увести в любую сторону.
-    if (onExit && !G.jumpState.airborne && G.exitLaneCenterOffset) {
-      const steerNow = typeof steerInput === 'number'
-        ? steerInput
-        : (G.keys.right ? 1 : 0) - (G.keys.left ? 1 : 0);
-      if (Math.abs(steerNow) < 0.15) {
-        const center = G.exitLaneCenterOffset();
-        if (Number.isFinite(center)) {
-          const diff = clamp(center - G.laneOffset, -0.6, 0.6);
-          const pull = clamp(diff * 1.2, -1.2, 1.2);
-          G.lateralVelocity = lerp(G.lateralVelocity, pull, Math.min(1, dt * 2));
-        }
-      }
-    }
     // Рулевой расчёт сглаживает скорость к обычной. В клине удержание вправо
     // остаётся довозом до ленты и не гасится этим сглаживанием.
     // У кромки довоз спадает, и запас скорости на ленту не переносится.
@@ -446,7 +430,7 @@ export function initLoop() {
   function riderDirection() {
     return ribbonDirection(
       G.drivenIsExitAt(G.playerS),
-      offsetDirection(G.riderLanesAt(G.playerS), G.laneOffset)
+      offsetDirection(G.lanesAtS(G.playerS), G.laneOffset)
     );
   }
 
@@ -456,7 +440,7 @@ export function initLoop() {
     // дорога ещё перестраивается, а игрок едет по своей ленте.
     if (G.onExitLane && G.onExitLane()) return;
     const fork = G.splitState;
-    if (fork && fork.d > -40 && fork.d < 760) return;
+    if (fork && fork.active) return;
     if (G.biomeTransition && G.biomeTransition.active) return;
     let hit = null;
     for (let i = 0; i <= 4; i++) {
@@ -474,7 +458,7 @@ export function initLoop() {
     const world = G.riderLatAt(G.playerS);
     const sign = world <= hit.lat ? -1 : 1;
     const axis = G.riderLatAt(G.playerS, 0);
-    const scale = G.riderLaneScaleAt(G.playerS);
+    const scale = G.laneSpanAt(G.playerS);
     const span = Math.abs(scale) < 0.2 ? 1 : scale;
     G.laneOffset = (hit.lat + sign * hit.clear - axis) / span;
   }

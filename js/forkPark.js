@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { EXIT_DIVERGE, EXIT_RUN, goreSpan } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN } from './engine/fork.js';
+import { goreSpan } from './engine/asphalt.js';
 import { box, cylinder } from './geom.js';
 import { G } from './state.js';
 

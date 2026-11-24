@@ -1363,7 +1363,7 @@ export function initUi() {
       r.s = G.findSafeRampS(150 + i * 280);
       const laneIdx = G.randomRunLane(r.s);
       r.laneIdx = laneIdx;
-      r.lateralOffset = G.drivenLanesAt(r.s).offsets[laneIdx];
+      r.lateralOffset = G.lanesAtS(r.s).offsets[laneIdx];
       r.triggeredThisPass = false;
     }
     for (let i = 0; i < G.pedestrians.length; i++) {

@@ -5,7 +5,7 @@
  * если конфига нет или он разошёлся сам с собой, игра падает сразу.
  */
 
-import type { BiomeId, LaneLayout } from './biomes.ts';
+import type { LaneLayout } from './biomes.ts';
 
 export interface LaneSource {
   laneCount?: number;
@@ -84,14 +84,8 @@ type CarriageInput = Road & {
   biomeOncoming?: number;
 };
 
-/** Съезд — одна попутная полоса. Полотно шире полосы города, чтобы в него попасть на скорости. */
+/** Ширина полосы съезда. Полотно шире полосы города, чтобы в него попасть на скорости. */
 export const EXIT_LANE_WIDTH = 9;
-
-/** Съезд собирается из одной попутной полосы на его оси. */
-export function exitCarriage(id: BiomeId): CarriageLayout {
-  const road = roadFrom([{ offset: 0, speed: 65, direction: 'with' }], EXIT_LANE_WIDTH);
-  return { id, ...road, biomeOncoming: 0 };
-}
 
 /** Скорость правой полосы съезда, км/ч. */
 const EXIT_LANE_SPEED = 65;

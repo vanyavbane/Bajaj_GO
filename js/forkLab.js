@@ -304,17 +304,14 @@ export function initForkLab() {
     const to = G.playerS + (cameraMode === 'both' ? 240 : 170);
     const step = cameraMode === 'both' ? 28 : 22;
     for (let s = from; s <= to; s += step) {
-      const roads = G.roadsAt(s);
-      const carriages = [roads.main, roads.exit].filter(Boolean);
-      for (const carriage of carriages) {
-        for (const lane of carriage.lanes.lanes) {
-          const lat = carriage.axis + lane.offset * carriage.scale;
-          const pose = G.embedRoad(s, lat);
-          const arrow = takeArrow(lane.direction === 'against');
-          aim(arrow, pose, s, lane.direction === 'against', scale);
-          used += 1;
-          if (used > 140) return;
-        }
+      const carriage = G.roadsAt(s);
+      for (const lane of carriage.lanes.lanes) {
+        const lat = carriage.axis + lane.offset * carriage.scale;
+        const pose = G.embedRoad(s, lat);
+        const arrow = takeArrow(lane.direction === 'against');
+        aim(arrow, pose, s, lane.direction === 'against', scale);
+        used += 1;
+        if (used > 140) return;
       }
     }
   }
@@ -359,7 +356,7 @@ export function initForkLab() {
 
   function readout() {
     const s = G.playerS;
-    const way = offsetDirection(G.riderLanesAt(s), G.laneOffset);
+    const way = offsetDirection(G.lanesAtS(s), G.laneOffset);
     const where = way === 'against' ? 'встречная' : 'попутная';
     const lat = G.riderLatAt(s);
     const surface = G.drivenIsExitAt(s) ? 'на съезде' : 'на шоссе';

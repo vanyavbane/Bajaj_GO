@@ -3,7 +3,7 @@
  * Мир байка, ось разметки и кромки в каждой фазе читаются из одного кадра.
  */
 import { BIOMES, laneLayoutOf } from './biomes.ts';
-import { accidentArrival, approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageAt, carriageHolds, carriagePhase, drivenIsExit, forwardArrival, laneAtWorld, laneFit, laneMarks, repairQueue, ribbonApproachLat, ribbonDirection, ribbonTrailLat, riderCarriage, sameCarriage, sideRibbon, solidMarks } from './carriage.ts';
+import { accidentArrival, approachExit, arrivalMove, birthLane, canStartExitJoin, carriageAt, carriageHolds, forwardArrival, laneAtWorld, laneFit, laneMarks, repairQueue, ribbonDirection, solidMarks } from './carriage.ts';
 import { EXIT_LANE_HALF, exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
 import { EXIT_LANE_WIDTH, laneGapOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
@@ -55,14 +55,11 @@ assert(openRoad.scale === 1, 'полосы биома уже лежат на с�
 assert(Math.abs(openRoad.axis) < 1e-6, 'ось разметки прямой — центр кадра');
 assert(covers(open, openRoad.axis), 'ось прямой внутри её кромок');
 
-const openRider = riderCarriage(openRoad, open, 'exit');
-assert(openRider.lanes.count === openRoad.lanes.count && openRider.axis === openRoad.axis, 'сиденье байка не заводит вторую дорогу');
-
 const grabbing: RiderSeat = { kind: 'road', lane: (ribbon ?? 0) / openRoad.scale };
-const grabbedWorld = seatWorld(open, grabbing, openRider.scale);
-const grabbed = stepSeat(open, grabbing, openRider.scale);
+const grabbedWorld = seatWorld(open, grabbing, openRoad.scale);
+const grabbed = stepSeat(open, grabbing, openRoad.scale);
 assert(grabbed.kind === 'exit', 'байк на асфальте ленты садится на съезд');
-assert(Math.abs(seatWorld(open, grabbed, openRider.scale) - grabbedWorld) < 1e-6, 'захват не двигает мир байка');
+assert(Math.abs(seatWorld(open, grabbed, openRoad.scale) - grabbedWorld) < 1e-6, 'захват не двигает мир байка');
 
 const earlySeal = frameAt(clock.choiceAt + 1, 1);
 const midReturn = frameAt(clock.choiceAt + 35, 1);
@@ -77,10 +74,9 @@ const earlyRibbon = exitRibbonCenter(earlySeal.local);
 const midRibbon = exitRibbonCenter(midReturn.local);
 assert(earlyRibbon != null && midRibbon != null && midRibbon > earlyRibbon, 'въезд плавно уходит с +1 полосы на линию курса');
 assert(midReturn.local.leftInner - midReturn.local.leftOuter < half * 2 - 1, 'старая дорога на въезде уже уже');
-const grown = riderCarriage(early, earlySeal, 'exit');
-assert(grown.lanes.lanes.some((lane) => lane.exit) && grown.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');
+assert(early.lanes.lanes.some((lane) => lane.exit) && early.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');
 const cityEdge = Math.max(...city.offsets.map((offset) => Math.abs(offset))) + city.laneWidth * 0.5;
-assert(Math.abs(grown.scale - Math.min(1, grown.half / cityEdge)) < 1e-9, 'полосы старой дороги держит её кромка, не съезд');
+assert(Math.abs(early.scale - Math.min(1, early.half / cityEdge)) < 1e-9, 'полосы старой дороги держит её кромка, не съезд');
 assert(exitRibbonCenter(lateSeal.local) == null && late.phase === 'road', 'к концу закрытия полоса съезда кончилась');
 assert(late.lanes.count === city.count && !late.lanes.lanes.some((lane) => lane.exit) && late.way === 'two-way', 'на месте съезда новая дорога без отдельной полосы');
 assert(Math.abs(late.half - EXIT_LANE_HALF) < 1e-6 && late.axis > half, 'новая дорога стоит на линии въезда и на его ширине');
@@ -95,10 +91,7 @@ assert(landed > lateSeal.local.leftOuter && landed < lateSeal.local.leftInner, '
 const nextZone = carriageAt({ frame: frameAt(-10, 0), biome: city });
 assert(nextZone.phase === 'road' && nextZone.way === 'two-way' && nextZone.lanes.count === city.count, 'следующая зона — своя дорога');
 assert(Math.abs(nextZone.half - half) < 1e-6 && Math.abs(nextZone.axis) < 1e-6, 'следующая зона стоит на центре и ширине биома');
-assert(carriagePhase(frameAt(-10, 0)) === 'road', 'до развилки съезда нет');
-
-const plain = carriageAt({ frame: frameAt(-10, 0), biome: city });
-assert(plain.phase === 'road' && plain.scale === 1, 'обычная дорога не сжимает полосы');
+assert(nextZone.scale === 1, 'обычная дорога не сжимает полосы');
 assert(laneFit(5, [-10, 10]) === 0.25, 'масштаб держит внешний край крайней полосы на кромке');
 assert(laneFit(9.5, [-7.125, -2.375, 2.375, 7.125]) === 1, 'полная ширина не сжимает свои полосы');
 assert(Math.abs(laneFit(4.6, [-7.125, -2.375, 2.375, 7.125]) - 4.6 / 9.5) < 1e-9, 'сужение сажает край полосы на кромку');
@@ -148,8 +141,6 @@ assert(returnMarks.length === roadMarks.length, 'пока старая доро�
 returnMarks.forEach((mark) => {
   assert(mark.lat > earlySeal.world.leftOuter - 0.05 && mark.lat < earlySeal.world.leftInner + 0.05, 'штрих дороги стоит на её ширине');
 });
-assert(sideRibbon(openRoad, open) == null, 'съезд — полоса дороги, не вторая проезжая часть');
-assert(sideRibbon(early, earlySeal) == null, 'на въезде второй дороги тоже нет');
 const roadSolids = solidMarks(openRoad);
 assert(roadSolids.length === 2, 'у двусторонней две жёлтые линии');
 assert(Math.abs((roadSolids[0].lat + roadSolids[1].lat) * 0.5 - openRoad.axis) < 1e-6, 'жёлтая ось стоит на границе хода шоссе');
@@ -171,21 +162,6 @@ assert(cityRoad.lanes[birthLane(cityRoad, true, 0)]?.direction === 'with', 'на
 assert(birthLane(cityRoad, false, 0) === cityRoad.lanes[0]?.index, 'на дороге первый бросок остаётся своей полосой');
 assert(repairQueue(true, true) && repairQueue(false, false), 'очередь ремонта стоит на дороге ямы');
 assert(!repairQueue(true, false) && !repairQueue(false, true), 'чужая дорога в очередь ремонта не встаёт');
-assert(sameCarriage(32, 32.2) && !sameCarriage(0, 32), 'шоссе и съезд — разные оси');
-assert(drivenIsExit(32, 32.2) && !drivenIsExit(32, 0) && !drivenIsExit(null, 0), 'байк на съезде только когда оси совпали');
-assert(sideRibbon(late, lateSeal) == null, 'после въезда боковой ленты нет');
-assert(ribbonApproachLat(false, true, 2, 32, 1) == null, 'пока байк не пришёл, точка позади остаётся на своей дороге');
-assert(ribbonApproachLat(true, false, 2, 32, 1) == null, 'на уже пришедшей дороге полоса считается от её центра');
-assert(ribbonApproachLat(true, true, 2, 32, 0.5) === 33, 'камера позади пришедшего байка остаётся на ленте въезда');
-assert(ribbonTrailLat(true, false, 0, 0, 32, 2, 1) === 34, 'камера позади байка на ленте не садится на ось прямой');
-assert(ribbonTrailLat(true, false, 32, 0, 32, 2, 1) == null, 'новая дорога после въезда держит свою ось');
-assert(ribbonTrailLat(true, false, 20, 0, 32, 2, 1) == null, 'скользящая ось новой дороги не заменяется осью ленты');
-assert(ribbonTrailLat(false, false, 0, 0, 32, 2, 1) == null, 'пока байк не на ленте, камера остаётся на прямой');
-assert(sideRibbon(carriageAt({ frame: frameAt(-10, 0), biome: city }), frameAt(-10, 0)) == null, 'до развилки боковой ленты нет');
-
-assert(!carFollowsRibbon({ hasExit: true, following: false }), 'с шоссе на съезд одним кадром не садятся');
-assert(carFollowsRibbon({ hasExit: true, following: true }), 'машина остаётся на съезде, пока эта дорога есть');
-assert(!carFollowsRibbon({ hasExit: false, following: true }), 'без дороги съезда машина едет по основной');
 const peel = { changingLane: false, lane: 3, lastLane: 3, roadRight: 10, ribbonLeft: 12 };
 assert(canStartExitJoin(peel), 'пока ленты вместе, крайняя попутная начинает переезд');
 assert(!canStartExitJoin({ ...peel, ribbonLeft: 28 }), 'через раскрытый клин машина не стартует');

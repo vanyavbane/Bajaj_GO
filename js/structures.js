@@ -184,7 +184,7 @@ export function initStructures() {
       height: r.height,
       s: safeS,
       laneIdx,
-      lateralOffset: G.drivenLanesAt(safeS).offsets[laneIdx],
+      lateralOffset: G.lanesAtS(safeS).offsets[laneIdx],
       triggeredThisPass: false
     });
   }
@@ -197,7 +197,7 @@ export function initStructures() {
         const nextInterval = 240 + Math.random() * 200;
         ramp.s = findSafeRampS(maxRampS + nextInterval);
         if (G.splitAmountAtS(ramp.s) > 0.05) ramp.s += 140;
-        const cfg = G.drivenLanesAt(ramp.s);
+        const cfg = G.lanesAtS(ramp.s);
         ramp.laneIdx = G.randomRunLane(ramp.s);
         ramp.lateralOffset = cfg.offsets[ramp.laneIdx];
         ramp.triggeredThisPass = false;

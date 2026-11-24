@@ -85,3 +85,9 @@ export function mixSecond(
 ): number {
   return dda + t2 * (b - a) + 2 * t1 * (db - da) + t * (ddb - dda);
 }
+
+/** Гладкий шаг 0..1. Им пользуются и съезд, и рельеф. */
+export function smooth01(v: number): number {
+  const t = Math.max(0, Math.min(1, v));
+  return t * t * (3 - 2 * t);
+}
