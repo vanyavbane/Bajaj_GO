@@ -1,4 +1,3 @@
-import { lanesOf } from './engine/lanes.js';
 import { highbeamYieldLane } from './engine/motion.js';
 import { G } from './state.js';
 
@@ -27,12 +26,7 @@ export function initHighbeam() {
       const sameRoad = onExit === bikeOnExit;
       const scale = road.scale || 1;
       const playerLane = sameRoad ? G.laneOffset : (riderLat - road.axis) / scale;
-      const lanes = lanesOf(road.lanes).map((lane) => (
-        onExit ? { ...lane, direction: 'with' } : lane
-      ));
-      const lane = highbeamYieldLane(
-        car, G.playerS, playerLane, lanes, road.lanes.laneWidth
-      );
+      const lane = highbeamYieldLane(car, G.playerS, playerLane, road.lanes);
       if (lane == null) continue;
       car.changingLane = true;
       car.targetLaneIdx = lane;

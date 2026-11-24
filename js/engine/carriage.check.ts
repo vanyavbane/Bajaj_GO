@@ -5,7 +5,7 @@
 import { BIOMES, laneLayoutOf } from './biomes.ts';
 import { accidentArrival, approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageAt, carriageHolds, carriagePhase, drivenIsExit, forwardArrival, laneFit, laneMarks, repairQueue, ribbonApproachLat, ribbonDirection, ribbonTrailLat, riderCarriage, sameCarriage, sideRibbon, solidMarks } from './carriage.ts';
 import { EXIT_LANE_HALF, exitClock, exitRibbonCenter, sampleRoad } from './fork.ts';
-import { EXIT_LANE_WIDTH, laneGapOffsets, lanesOf } from './lanes.ts';
+import { EXIT_LANE_WIDTH, laneGapOffsets } from './lanes.ts';
 import { seatWorld, stepSeat, type RiderSeat } from './seat.ts';
 import { RIGHT_FORK, courseLayoutOf, createVectorField, openCourse } from './vectors.ts';
 
@@ -129,7 +129,7 @@ assert(apart(roadPose, parent) < 0.5, 'ось дороги остаётся на
 const ribbonPose = pose(earlySeal, earlySeal.origin + (earlyRibbon ?? 0), clock.choiceAt + 1);
 assert(ribbonPose.x > roadPose.x + 2, 'лента съезда справа от курса дороги');
 
-const roadGaps = laneGapOffsets(lanesOf(openRoad.lanes));
+const roadGaps = laneGapOffsets(openRoad.lanes);
 const roadMarks = laneMarks(openRoad);
 assert(roadMarks.length === roadGaps.length && roadMarks.every((mark) => mark.w === 1), 'штрихи шоссе — промежутки его полос');
 roadMarks.forEach((mark, index) => {
@@ -155,19 +155,19 @@ assert(solidMarks(early).length === 2, 'у сужающейся дороги с�
 assert(solidMarks(side).length === 0, 'у боковой ленты двойной сплошной нет');
 assert(ribbonDirection(true, 'against') === 'with', 'на ленте въезда встречная полоса едет вперёд');
 assert(ribbonDirection(false, 'against') === 'against', 'на дороге встречный ход остаётся встречным');
-assert(forwardArrival(lanesOf(early.lanes), -7) > 0, 'машина с ленты садится на попутную полосу новой дороги');
-const cityLanes = lanesOf(early.lanes);
-assert(accidentArrival(true, false, cityLanes, -7) > 0, 'авария с ленты сажает на попутную новой дороги');
-assert(accidentArrival(true, true, cityLanes, -7) < 0, 'пока лента жива авария оставляет полосу ленты');
-assert(accidentArrival(false, false, cityLanes, -7) < 0, 'встречная на своей дороге после аварии остаётся встречной');
-const hop = arrivalMove(cityLanes, -7);
+const cityRoad = early.lanes;
+assert(forwardArrival(cityRoad, -7) > 0, 'машина с ленты садится на попутную полосу новой дороги');
+assert(accidentArrival(true, false, cityRoad, -7) > 0, 'авария с ленты сажает на попутную новой дороги');
+assert(accidentArrival(true, true, cityRoad, -7) < 0, 'пока лента жива авария оставляет полосу ленты');
+assert(accidentArrival(false, false, cityRoad, -7) < 0, 'встречная на своей дороге после аварии остаётся встречной');
+const hop = arrivalMove(cityRoad, -7);
 assert(hop.changing && hop.target > 0 && hop.offset === -7, 'с левой полосы ленты машина доезжает до попутной');
-const seated = arrivalMove(cityLanes, hop.target);
+const seated = arrivalMove(cityRoad, hop.target);
 assert(!seated.changing && seated.offset === hop.target, 'уже на попутной машина остаётся');
 assert(!carriageHolds(32, 0, 9.5), 'съезд, от которого отказались, шоссе уже не держит');
 assert(carriageHolds(25, 32, 9.5), 'левая полоса новой дороги ещё на ней');
-assert(cityLanes[birthLane(cityLanes, true, 0)]?.direction === 'with', 'на ленте машина рождается на попутной');
-assert(birthLane(cityLanes, false, 0) === cityLanes[0]?.index, 'на дороге первый бросок остаётся своей полосой');
+assert(cityRoad.lanes[birthLane(cityRoad, true, 0)]?.direction === 'with', 'на ленте машина рождается на попутной');
+assert(birthLane(cityRoad, false, 0) === cityRoad.lanes[0]?.index, 'на дороге первый бросок остаётся своей полосой');
 assert(repairQueue(true, true) && repairQueue(false, false), 'очередь ремонта стоит на дороге ямы');
 assert(!repairQueue(true, false) && !repairQueue(false, true), 'чужая дорога в очередь ремонта не встаёт');
 assert(sameCarriage(32, 32.2) && !sameCarriage(0, 32), 'шоссе и съезд — разные оси');

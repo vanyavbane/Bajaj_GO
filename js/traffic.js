@@ -1,6 +1,6 @@
 import { approachExit, arrivalMove, birthLane, canStartExitJoin, carFollowsRibbon, carriageHolds, carriageLat, repairQueue, ribbonDirection } from './engine/carriage.js';
 import { clampLaneIndex, nearestLaneIndex, sameLaneOffset } from './engine/lanes.js';
-import { besideWithLane, lanesOf, offsetDirection, outerLane } from './engine/lanes.js';
+import { besideWithLane, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
 import { COMBO_WINDOW, nearMissPoints } from './engine/rules.js';
 import { createVehicleModel } from './models/vehicles.js';
@@ -49,7 +49,7 @@ export function initTraffic() {
   }
 
   function quteLane(cfg) {
-    const forward = lanesOf(cfg).filter((lane) => lane.direction === 'with');
+    const forward = cfg.lanes.filter((lane) => lane.direction === 'with');
     if (forward.length === 0) return 0;
     const pick = forward.length >= 2 ? forward[forward.length - 2] : forward[0];
     return pick ? pick.index : 0;
@@ -59,7 +59,7 @@ export function initTraffic() {
     if (model.type === 'qute_traffic') return quteLane(cfg);
     if (onRibbon) {
       const roll = forcedLane == null ? Math.random() * cfg.count : forcedLane;
-      return birthLane(lanesOf(cfg), true, roll);
+      return birthLane(cfg, true, roll);
     }
     if (forcedLane == null) return Math.floor(Math.random() * cfg.count);
     return clampLaneIndex(forcedLane, cfg.count);
@@ -113,7 +113,7 @@ export function initTraffic() {
     const road = spawnRoad(s);
     const cfg = road.lanes;
     const idx = pickLane(cfg, model, forcedLane, road.onExit);
-    const facing = lanesOf(cfg)[idx];
+    const facing = cfg.lanes[idx];
     return {
       model,
       laneIdx: idx,
@@ -190,7 +190,7 @@ export function initTraffic() {
 
   /** 1 — по ходу дороги, -1 — навстречу. На ленте въезда все едут вперёд. */
   function travelFlow(car, road, onRibbon) {
-    const lanes = lanesOf(road);
+    const lanes = road.lanes;
     const target = lanes[car.targetLaneIdx];
     const current = lanes[car.laneIdx];
     const sense = (lane) => ribbonDirection(onRibbon, lane && lane.direction);
@@ -211,7 +211,7 @@ export function initTraffic() {
   function beginExitJoin(car, roads) {
     const ribbon = roads.exit;
     if (!ribbon || car.onExit) return false;
-    const gate = outerLane(lanesOf(roads.main.lanes), 'right', 'with');
+    const gate = outerLane(roads.main.lanes, 'right', 'with');
     if (!gate) return false;
     return canStartExitJoin({
       changingLane: !!car.changingLane,
@@ -271,7 +271,7 @@ export function initTraffic() {
       car.speedKmh = Math.min(car.speedKmh, 14);
     }
     if (G.playerS > ev.s + ev.length && car.speedKmh < 2) {
-      const alt = besideWithLane(lanesOf(carLanes(car)), car.laneIdx);
+      const alt = besideWithLane(carLanes(car), car.laneIdx);
       if (alt && alt.index !== car.laneIdx) {
         car.changingLane = true;
         car.targetLaneIdx = alt.index;
@@ -300,7 +300,7 @@ export function initTraffic() {
       if (!carriageHolds(world, axis, roads.main.half)) {
         departed = true;
       } else {
-        const moved = arrivalMove(lanesOf(highway), (world - axis) / scale);
+        const moved = arrivalMove(highway, (world - axis) / scale);
         const here = nearestLaneIndex(highway.offsets, moved.offset);
         const dest = nearestLaneIndex(highway.offsets, moved.target);
         car.laneIdx = moved.changing ? here : dest;
@@ -353,7 +353,7 @@ export function initTraffic() {
 
       const wasFlashing = car.flashReactTimer > 0;
       const flow = travelFlow(car, road, onRibbon);
-      const step = stepTrafficCar(car, dt, lanesOf(road), flow);
+      const step = stepTrafficCar(car, dt, road, flow);
       faceTraffic(car, flow, dt);
       car.s = step.s;
       car.lateralOffset = step.lateralOffset;
@@ -454,7 +454,7 @@ export function initTraffic() {
         if (G.trackMaxCombo) G.trackMaxCombo(G.comboCount);
         const pts = nearMissPoints(
           G.comboCount,
-          ribbonDirection(G.drivenIsExitAt(G.playerS), offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset))
+          ribbonDirection(G.drivenIsExitAt(G.playerS), offsetDirection(G.riderLanesAt(G.playerS), G.laneOffset))
         );
         G.score += pts;
         const side = carWorldLat < playerWorldLat ? 'left' : 'right';

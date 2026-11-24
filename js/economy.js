@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, iconPaths, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { accidentArrival } from './engine/carriage.js';
-import { lanesOf, nearestLaneIndex, outerLane } from './engine/lanes.js';
+import { nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
 import { G } from './state.js';
@@ -625,11 +625,11 @@ function exitSideAt(_s) {
 
 /** Попутная полоса у обочины дороги байка. Справа крайняя правая, слева крайняя левая попутная. */
 function exitLane(s, side) {
-  const lanes = lanesOf(G.drivenLanesAt(s));
-  if (side >= 0) return outerLane(lanes, 'right', 'with')?.offset ?? 0;
-  const left = outerLane(lanes, 'left', 'with');
+  const road = G.drivenLanesAt(s);
+  if (side >= 0) return outerLane(road, 'right', 'with')?.offset ?? 0;
+  const left = outerLane(road, 'left', 'with');
   if (left) return left.offset;
-  const forward = lanes.find((lane) => lane.direction === 'with');
+  const forward = road.lanes.find((lane) => lane.direction === 'with');
   return forward ? forward.offset : 0;
 }
 
@@ -1201,7 +1201,7 @@ function exitLane(s, side) {
         const wasOnExit = !!pendingAccidentCar.onExit;
         const stay = !!(wasOnExit && roads.exit);
         const lanes = stay ? roads.exit.lanes : roads.main.lanes;
-        const seat = accidentArrival(wasOnExit, stay, lanesOf(lanes), pendingAccidentCar.lateralOffset);
+        const seat = accidentArrival(wasOnExit, stay, lanes, pendingAccidentCar.lateralOffset);
         const idx = nearestLaneIndex(lanes.offsets, seat);
         pendingAccidentCar.onExit = stay;
         pendingAccidentCar.laneIdx = idx;

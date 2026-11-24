@@ -1,10 +1,11 @@
 /**
+ * Дорога собирается из полос. Смещения, скорости и ход — проекция этих полос.
  * Полосы читаются только из конфига, который выставил биом.
  * Городские «4 полосы и 2 встречные» больше нигде не подставляются молча:
  * если конфига нет или он разошёлся сам с собой, игра падает сразу.
  */
 
-import type { LaneLayout } from './biomes.ts';
+import type { BiomeId, LaneLayout } from './biomes.ts';
 
 export interface LaneSource {
   laneCount?: number;
@@ -24,9 +25,12 @@ export type LaneDirection = 'with' | 'against';
 export type LaneSide = 'left' | 'right';
 
 /**
- * Одна полоса одной дороги.
+ * Полоса своей дороги. Отдельно от дороги её нет:
+ * собрать можно только через `roadFrom`, читать — только с дороги.
  * Направление и сторона — свойства полосы, а не догадка по номеру.
  * На съезде обе полосы едут вперёд, но одна остаётся левой, другая правой.
+ * `home` — направление, с которым полосу положили в дорогу.
+ * Односторонний ход может временно пустить всех вперёд, `home` при этом не меняется.
  */
 export interface Lane {
   index: number;
@@ -34,7 +38,35 @@ export interface Lane {
   offset: number;
   speed: number;
   direction: LaneDirection;
+  /** Направление при сборке дороги. */
+  home: LaneDirection;
   side: LaneSide;
+}
+
+/** Полоса до сборки: где стоит, как быстро, куда едет. Индекс и сторону назначает дорога. */
+export interface LanePiece {
+  /** Метры от оси. Лево отрицательное. */
+  offset: number;
+  speed: number;
+  direction: LaneDirection;
+}
+
+/**
+ * Дорога — это её полосы слева направо.
+ * Число, смещения, скорости, ширина и встречный ряд считаются из полос.
+ */
+export interface Road {
+  lanes: Lane[];
+  way: RoadWay;
+  laneWidth: number;
+  /** Число полос × ширина полосы. */
+  width: number;
+  count: number;
+  /** Сколько полос слева подряд едут навстречу. Направление каждой полосы лежит на ней. */
+  oncomingCount: number;
+  offsets: number[];
+  speeds: number[];
+  startLane: number;
 }
 
 /**
@@ -44,87 +76,111 @@ export interface Lane {
  */
 export interface CarriageLayout extends LaneLayout {
   biomeOncoming: number;
-  way: RoadWay;
 }
 
-type CarriageInput = {
-  oncomingCount: number;
+type CarriageInput = Road & {
   biomeOncoming?: number;
-  way?: RoadWay;
 };
 
 /** Съезд — одна попутная полоса. Полотно шире полосы города, чтобы в него попасть на скорости. */
 export const EXIT_LANE_WIDTH = 9;
 
-export function exitCarriage(id: LaneLayout['id']): CarriageLayout {
-  return {
-    id,
-    count: 1,
-    oncomingCount: 0,
-    biomeOncoming: 0,
-    way: 'one-way',
-    laneWidth: EXIT_LANE_WIDTH,
-    width: EXIT_LANE_WIDTH,
-    offsets: [0],
-    speeds: [65],
-    startLane: 0,
-  };
+/** Съезд собирается из одной попутной полосы на его оси. */
+export function exitCarriage(id: BiomeId): CarriageLayout {
+  const road = roadFrom([{ offset: 0, speed: 65, direction: 'with' }], EXIT_LANE_WIDTH);
+  return { id, ...road, biomeOncoming: 0 };
+}
+
+function laneDirection(value: LaneDirection | undefined): LaneDirection {
+  if (value !== 'against' && value !== 'with') throw new Error('У полосы нет направления');
+  return value;
+}
+
+function pieceSpeed(speed: number): number {
+  if (typeof speed !== 'number' || !Number.isFinite(speed)) {
+    throw new Error('У полосы нет скорости');
+  }
+  return speed;
 }
 
 /**
- * Полосы дороги слева направо.
- * Двусторонняя: левые `oncomingCount` полос едут навстречу, остальные по ходу.
- * Односторонняя: все по ходу, левая и правая стороны не пропадают.
- * Сторона — знак смещения. Ноль лежит на правой стороне.
+ * Собрать дорогу из полос.
+ * Полосы встают слева направо по смещению. Ход читается из их направлений.
+ * Пустой набор дорогой не становится.
  */
-export function lanesOf(layout: {
-  offsets?: readonly number[] | null;
-  speeds?: readonly number[] | null;
-  oncomingCount?: number;
-  way?: RoadWay;
-}): Lane[] {
-  const offsets = layout.offsets ?? [];
-  const speeds = layout.speeds ?? [];
-  const way = layout.way === 'one-way' ? 'one-way' : 'two-way';
-  const against = way === 'one-way' ? 0 : Math.max(0, layout.oncomingCount ?? 0);
+export function roadFrom(pieces: readonly LanePiece[], laneWidth: number): Road {
+  if (!(laneWidth > 0) || !Number.isFinite(laneWidth)) {
+    throw new Error('Ширина полосы должна быть больше нуля');
+  }
+  if (pieces.length < 1) throw new Error('Дорогу собирают из полос');
+  const sorted = pieces.slice().sort((a, b) => a.offset - b.offset);
   const lanes: Lane[] = [];
-  for (let index = 0; index < offsets.length; index++) {
-    const offset = offsets[index];
-    const speed = speeds[index];
-    if (typeof offset !== 'number' || !Number.isFinite(offset)) continue;
+  for (let index = 0; index < sorted.length; index++) {
+    const piece = sorted[index];
+    if (!piece || typeof piece.offset !== 'number' || !Number.isFinite(piece.offset)) {
+      throw new Error('У полосы нет смещения');
+    }
+    const direction = laneDirection(piece.direction);
     lanes.push({
       index,
-      offset,
-      speed: typeof speed === 'number' && Number.isFinite(speed) ? speed : 0,
-      direction: index < against ? 'against' : 'with',
-      side: offset < 0 ? 'left' : 'right',
+      offset: piece.offset,
+      speed: pieceSpeed(piece.speed),
+      direction,
+      home: direction,
+      side: piece.offset < 0 ? 'left' : 'right',
     });
   }
-  return lanes;
+  let oncomingCount = 0;
+  for (const lane of lanes) {
+    if (lane.home !== 'against') break;
+    oncomingCount += 1;
+  }
+  const offsets = lanes.map((lane) => lane.offset);
+  const speeds = lanes.map((lane) => lane.speed);
+  const way: RoadWay = lanes.some((lane) => lane.home === 'against') ? 'two-way' : 'one-way';
+  return {
+    lanes,
+    way,
+    laneWidth,
+    width: lanes.length * laneWidth,
+    count: lanes.length,
+    oncomingCount,
+    offsets,
+    speeds,
+    startLane: offsets[offsets.length - 1] ?? 0,
+  };
 }
 
-/** Полосы одного направления, слева направо. */
-export function lanesGoing(lanes: readonly Lane[], direction: LaneDirection): Lane[] {
-  return lanes.filter((lane) => lane.direction === direction);
+/** Текущий ход: на односторонней все едут вперёд, `home` остаётся направлением сборки. */
+function lanesInWay(rows: readonly Lane[], way: RoadWay): Lane[] {
+  return rows.map((lane) => ({
+    ...lane,
+    direction: way === 'one-way' ? 'with' : lane.home,
+  }));
+}
+
+/** Полосы одного направления этой дороги, слева направо. */
+function lanesGoing(road: Road, direction: LaneDirection): readonly Lane[] {
+  return road.lanes.filter((lane) => lane.direction === direction);
 }
 
 /**
  * Попутная полоса по умолчанию.
  * Если есть встречные, это ближайшая к оси попутная. Иначе крайняя правая.
  */
-export function defaultRunOffset(lanes: readonly Lane[]): number {
-  const forward = lanesGoing(lanes, 'with');
-  if (forward.length === 0) return lanes[lanes.length - 1]?.offset ?? 0;
-  if (directionEdge(lanes) == null) {
-    return outerLane(lanes, 'right', 'with')?.offset ?? forward[forward.length - 1]?.offset ?? 0;
+export function defaultRunOffset(road: Road): number {
+  const forward = lanesGoing(road, 'with');
+  if (forward.length === 0) return road.lanes[road.lanes.length - 1]?.offset ?? 0;
+  if (directionEdge(road) == null) {
+    return outerLane(road, 'right', 'with')?.offset ?? forward[forward.length - 1]?.offset ?? 0;
   }
   return forward[0]?.offset ?? 0;
 }
 
 /** Ближайшая полоса заданного направления. Если таких нет, ближайшая из всех. */
-export function nearestLaneOffset(lanes: readonly Lane[], lateral: number, direction: LaneDirection = 'with'): number {
-  const pool = lanesGoing(lanes, direction);
-  const use = pool.length > 0 ? pool : lanes;
+export function nearestLaneOffset(road: Road, lateral: number, direction: LaneDirection = 'with'): number {
+  const pool = lanesGoing(road, direction);
+  const use = pool.length > 0 ? pool : road.lanes;
   let best = use[0]?.offset ?? 0;
   let bestDist = Infinity;
   const target = Number.isFinite(lateral) ? lateral : 0;
@@ -139,26 +195,26 @@ export function nearestLaneOffset(lanes: readonly Lane[], lateral: number, direc
 }
 
 /** Случайная полоса направления. roll — 0…1. */
-export function laneIndexByRoll(lanes: readonly Lane[], direction: LaneDirection, roll: number): number {
-  const pool = lanesGoing(lanes, direction);
-  const use = pool.length > 0 ? pool : lanes;
+export function laneIndexByRoll(road: Road, direction: LaneDirection, roll: number): number {
+  const pool = lanesGoing(road, direction);
+  const use = pool.length > 0 ? pool : road.lanes;
   if (use.length === 0) return 0;
   const span = Math.max(0, Math.min(0.999999, Number.isFinite(roll) ? roll : 0));
   return use[Math.floor(span * use.length)]?.index ?? 0;
 }
 
 /** Соседняя попутная полоса: с крайней правой шаг внутрь, с остальных — наружу. */
-export function besideWithLane(lanes: readonly Lane[], index: number): Lane | null {
-  const forward = lanesGoing(lanes, 'with');
+export function besideWithLane(road: Road, index: number): Lane | null {
+  const forward = lanesGoing(road, 'with');
   const pos = forward.findIndex((lane) => lane.index === index);
   if (pos < 0 || forward.length < 2) return null;
   return pos >= forward.length - 1 ? forward[pos - 1] ?? null : forward[pos + 1] ?? null;
 }
 
 /** Крайняя полоса заданной стороны и направления. */
-export function outerLane(lanes: readonly Lane[], side: LaneSide, direction: LaneDirection): Lane | null {
+export function outerLane(road: Road, side: LaneSide, direction: LaneDirection): Lane | null {
   let found: Lane | null = null;
-  for (const lane of lanes) {
+  for (const lane of road.lanes) {
     if (lane.side !== side || lane.direction !== direction) continue;
     if (!found || Math.abs(lane.offset) > Math.abs(found.offset)) found = lane;
   }
@@ -169,15 +225,16 @@ export function outerLane(lanes: readonly Lane[], side: LaneSide, direction: Lan
  * Направление в точке смещения.
  * Левее границы хода — навстречу. На дороге без встречных всё едет вперёд.
  */
-export function offsetDirection(lanes: readonly Lane[], offset: number): LaneDirection {
-  const edge = directionEdge(lanes);
+export function offsetDirection(road: Road, offset: number): LaneDirection {
+  const edge = directionEdge(road);
   if (edge == null) return 'with';
   const at = Number.isFinite(offset) ? offset : 0;
   return at < edge ? 'against' : 'with';
 }
 
 /** Граница встречного и попутного хода. null, если вся дорога едет в одну сторону. */
-export function directionEdge(lanes: readonly Lane[]): number | null {
+export function directionEdge(road: Road): number | null {
+  const lanes = road.lanes;
   for (let i = 0; i < lanes.length - 1; i++) {
     const left = lanes[i];
     const right = lanes[i + 1];
@@ -189,12 +246,19 @@ export function directionEdge(lanes: readonly Lane[]): number | null {
 
 /** На односторонней встречная полоса становится попутной. Смещения полос те же. */
 export function carriageLanes<T extends CarriageInput>(
-  lanes: T,
+  road: T,
   way: RoadWay,
-): Omit<T, 'oncomingCount' | 'biomeOncoming' | 'way'> & CarriageStamp {
-  const biomeOncoming = lanes.biomeOncoming ?? lanes.oncomingCount;
+): Omit<T, 'oncomingCount' | 'biomeOncoming' | 'way' | 'lanes'> & CarriageStamp & { lanes: Lane[] } {
+  if (road.lanes.length < 1) throw new Error('У дороги нет полос');
+  const biomeOncoming = road.biomeOncoming ?? road.oncomingCount;
   const oncomingCount = way === 'one-way' ? 0 : biomeOncoming;
-  return { ...lanes, oncomingCount, biomeOncoming, way };
+  return {
+    ...road,
+    oncomingCount,
+    biomeOncoming,
+    way,
+    lanes: lanesInWay(road.lanes, way),
+  };
 }
 
 /** То, что carriageLanes всегда дописывает к конфигу биома. */
@@ -247,8 +311,9 @@ export function readLanes(state: LaneSource | null | undefined): LaneConfig {
 }
 
 /** Штрих между соседними полосами одного направления. Смена направления — жёлтая ось, не штрих. */
-export function laneGapOffsets(lanes: readonly Lane[]): number[] {
+export function laneGapOffsets(road: Road): number[] {
   const marks: number[] = [];
+  const lanes = road.lanes;
   for (let i = 0; i < lanes.length - 1; i++) {
     const left = lanes[i];
     const right = lanes[i + 1];

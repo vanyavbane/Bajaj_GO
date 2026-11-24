@@ -1,6 +1,6 @@
 /** Шаг байка без Three.js и без DOM. Кадр только применяет результат и рисует. */
 
-import { besideWithLane, type Lane } from './lanes.ts';
+import { besideWithLane, type Road } from './lanes.ts';
 
 function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
@@ -267,10 +267,10 @@ export interface TrafficStep {
 export function stepTrafficCar(
   car: TrafficMotion,
   dt: number,
-  lanes: readonly Lane[],
+  road: Road,
   flow?: 1 | -1,
 ): TrafficStep {
-  const here = lanes[car.laneIdx];
+  const here = road.lanes[car.laneIdx];
   const oncoming = flow == null ? here?.direction === 'against' : flow < 0;
   const move = worldMeters(car.speedKmh, dt);
   let lateralOffset = car.lateralOffset;
@@ -280,7 +280,7 @@ export function stepTrafficCar(
   const flashReactTimer = car.flashReactTimer > 0 ? car.flashReactTimer - dt : car.flashReactTimer;
 
   if (changingLane) {
-    const target = lanes[car.targetLaneIdx]?.offset ?? Number.NaN;
+    const target = road.lanes[car.targetLaneIdx]?.offset ?? Number.NaN;
     const diff = target - lateralOffset;
     lateralOffset += Math.sign(diff) * Math.min(Math.abs(diff), 4.2 * dt);
     steerAngle = clamp(diff * 0.25, -0.35, 0.35);
@@ -337,17 +337,17 @@ export function highbeamYieldLane(
   car: YieldCar,
   playerS: number,
   playerLane: number,
-  lanes: readonly Lane[],
-  laneWidth: number,
+  road: Road,
 ): number | null {
+  const laneWidth = road.laneWidth;
   if (!Number.isFinite(laneWidth) || laneWidth <= 0) {
     throw new Error(`laneWidth должен прийти из биома машины, получено ${laneWidth}`);
   }
-  const here = lanes[car.laneIdx];
+  const here = road.lanes[car.laneIdx];
   if (!here || here.direction !== 'with' || car.changingLane) return null;
   const distAhead = car.s - playerS;
   if (distAhead < 6 || distAhead > 60) return null;
   const limit = laneWidth * 0.5 + 0.15;
   if (Math.abs(car.lateralOffset - playerLane) >= limit) return null;
-  return besideWithLane(lanes, here.index)?.index ?? null;
+  return besideWithLane(road, here.index)?.index ?? null;
 }

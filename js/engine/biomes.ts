@@ -5,6 +5,7 @@
  * в конец, не в середину.
  */
 
+import { roadFrom, type LanePiece, type Road } from './lanes.ts';
 import { cos, sin, type Wave } from './profile.ts';
 
 export const TRAFFIC_MODELS = [
@@ -92,16 +93,9 @@ export interface BiomeDef {
   traffic: BiomeTraffic;
 }
 
-/** Полосы одного биома. `count` — все полосы, `oncomingCount` — сколько из них встречные. */
-export interface LaneLayout {
+/** Дорога биома. Полосы — то, из чего она собрана. Остальное повторяет их. */
+export interface LaneLayout extends Road {
   id: BiomeId;
-  count: number;
-  oncomingCount: number;
-  laneWidth: number;
-  width: number;
-  offsets: number[];
-  speeds: number[];
-  startLane: number;
 }
 
 /** Профиль дороги в одной точке s. */
@@ -471,20 +465,17 @@ export function transitionIndexes(): number[][] {
   return BIOMES.map((biome) => BIOME_NEXT[biome.id].map((id) => biomeIndexOf(id)));
 }
 
-/** Смещения полос от центра полотна. Крайняя попутная — старт байка. */
+/** Дорога биома, собранная из его полос. Крайняя правая — старт байка. */
 export function laneLayoutOf(biome: BiomeDef): LaneLayout {
-  const offsets: number[] = [];
   const half = (biome.lanes - 1) * 0.5;
-  for (let i = 0; i < biome.lanes; i++) offsets.push((i - half) * biome.laneWidth);
-  const startLane = offsets[biome.lanes - 1] ?? 0;
-  return {
-    id: biome.id,
-    count: biome.lanes,
-    oncomingCount: biome.oncoming,
-    laneWidth: biome.laneWidth,
-    width: biome.lanes * biome.laneWidth,
-    offsets,
-    speeds: biome.speeds.slice(),
-    startLane,
-  };
+  const pieces: LanePiece[] = [];
+  for (let i = 0; i < biome.lanes; i++) {
+    const speed = biome.speeds[i];
+    pieces.push({
+      offset: (i - half) * biome.laneWidth,
+      speed: typeof speed === 'number' ? speed : 0,
+      direction: i < biome.oncoming ? 'against' : 'with',
+    });
+  }
+  return { id: biome.id, ...roadFrom(pieces, biome.laneWidth) };
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { box, cylinder } from './geom.js';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
 import { carriageAt, carriageLat, drivenIsExit, laneMarks, ribbonApproachLat, ribbonTrailLat, riderCarriage, roadsAt, sideRibbon, solidMarks } from './engine/carriage.js';
-import { laneIndexByRoll, lanesOf, nearestLaneOffset } from './engine/lanes.js';
+import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
 import { rescaleSeat, seatAxis, seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
 import { keepInWindow } from './engine/stream.js';
 import { asphaltSpan, besidePoint, branchPick, exitClock, exitRibbonCenter, forkOccupancy, forkOffset, forkSpreadAt, groundAt, groundEdge, laneAnchor, laneMeters, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, shoulderHeight, shoulderLats, splitPick, stayOnAsphalt, vergeAt } from './engine/fork.js';
@@ -840,7 +840,7 @@ function dominantBiomeAtS(s) {
 /** Ближайшая попутная полоса к логическому смещению. */
 function nearestRunLane(lateralOffset, cfg = null) {
   const config = cfg || playerLive(G.playerS).lanes;
-  return nearestLaneOffset(lanesOf(config), lateralOffset, 'with');
+  return nearestLaneOffset(config, lateralOffset, 'with');
 }
 
 function weightOf(live, index) {
@@ -1315,17 +1315,17 @@ function riderLaneScaleAt(s) {
 
 /** Случайная попутная полоса дороги байка в точке s. */
 function randomRunLane(s) {
-  return laneIndexByRoll(lanesOf(drivenLanesAt(s)), 'with', Math.random());
+  return laneIndexByRoll(drivenLanesAt(s), 'with', Math.random());
 }
 
 /** Смещение остаётся, если это попутная полоса дороги байка. Иначе ближайшая такая полоса. */
 function holdDrivenLane(s, offset) {
-  const lanes = lanesOf(drivenLanesAt(s));
+  const road = drivenLanesAt(s);
   const lane = Number.isFinite(offset) ? offset : 0;
-  for (const item of lanes) {
+  for (const item of road.lanes) {
     if (item.direction === 'with' && Math.abs(item.offset - lane) < 0.05) return item.offset;
   }
-  return nearestLaneOffset(lanes, lane, 'with');
+  return nearestLaneOffset(road, lane, 'with');
 }
 
 function clearForkChoice(zone) {

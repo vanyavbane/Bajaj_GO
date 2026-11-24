@@ -6,7 +6,7 @@
  */
 
 import { exitLaneOpen, exitRibbonCenter, exitWidth, laneAnchor, type RoadFrame } from './fork.ts';
-import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, lanesGoing, lanesOf, nearestLaneOffset, type CarriageLayout, type Lane, type RoadWay } from './lanes.ts';
+import { carriageLanes, directionEdge, exitCarriage, laneGapOffsets, nearestLaneOffset, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
 import type { SeatKind } from './seat.ts';
 
@@ -122,9 +122,9 @@ export function drivenIsExit(exitAxis: number | null, drivenMid: number): boolea
 }
 
 /** Машина с ленты въезда садится на попутную полосу новой дороги и не разворачивается. */
-export function forwardArrival(lanes: readonly Lane[], lateral: number): number {
+export function forwardArrival(road: Road, lateral: number): number {
   const at = Number.isFinite(lateral) ? lateral : 0;
-  return nearestLaneOffset(lanes, at, 'with');
+  return nearestLaneOffset(road, at, 'with');
 }
 
 /** Очередь ремонта держит машину только на той дороге, где нарисована яма. */
@@ -133,9 +133,9 @@ export function repairQueue(carOnExit: boolean, holeOnExit: boolean): boolean {
 }
 
 /** На ленте въезда новая машина рождается на попутной полосе. На дороге бросок берёт любую. */
-export function birthLane(lanes: readonly Lane[], onRibbon: boolean, roll: number): number {
-  const pool = onRibbon ? lanesGoing(lanes, 'with') : lanes;
-  const use = pool.length > 0 ? pool : lanes;
+export function birthLane(road: Road, onRibbon: boolean, roll: number): number {
+  const pool = onRibbon ? road.lanes.filter((lane) => lane.direction === 'with') : road.lanes;
+  const use = pool.length > 0 ? pool : road.lanes;
   const n = use.length;
   if (n === 0) return 0;
   const raw = Number.isFinite(roll) ? Math.floor(roll) : 0;
@@ -150,9 +150,9 @@ export interface ArrivalMove {
 }
 
 /** На новой дороге машина доезжает до попутной полосы. Место на ленте не прыгает. */
-export function arrivalMove(lanes: readonly Lane[], lateral: number): ArrivalMove {
+export function arrivalMove(road: Road, lateral: number): ArrivalMove {
   const at = Number.isFinite(lateral) ? lateral : 0;
-  const target = forwardArrival(lanes, at);
+  const target = forwardArrival(road, at);
   const changing = Math.abs(target - at) > 0.06;
   return { offset: changing ? at : target, target, changing };
 }
@@ -173,10 +173,10 @@ export function carriageHolds(world: number, axis: number, half: number, slack =
 export function accidentArrival(
   wasOnExit: boolean,
   exitRemains: boolean,
-  lanes: readonly Lane[],
+  road: Road,
   lateral: number,
 ): number {
-  if (wasOnExit && !exitRemains) return forwardArrival(lanes, lateral);
+  if (wasOnExit && !exitRemains) return forwardArrival(road, lateral);
   return Number.isFinite(lateral) ? lateral : 0;
 }
 
@@ -288,7 +288,7 @@ export function ribbonTrailLat(
 /** Штрихи наследуются от полос этой проезжей части и стоят на её оси. */
 export function laneMarks(road: LiveCarriage): LaneMark[] {
   const scale = Number.isFinite(road.scale) && road.scale !== 0 ? road.scale : 1;
-  return laneGapOffsets(lanesOf(road.lanes)).map((offset) => ({
+  return laneGapOffsets(road.lanes).map((offset) => ({
     lat: road.axis + offset * scale,
     w: 1,
   }));
@@ -303,7 +303,7 @@ const SOLID_GAP = 0.22;
  * Линии не едут за клином развилки: середина — граница хода на оси этой дороги.
  */
 export function solidMarks(road: LiveCarriage): LaneMark[] {
-  const edge = directionEdge(lanesOf(road.lanes));
+  const edge = directionEdge(road.lanes);
   if (edge == null) return [];
   const scale = Number.isFinite(road.scale) && road.scale !== 0 ? road.scale : 1;
   const mid = road.axis + edge * scale;

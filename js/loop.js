@@ -1,6 +1,6 @@
 import { ribbonDirection } from './engine/carriage.js';
 import { exitEntryPull } from './engine/fork.js';
-import { defaultRunOffset, lanesOf, offsetDirection } from './engine/lanes.js';
+import { defaultRunOffset, offsetDirection } from './engine/lanes.js';
 import { jumpLaunchVy, playerHalfWidth, rampUnderBike, stepGroundedPose, stepJump, stepSpeed, stepSteer, worldMeters } from './engine/motion.js';
 import { meters, rubles } from './engine/money.js';
 import { HARD_LANDING_PITCH, HARD_LANDING_WOBBLE, distancePoints, hardLandingSpeed, jumpBonus, oncomingMultiplier, overflyMultiplier, scrapeSpeed } from './engine/rules.js';
@@ -83,7 +83,7 @@ export function initLoop() {
 
     // В меню ряд фиксирован: на трамплине и после него байк не перестраивается.
     if (!G.jumpState.airborne) {
-      const demoTarget = defaultRunOffset(lanesOf(G.riderLanesAt(G.playerS)));
+      const demoTarget = defaultRunOffset(G.riderLanesAt(G.playerS));
       G.laneOffset = lerp(G.laneOffset, demoTarget, dt * 2.5);
     }
     G.steerVisual = Math.sin(now * 0.0012) * 0.08;
@@ -317,7 +317,7 @@ export function initLoop() {
   function riderDirection() {
     return ribbonDirection(
       G.drivenIsExitAt(G.playerS),
-      offsetDirection(lanesOf(G.riderLanesAt(G.playerS)), G.laneOffset)
+      offsetDirection(G.riderLanesAt(G.playerS), G.laneOffset)
     );
   }
 

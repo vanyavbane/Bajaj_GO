@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { exitClock } from './engine/fork.js';
-import { lanesOf, offsetDirection } from './engine/lanes.js';
+import { offsetDirection } from './engine/lanes.js';
 import { G } from './state.js';
 
 /**
@@ -307,8 +307,7 @@ export function initForkLab() {
       const roads = G.roadsAt(s);
       const carriages = [roads.main, roads.exit].filter(Boolean);
       for (const carriage of carriages) {
-        const lanes = lanesOf(carriage.lanes);
-        for (const lane of lanes) {
+        for (const lane of carriage.lanes.lanes) {
           const lat = carriage.axis + lane.offset * carriage.scale;
           const pose = G.embedRoad(s, lat);
           const arrow = takeArrow(lane.direction === 'against');
@@ -360,8 +359,7 @@ export function initForkLab() {
 
   function readout() {
     const s = G.playerS;
-    const lanes = lanesOf(G.riderLanesAt(s));
-    const way = offsetDirection(lanes, G.laneOffset);
+    const way = offsetDirection(G.riderLanesAt(s), G.laneOffset);
     const where = way === 'against' ? 'встречная' : 'попутная';
     const lat = G.riderLatAt(s);
     const surface = G.drivenIsExitAt(s) ? 'на съезде' : 'на шоссе';

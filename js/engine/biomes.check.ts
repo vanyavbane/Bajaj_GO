@@ -1,5 +1,5 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
-import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, lanesOf, nearestLaneOffset, offsetDirection, outerLane } from './lanes.ts';
+import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, exitCarriage, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
 import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneMeters, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, roadLateral, sampleRoad, splitPick } from './fork.ts';
 
@@ -28,6 +28,27 @@ const city = laneLayoutOf(BIOMES[0]!);
 const mountain = laneLayoutOf(BIOMES[3]!);
 const mkad = laneLayoutOf(BIOMES[4]!);
 const embankment = laneLayoutOf(BIOMES[5]!);
+assert(city.lanes.length === city.count, 'город собран из своих полос');
+assert(city.lanes.every((lane, i) => lane.index === i && lane.offset === city.offsets[i] && lane.speed === city.speeds[i]), 'списки города повторяют его полосы');
+assert(city.lanes.filter((lane) => lane.home === 'against').length === city.oncomingCount, 'встречные города — полосы, собранные навстречу');
+const swapped = roadFrom([
+  { offset: 7.125, speed: 55, direction: 'with' },
+  { offset: -7.125, speed: 40, direction: 'against' },
+  { offset: 2.375, speed: 70, direction: 'with' },
+  { offset: -2.375, speed: 60, direction: 'against' },
+], 4.75);
+assert(swapped.lanes.map((lane) => lane.offset).join() === city.offsets.join(), 'дорога собирается из полос слева направо');
+assert(swapped.way === 'two-way' && swapped.oncomingCount === 2, 'ход дороги читается из её полос');
+const odd = roadFrom([
+  { offset: 4, speed: 30, direction: 'against' },
+  { offset: -4, speed: 30, direction: 'with' },
+], 4);
+assert(odd.way === 'two-way' && odd.oncomingCount === 0, 'встречная справа не становится левым рядом');
+assert(odd.lanes[0]?.direction === 'with' && odd.lanes[1]?.direction === 'against' && odd.lanes[1]?.home === 'against', 'направление полосы читается у её дороги');
+const folded = carriageLanes({ ...odd, biomeOncoming: odd.oncomingCount }, 'one-way');
+assert(folded.lanes.every((lane) => lane.direction === 'with') && folded.lanes[1]?.home === 'against', 'односторонний ход пускает всех вперёд и помнит сборку');
+const unfolded = carriageLanes(folded, 'two-way');
+assert(unfolded.lanes[1]?.direction === 'against', 'возврат двусторонней отдаёт полосе её направление');
 assert(city.count === 4 && city.oncomingCount === 2, 'город: 4 полосы, 2 встречные');
 assert(mountain.count === 2 && mountain.oncomingCount === 1, 'горы: 2 полосы, 1 встречная');
 assert(mkad.count === 8 && mkad.oncomingCount === 4 && mkad.width === 34.4, 'МКАД: 8 полос по 4.3 м');
@@ -241,41 +262,43 @@ assert(forkOccupancy(FORK_SPREAD, 'run', 1, openForkEdges) === FORK_SPREAD, 'н�
 const dead = branchEdges(10, 0);
 assert(Math.abs(landOnCarriage(0, dead, 32, 1) - 9.3) < 1e-9, 'пропавшая лента сажает байка на край прямой');
 assert(landOnCarriage(0, dead, 2, 1) === 2, 'байк, который уже на прямой, остаётся на месте');
-const oneWay = carriageLanes({ oncomingCount: 2, offsets: [-6, -2, 2, 6] }, 'one-way');
+const laid = roadFrom([
+  { offset: -6, speed: 36, direction: 'against' },
+  { offset: -2, speed: 36, direction: 'against' },
+  { offset: 2, speed: 36, direction: 'with' },
+  { offset: 6, speed: 36, direction: 'with' },
+], 4);
+const oneWay = carriageLanes(laid, 'one-way');
 assert(oneWay.way === 'one-way' && oneWay.oncomingCount === 0 && oneWay.biomeOncoming === 2, 'односторонняя помнит, какие полосы были встречными');
 const again = carriageLanes(oneWay, 'one-way');
 assert(again.way === 'one-way' && again.oncomingCount === 0 && again.biomeOncoming === 2, 'повтор не забывает встречные полосы биома');
 const back = carriageLanes(oneWay, 'two-way');
 assert(back.way === 'two-way' && back.oncomingCount === 2, 'на двусторонней встречные биома возвращаются');
-const cityLanes = lanesOf({ ...city, way: 'two-way' });
-assert(cityLanes.length === city.count, 'у города полоса на каждое смещение');
-assert(cityLanes.every((lane) => (lane.direction === 'against') === (lane.side === 'left')), 'встречные полосы города — его левая сторона');
-assert(cityLanes.every((lane) => (lane.direction === 'with') === (lane.side === 'right')), 'попутные полосы города — его правая сторона');
-const exitLanes = lanesOf(exitCarriage(city.id));
-assert(exitLanes.length === 1 && exitLanes[0]?.direction === 'with', 'съезд — одна полоса вперёд');
-assert(directionEdge(exitLanes) == null, 'у съезда нет границы встречного хода');
-assert(outerLane(exitLanes, 'right', 'with')?.offset === exitLanes[0]?.offset, 'единственная полоса съезда едет вперёд');
-const forward = lanesOf(oneWay);
-assert(forward.every((lane) => lane.direction === 'with'), 'односторонняя не оставляет встречного направления');
-assert(forward[0]?.side === 'left' && forward[forward.length - 1]?.side === 'right', 'стороны односторонней дороги остаются');
-const restored = lanesOf(back);
-assert(restored[0]?.direction === 'against' && restored[0]?.side === 'left', 'возврат двусторонней снова ставит левую полосу навстречу');
-assert(defaultRunOffset(cityLanes) === cityLanes.find((lane) => lane.direction === 'with')?.offset, 'попутная по умолчанию — ближайшая к оси, не встречная');
-assert(defaultRunOffset(exitLanes) === 0, 'на съезде попутная полоса — его единственная');
-assert(nearestLaneOffset(cityLanes, -100, 'with') === defaultRunOffset(cityLanes), 'поиск попутной не сажает байка на встречную');
-assert(besideWithLane(cityLanes, 2)?.index === 3 && besideWithLane(cityLanes, 3)?.index === 2, 'попутная уступает соседу своего направления');
-assert(besideWithLane(cityLanes, 0) == null, 'встречная от дальнего света не перестраивается');
-assert(offsetDirection(cityLanes, -8) === 'against' && offsetDirection(cityLanes, 8) === 'with', 'левее границы ход встречный, правее попутный');
-assert(offsetDirection(exitLanes, -2) === 'with', 'на съезде левая полоса не даёт двойных очков встречки');
-const meetLanes = lanesOf({ offsets: [-6, -2, 2, 6], oncomingCount: 2, way: 'two-way' });
+assert(city.lanes.length === city.count, 'у города полоса на каждое смещение');
+assert(city.lanes.every((lane) => (lane.direction === 'against') === (lane.side === 'left')), 'встречные полосы города — его левая сторона');
+assert(city.lanes.every((lane) => (lane.direction === 'with') === (lane.side === 'right')), 'попутные полосы города — его правая сторона');
+const exitRoad = exitCarriage(city.id);
+assert(exitRoad.lanes.length === 1 && exitRoad.lanes[0]?.direction === 'with', 'съезд — одна полоса вперёд');
+assert(directionEdge(exitRoad) == null, 'у съезда нет границы встречного хода');
+assert(outerLane(exitRoad, 'right', 'with')?.offset === exitRoad.lanes[0]?.offset, 'единственная полоса съезда едет вперёд');
+assert(oneWay.lanes.every((lane) => lane.direction === 'with'), 'односторонняя не оставляет встречного направления');
+assert(oneWay.lanes[0]?.side === 'left' && oneWay.lanes[oneWay.lanes.length - 1]?.side === 'right', 'стороны односторонней дороги остаются');
+assert(back.lanes[0]?.direction === 'against' && back.lanes[0]?.side === 'left', 'возврат двусторонней снова ставит левую полосу навстречу');
+assert(defaultRunOffset(city) === city.lanes.find((lane) => lane.direction === 'with')?.offset, 'попутная по умолчанию — ближайшая к оси, не встречная');
+assert(defaultRunOffset(exitRoad) === 0, 'на съезде попутная полоса — его единственная');
+assert(nearestLaneOffset(city, -100, 'with') === defaultRunOffset(city), 'поиск попутной не сажает байка на встречную');
+assert(besideWithLane(city, 2)?.index === 3 && besideWithLane(city, 3)?.index === 2, 'попутная уступает соседу своего направления');
+assert(besideWithLane(city, 0) == null, 'встречная от дальнего света не перестраивается');
+assert(offsetDirection(city, -8) === 'against' && offsetDirection(city, 8) === 'with', 'левее границы ход встречный, правее попутный');
+assert(offsetDirection(exitRoad, -2) === 'with', 'на съезде левая полоса не даёт двойных очков встречки');
 const meet = stepTrafficCar(
   { laneIdx: 0, targetLaneIdx: 0, lateralOffset: -6, s: 10, speedKmh: 36, changingLane: false, flashReactTimer: 0, steerAngle: 0 },
-  0.5, meetLanes,
+  0.5, laid,
 );
 assert(meet.s < 10 && meet.oncoming, 'на двусторонней встречная едет навстречу');
 const merged = stepTrafficCar(
   { laneIdx: 0, targetLaneIdx: 2, lateralOffset: -6, s: 10, speedKmh: 36, changingLane: true, flashReactTimer: 0, steerAngle: 0 },
-  0.5, lanesOf({ offsets: [-6, -2, 2, 6], oncomingCount: 0, way: 'one-way' }), 1,
+  0.5, oneWay, 1,
 );
 assert(merged.s > 10 && !merged.oncoming, 'на съезде бывшая встречная едет вперёд и перестраивается');
 
