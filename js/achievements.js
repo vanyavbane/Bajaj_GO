@@ -15,6 +15,8 @@ export const ACHIEVEMENT_THRESHOLDS = {
   mkadWarrior: [5000, 20000, 60000, 150000, 400000], // пробег МКАД, метры
   speedDemon: [80, 120, 160, 220, 300], // максимальная скорость, км/ч
   leftTurner: [1, 10, 30, 75, 150], // повороты налево на развязке
+  wheelieRider: [200, 1000, 3000, 8000, 20000], // TODO: подобрать - проезд на заднем колесе, метры
+  stoppieRider: [200, 1000, 3000, 8000, 20000], // TODO: подобрать - проезд на переднем колесе, метры
 };
 
 export const ACHIEVEMENT_DEFS = [
@@ -33,6 +35,8 @@ export const ACHIEVEMENT_DEFS = [
   { id: 'mkadWarrior', title: 'МКАД-ый воин', description: 'Пробег по биому «МКАД».', icon: '🛣️', type: 'counter', stat: 'biomeDistanceM.mkad', unit: 'm' },
   { id: 'speedDemon', title: 'Бл#ь я второй', description: 'Максимальная скорость на любом мотоцикле.', icon: '🏁', type: 'counter', stat: 'maxSpeedKmh', unit: 'kmh' },
   { id: 'leftTurner', title: 'Ходок', description: 'Выбор левого поворота на развязке.', icon: '⬅️', type: 'counter', stat: 'forkLeftChoices', unit: '' },
+  { id: 'wheelieRider', title: 'На козла', description: 'Проезд на заднем колесе.', icon: '🐐', type: 'counter', stat: 'wheelieDistanceM', unit: 'm' },
+  { id: 'stoppieRider', title: 'Стоппи', description: 'Проезд на переднем колесе.', icon: '🛑', type: 'counter', stat: 'stoppieDistanceM', unit: 'm' },
   { id: 'traveler', title: 'Путешественник', description: 'Посетить все биомы.', icon: '🧭', type: 'boolean', stat: 'allBiomesVisited' },
 ];
 

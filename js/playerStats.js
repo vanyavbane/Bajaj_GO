@@ -47,6 +47,8 @@ function normalizeStats(raw) {
 
   return {
     flightDistanceM: toNonNegativeNum(src.flightDistanceM, 0),
+    wheelieDistanceM: toNonNegativeNum(src.wheelieDistanceM, 0),
+    stoppieDistanceM: toNonNegativeNum(src.stoppieDistanceM, 0),
     maxCombo: toNonNegativeInt(src.maxCombo, 0),
     maxSpeedKmh: toNonNegativeNum(src.maxSpeedKmh, 0),
     stoRepairs: toNonNegativeInt(src.stoRepairs, 0),
@@ -146,6 +148,20 @@ export function initPlayerStats() {
     markDirty();
   }
 
+  function trackWheelieDistance(meters) {
+    const n = toNonNegativeNum(meters, 0);
+    if (n <= 0) return;
+    stats.wheelieDistanceM += n;
+    markDirty();
+  }
+
+  function trackStoppieDistance(meters) {
+    const n = toNonNegativeNum(meters, 0);
+    if (n <= 0) return;
+    stats.stoppieDistanceM += n;
+    markDirty();
+  }
+
   function trackStoRepair() { stats.stoRepairs += 1; markDirty(); }
   function trackFuelTowCall() { stats.fuelTowCalls += 1; markDirty(); }
   function trackFuelTowRefusal() { stats.fuelTowRefusals += 1; markDirty(); }
@@ -202,6 +218,8 @@ export function initPlayerStats() {
   G.trackMaxCombo = trackMaxCombo;
   G.trackMaxSpeed = trackMaxSpeed;
   G.trackFlightDistance = trackFlightDistance;
+  G.trackWheelieDistance = trackWheelieDistance;
+  G.trackStoppieDistance = trackStoppieDistance;
   G.trackStoRepair = trackStoRepair;
   G.trackFuelTowCall = trackFuelTowCall;
   G.trackFuelTowRefusal = trackFuelTowRefusal;

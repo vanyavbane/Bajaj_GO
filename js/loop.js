@@ -320,6 +320,10 @@ export function initLoop() {
     G.playerS += forwardMeters;
     G.distance += (G.speed * dt) / 3600;
     if (G.jumpState.airborne && G.trackFlightDistance) G.trackFlightDistance(forwardMeters);
+    if (!G.jumpState.airborne && G.stunt) {
+      if (G.stunt.mode === 'wheelie' && G.trackWheelieDistance) G.trackWheelieDistance(forwardMeters);
+      if (G.stunt.mode === 'stoppie' && G.trackStoppieDistance) G.trackStoppieDistance(forwardMeters);
+    }
     if (G.trackMaxSpeed) G.trackMaxSpeed(G.speed);
 
     // 3.1 Экономика: расход топлива, износ деталей и таймер заказа
