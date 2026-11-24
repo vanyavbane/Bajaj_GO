@@ -28,22 +28,22 @@ export interface ExitRecipe {
   choices: readonly [readonly RoadBlock[], readonly RoadBlock[]];
 }
 
-/** Правый съезд зоны. Длины цепочек совпадают, поэтому стык не зависит от выбора. */
+/** Правый съезд зоны: +1 полоса за 50 м до развилки, затем чистое отделение. */
 export const RIGHT_EXIT: ExitRecipe = {
   id: 'right-exit',
   spread: 22,
   approach: [
-    { id: 'split', kind: 'split', length: 80 },
-    { id: 'fork', kind: 'fork', length: 480 },
+    { id: 'split', kind: 'split', length: 50 },
+    { id: 'fork', kind: 'fork', length: 140 },
   ],
   choices: [
     [
-      { id: 'seal-exit', kind: 'seal', length: 160 },
-      { id: 'ahead', kind: 'road', length: 180 },
+      { id: 'seal-exit', kind: 'seal', length: 120 },
+      { id: 'ahead', kind: 'road', length: 80 },
     ],
     [
-      { id: 'seal-main', kind: 'seal', length: 160 },
-      { id: 'arrived', kind: 'road', length: 180 },
+      { id: 'seal-main', kind: 'seal', length: 120 },
+      { id: 'arrived', kind: 'road', length: 80 },
     ],
   ],
 };
