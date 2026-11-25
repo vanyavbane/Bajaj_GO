@@ -1071,12 +1071,6 @@ export function initUi() {
           label: 'Настройки',
           trail: G.graphicsLabel,
           trailOn: G.graphics.preset === 'sharp'
-        }),
-        button({
-          id: 'mm-sound',
-          icon: 'vinyl',
-          label: 'Настройки звука',
-          trail: G.audio && !G.audio.settings.soundOn ? 'Выкл' : `${G.audio ? G.audio.settings.master : 80}%`
         })
       ].join(''),
       balance: currency({ id: 'bank', label: 'Баланс', value: rubles(G.bankPoints) }),
@@ -1094,7 +1088,6 @@ export function initUi() {
     $('mm-outfit').addEventListener('click', renderOutfit);
     $('mm-achievements').addEventListener('click', renderAchievements);
     $('mm-settings').addEventListener('click', () => renderSettings('graphics', 'menu'));
-    $('mm-sound').addEventListener('click', () => renderSettings('sound', 'menu'));
     $('mm-cam-settings').addEventListener('click', () => {
       G.renderCameraSettings(renderMainMenu);
     });
