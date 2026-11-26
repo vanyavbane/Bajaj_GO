@@ -78,6 +78,7 @@ const bridgeFrame: ReturnType<typeof sampleRoad> = {
   world: bridgeEdges(),
   phase: { kind: 'settle', t: 1, open: 0 },
   chosen: 0,
+  tail: 0,
   block: null,
 };
 assert(readExit(bridgeFrame).ribbon == null, 'на мосту нет ленты съезда из правой половины полотна');

@@ -94,6 +94,8 @@ export function sampleRide(
   const playerCenter = playerOrigin + rideCenter(player, onRibbon);
   const world = Number.isFinite(playerWorld) ? playerWorld : playerCenter;
   const along = (world - playerCenter) * f;
+  // Пока кадр позади ещё не стал дорогой, точка едет по линии байка, а не по
+  // midline старого кадра: камера не дёргается на стыке ленты и хвоста.
   if (player.life === 'settle' && sample.life !== 'settle') return playerCenter + along;
   return sampleOrigin + rideCenter(sample, onRibbon && sample.ribbon != null) + along;
 }

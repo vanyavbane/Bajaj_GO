@@ -337,6 +337,8 @@ export interface RoadFrame {
   world: AsphaltEdges;
   phase: ExitPhase;
   chosen: ChosenSide;
+  /** Сторона развилки позади: хвост двух дорог после конца рецепта. 0 — хвоста нет. */
+  tail: ChosenSide;
   /** Блок рецепта в этой точке. null — съезда здесь нет. */
   block: PlacedBlock | null;
 }
@@ -350,6 +352,8 @@ export interface RoadQuery {
   endWeight?: number;
   /** Полуширина дороги, в которую приходит въезд. Без числа это ширина самого съезда. */
   arriveHalf?: number;
+  /** Развилка позади: обе дороги продолжаются и после конца рецепта. */
+  tailSide?: ChosenSide;
 }
 
 function finiteOrigin(value: number): number {
@@ -373,13 +377,19 @@ export function sampleRoad(query: RoadQuery): RoadFrame {
   const phase = exitPhase(query.forkDistance);
   const origin = finiteOrigin(query.baseOrigin);
   const arrive = typeof query.arriveHalf === 'number' ? query.arriveHalf : EXIT_LANE_HALF;
-  const local = blockEdges(query.half, block, chosen, query.endWeight ?? 1, arrive);
+  // Рецепт кончается на границе зоны, но две дороги за ним не сливаются:
+  // активная стоит на оси маршрута, невыбранная продолжается в свою сторону.
+  const tail = block ? 0 : (query.tailSide === 1 || query.tailSide === -1 ? query.tailSide : 0);
+  const local = tail
+    ? handoffBranches(query.half, tail, 1, arrive)
+    : blockEdges(query.half, block, chosen, query.endWeight ?? 1, arrive);
   return {
     origin,
     local,
     world: translateEdges(local, origin),
     phase,
-    chosen,
+    chosen: tail || chosen,
+    tail,
     block,
   };
 }

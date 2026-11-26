@@ -155,6 +155,12 @@ export interface EmbedQuery {
   /** Путь уже ведёт эта точка, а не лента съезда. Игра держит это выключенным: съезд в дорогу не превращается. */
   ownedHere: boolean;
   /**
+   * Между лентами есть живой клин. После конца рецепта он пустой, и курс
+   * не должен сворачивать в него. По умолчанию клин есть — так работают чистые
+   * геометрические проверки.
+   */
+  gore?: boolean;
+  /**
    * Полосы ещё едут к ленте. `t` — тот же 0…1, что сдвигает laneAnchor.
    * Точка у оси едет этим t, а не перескакивает на курс съезда у кромки.
    * Нет поля — курс по-прежнему смотрит только на кромки.
@@ -289,6 +295,7 @@ export function createVectorField() {
     leftInner: number;
     leftOuter: number;
     ownedHere: boolean;
+    gore: boolean;
     branched: boolean;
     peel: number;
     separated: number;
@@ -299,6 +306,7 @@ export function createVectorField() {
 
   function heading(query: Omit<EmbedQuery, 'lat'>, spline: (s: number) => SplineSample): Heading {
     const { s, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
+    const gore = query.gore !== false;
     const givenHold = query.hold;
     const width = edges.rightOuter - edges.rightInner;
     const gap = edges.rightInner - edges.leftInner;
@@ -325,6 +333,7 @@ export function createVectorField() {
       leftInner: edges.leftInner,
       leftOuter: edges.leftOuter,
       ownedHere,
+      gore,
       branched: owned.length > 0,
       peel,
       separated,
@@ -398,7 +407,9 @@ export function createVectorField() {
     if (onRight && head.right) return ribbonPose(head, head.right, lat);
     const gap = head.rightInner - head.leftInner;
     const open = Math.max(0, Math.min(1, head.width / 4));
-    if (!head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < exitCourseStart(ribbonEdge)) {
+    // После разделения клин пустой: камера не должна поворачивать в него,
+    // даже если её боковая точка лежит между полными лентами.
+    if (head.gore && !head.ownedHere && head.right && gap > 0.8 && open > 0 && lat > head.leftInner && lat < exitCourseStart(ribbonEdge)) {
       const u = (lat - head.leftInner) / gap;
       const main = onParent(head, head.leftInner);
       const exitEdge = ribbonPose(head, head.right, head.rightInner);
