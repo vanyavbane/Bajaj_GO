@@ -205,21 +205,12 @@ export function initEmbankment() {
     pedHead: instance(unitBox, mats.pedHead, 180, false),
     boatHull: instance(unitBox, mats.boat, 60, false),
     boatCabin: instance(unitBox, mats.boatBlue, 60, false),
-    bank: instance(unitBox, mats.bank, 700, false)
+    bank: instance(unitBox, mats.bank, 700, false),
+    // Река и брусчатка — не одно полотно на 4200 м, а короткие сегменты
+    // вдоль дороги: каждый со своим курсом и своей прозрачностью биома.
+    river: instance(new THREE.PlaneGeometry(1, 1), mats.water, 256, false),
+    cobble: instance(new THREE.PlaneGeometry(1, 1), mats.cobble, 256, false)
   };
-
-  /* ---------- Река и брусчатка: два длинных полотна ---------- */
-  const river = new THREE.Mesh(new THREE.PlaneGeometry(220, 4200), mats.water);
-  river.rotation.x = -Math.PI / 2;
-  river.position.y = CFG.WATER_Y;
-  river.visible = false;
-  G.scene.add(river);
-
-  const cobble = new THREE.Mesh(new THREE.PlaneGeometry(9, 4200), mats.cobble);
-  cobble.rotation.x = -Math.PI / 2;
-  cobble.position.y = 0.06;
-  cobble.visible = false;
-  G.scene.add(cobble);
 
   /* ---------- Мост через реку ---------- */
   function buildBridge() {
@@ -251,12 +242,15 @@ export function initEmbankment() {
   const UP = new THREE.Vector3(0, 1, 0);
   const qYaw = new THREE.Quaternion();
 
-  /** Плоскость, лежащая вдоль дороги: позиция от кромки, поворот по курсу. */
-  function placeFlat(obj, s, lat, y) {
+  /** Короткий сегмент полотна: своя точка, свой курс, свой масштаб. */
+  function putFlat(pool, s, lat, y, width, length, counter) {
+    if (counter.value >= pool.instanceMatrix.count) return;
     const pose = G.embedRoad(s, lat);
-    obj.position.set(pose.x, y, pose.z);
-    obj.rotation.order = 'YXZ';
-    obj.rotation.set(-Math.PI / 2, Math.atan2(-pose.fx, -pose.fz), 0);
+    dummy.position.set(pose.x, y, pose.z);
+    dummy.rotation.set(-Math.PI / 2, Math.atan2(-pose.fx, -pose.fz), 0, 'YXZ');
+    dummy.scale.set(width, length, 1);
+    dummy.updateMatrix();
+    pool.setMatrixAt(counter.value++, dummy.matrix);
   }
 
   function put(pool, s, edge, lat, yOff, sx, sy, sz, yaw, counter) {
@@ -363,6 +357,17 @@ export function initEmbankment() {
       const flank = G.flankAt(s, 1, depth);
       if (flank) put(pools.bank, s, flank.edge, flank.lat, h * 0.5 - 2, w, h, 14, 0, counters.bank);
     }
+
+    // Река и брусчатка: по сегменту на чанк, с лёгким перекрытием, чтобы не
+    // было щелей на стыках. Длина убывает вместе с весом биома, поэтому
+    // полотно обрывается на границе, а не тянется в следующий биом.
+    const flatS = startS + CFG.CHUNK_M * 0.5;
+    const flatK = embK(flatS);
+    if (flatK > 0.02) {
+      const flatLen = CFG.CHUNK_M * 1.08 * flatK;
+      putFlat(pools.river, flatS, CFG.RIVER_LAT, CFG.WATER_Y, 220 * flatK, flatLen, counters.river);
+      putFlat(pools.cobble, flatS, 13, 0.06, 9 * flatK, flatLen, counters.cobble);
+    }
   }
 
   /* ---------- Пешеходы и катера: отдельные пулы на чанк ---------- */
@@ -438,16 +443,8 @@ export function initEmbankment() {
     mats.lampGlow.emissiveIntensity = (0.25 + 0.9 * nightGlow) * Math.max(op, visK);
     const visible = visK > 0.001;
     for (const pool of Object.values(pools)) pool.visible = visible && pool.count > 0;
-    river.visible = visible;
-    cobble.visible = visible;
-    const flatScale = Math.max(0.001, visK);
-    river.scale.set(flatScale, 1, flatScale);
-    cobble.scale.set(flatScale, 1, flatScale);
-
-    // Река и брусчатка едут с игроком: бесконечная лента вдоль дороги.
+    // Полотна разложены сегментами в rebuild(); здесь только рябь воды.
     if (visible) {
-      placeFlat(river, G.playerS + 800, CFG.RIVER_LAT, CFG.WATER_Y);
-      placeFlat(cobble, G.playerS + 800, 13, 0.06);
       waterTex.offset.x += dt * 0.012;
       waterTex.offset.y += dt * 0.02;
     }
