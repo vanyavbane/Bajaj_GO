@@ -143,8 +143,11 @@ export function initLocationEditor() {
   let selectionBox = null, selectionRing = null;
   let hiddenUi = [];
   let selectedSceneKey = null;
+  let editorTab = 'objects'; // objects | map
+  let sceneSearch = '';
   let overrides = {};
   const overrideRuntime = new Map();
+  const thumbCache = new Map();
   const qA = new THREE.Quaternion(), qB = new THREE.Quaternion();
   let raycaster = new THREE.Raycaster();
   let pointer = new THREE.Vector2();
@@ -401,10 +404,12 @@ export function initLocationEditor() {
     selectedId = id;
     syncSelectionVisual(); renderUI();
   }
-  function selectScene(key) {
-    if (!findSceneObjectByKey(key)) return;
+  function selectScene(key, focus = false) {
+    const obj = findSceneObjectByKey(key);
+    if (!obj) return;
     selectedId = null;
     selectedSceneKey = key;
+    if (focus) { camTarget.set(obj.position.x, 0, obj.position.z); updateEditorCam(); }
     syncSelectionVisual(); renderUI();
   }
 
@@ -894,6 +899,133 @@ export function initLocationEditor() {
     return [deg(e.x), deg(e.y), deg(e.z)];
   }
 
+  function sceneObjectLabel(key) {
+    const parts = String(key || '').split(':');
+    if (parts[0] === 'roadside') {
+      const names = {
+        leftLamp: 'Левый фонарь', rightLamp: 'Правый фонарь',
+        leftProp: 'Левое сооружение', rightProp: 'Правое сооружение',
+        billboard: 'Билборд', portal: 'Портал / знак'
+      };
+      return `${names[parts[2]] || 'Объект'} · слот ${parts[1]}`;
+    }
+    if (parts[0] === 'scenery') {
+      const biome = G.BIOMES?.[Number(parts[3])];
+      return `${biome?.name || 'Биом'} · ${parts[2] === 'L' ? 'лево' : 'право'} · слот ${parts[1]}`;
+    }
+    if (parts[0] === 'mega') return `Крупная конструкция · ${parts[1]}`;
+    if (parts[0] === 'ped') return `Пешеход · ${parts[1]}`;
+    return String(key || 'Объект');
+  }
+
+  function listSceneObjects() {
+    const out = [];
+    const push = (key, obj) => {
+      if (!obj) return;
+      out.push({ key, obj, label: sceneObjectLabel(key), dist: obj.position.distanceTo(camTarget) });
+    };
+    const slots = G.roadsideSlots || [];
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      push(`roadside:${i}:leftLamp`, s.leftLamp);
+      push(`roadside:${i}:rightLamp`, s.rightLamp);
+      push(`roadside:${i}:leftProp`, s.leftProp);
+      push(`roadside:${i}:rightProp`, s.rightProp);
+      if (s.billboard) push(`roadside:${i}:billboard`, s.billboard.group);
+      if (s.portal) push(`roadside:${i}:portal`, s.portal.group);
+    }
+    const scenery = G.biomeScenery || [];
+    for (let i = 0; i < scenery.length; i++) {
+      const slot = scenery[i];
+      for (const entry of slot.left || []) push(`scenery:${i}:L:${entry.biome}`, entry.group);
+      for (const entry of slot.right || []) push(`scenery:${i}:R:${entry.biome}`, entry.group);
+    }
+    const mega = G.megaStructures || [];
+    for (let i = 0; i < mega.length; i++) push(`mega:${i}`, mega[i]);
+    const peds = G.pedestrians || [];
+    for (let i = 0; i < peds.length; i++) push(`ped:${i}`, peds[i]?.group);
+    out.sort((a, b) => a.dist - b.dist);
+    return out;
+  }
+
+  function sceneThumbnail(obj, key) {
+    if (thumbCache.has(key)) return thumbCache.get(key);
+    let url = '';
+    let rt = null, captured = false;
+    const hidden = [], tempLights = [];
+    let savedTarget = null, savedBg = null, savedColor = null, savedAlpha = 1, savedExposure = 1, visibleWas = null;
+    try {
+      rt = new THREE.WebGLRenderTarget(96, 96, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
+      rt.texture.colorSpace = THREE.SRGBColorSpace;
+      const box = new THREE.Box3().setFromObject(obj);
+      if (!box.isEmpty()) {
+        const center = box.getCenter(new THREE.Vector3());
+        const radius = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 0.5);
+        const cam = new THREE.PerspectiveCamera(38, 1, Math.max(0.05, radius * 0.02), radius * 30);
+        cam.position.copy(center).add(new THREE.Vector3(radius * 1.25, radius * 0.9, radius * 1.55));
+        cam.lookAt(center);
+        cam.updateProjectionMatrix();
+
+        let root = obj;
+        while (root.parent && root.parent !== G.scene) root = root.parent;
+        for (const child of G.scene.children) {
+          if (child === root) continue;
+          hidden.push([child, child.visible]);
+          child.visible = false;
+        }
+        visibleWas = obj.visible;
+        obj.visible = true;
+
+        const ambient = new THREE.AmbientLight(0xffffff, 3.5);
+        const keyLight = new THREE.DirectionalLight(0xffffff, 4.5);
+        keyLight.position.copy(center).add(new THREE.Vector3(radius, radius * 2, radius));
+        tempLights.push(ambient, keyLight);
+        G.scene.add(ambient, keyLight);
+
+        savedTarget = G.renderer.getRenderTarget();
+        savedBg = G.scene.background;
+        savedColor = new THREE.Color();
+        G.renderer.getClearColor(savedColor);
+        savedAlpha = G.renderer.getClearAlpha();
+        savedExposure = G.renderer.toneMappingExposure;
+        captured = true;
+
+        G.scene.background = new THREE.Color(0x101824);
+        G.renderer.toneMappingExposure = Math.max(savedExposure, 1.6);
+        G.renderer.setRenderTarget(rt);
+        G.renderer.setClearColor(0x101824, 1);
+        G.renderer.clear();
+        G.renderer.render(G.scene, cam);
+
+        const px = new Uint8Array(96 * 96 * 4);
+        G.renderer.readRenderTargetPixels(rt, 0, 0, 96, 96, px);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 96;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const img = ctx.createImageData(96, 96);
+          for (let y = 0; y < 96; y++) img.data.set(px.subarray((95 - y) * 96 * 4, (96 - y) * 96 * 4), y * 96 * 4);
+          ctx.putImageData(img, 0, 0);
+          url = canvas.toDataURL('image/png');
+        }
+      }
+    } catch { url = ''; }
+    finally {
+      if (captured) {
+        G.renderer.setRenderTarget(savedTarget);
+        G.renderer.setClearColor(savedColor, savedAlpha);
+        G.renderer.toneMappingExposure = savedExposure;
+        G.scene.background = savedBg;
+      }
+      for (const light of tempLights) G.scene.remove(light);
+      if (visibleWas !== null) obj.visible = visibleWas;
+      for (const [child, visible] of hidden) child.visible = visible;
+      rt?.dispose?.();
+    }
+    thumbCache.set(key, url);
+    return url;
+  }
+
   function renderUI() {
     if (!rootEl) return;
     const sel = selected();
@@ -965,6 +1097,47 @@ export function initLocationEditor() {
         <span>${escapeHtml(key)}</span><small>${overrides[key].hidden ? 'скрыт' : 'правка'}</small>
       </button>`).join('');
 
+    const q = sceneSearch.trim().toLowerCase();
+    const sceneEntries = editorTab === 'map'
+      ? listSceneObjects().filter(e => !q || e.key.toLowerCase().includes(q) || e.label.toLowerCase().includes(q))
+      : [];
+    const sceneTilesHtml = sceneEntries.slice(0, 48).map(e => {
+      const thumb = sceneThumbnail(e.obj, e.key);
+      const mark = e.key.startsWith('roadside:') ? 'Д' : e.key.startsWith('scenery:') ? 'Б'
+        : e.key.startsWith('mega:') ? 'К' : 'П';
+      const badge = overrides[e.key]?.hidden ? 'скрыт' : overrides[e.key] ? 'правка' : '';
+      return `<button class="le-scene-tile ${e.key === selectedSceneKey ? 'is-on' : ''}" data-selscene="${escapeAttr(e.key)}" title="${escapeAttr(e.label)}">
+        <span class="le-thumb">${thumb ? `<img src="${escapeAttr(thumb)}" alt="">` : `<span class="le-thumb-fallback">${mark}</span>`}</span>
+        <span class="le-tile-name">${escapeHtml(e.label)}</span>
+        <small>${escapeHtml(e.key)}</small>
+        ${badge ? `<small class="le-badge">${badge}</small>` : ''}
+      </button>`;
+    }).join('');
+
+    const objectsTabHtml = editorTab === 'objects' ? `
+      <div class="le-sec">
+        <div class="le-sec-title le-row-between"><span>Каталог объектов</span><button data-act="toggle-catalog">${catalogOpen?'Скрыть':'Показать'}</button></div>
+        ${catalogOpen ? `<div class="le-catalog">${catalogHtml}</div>` : `<div class="le-empty">Объекты по категориям биомов — для ручного добавления на карту.</div>`}
+      </div>
+      <div class="le-sec">
+        <div class="le-sec-title">Объекты редактора (${items.length})</div>
+        <div class="le-list">${listHtml || '<div class="le-empty">Пока нет объектов</div>'}</div>
+      </div>
+      ${selHtml}` : '';
+
+    const mapTabHtml = editorTab === 'map' ? `
+      <div class="le-sec">
+        <div class="le-sec-title">Объекты карты рядом с камерой (${sceneEntries.length})</div>
+        <input class="le-search" data-scene-search type="search" placeholder="Поиск по типу или ключу" value="${escapeAttr(sceneSearch)}">
+        <div class="le-hint">Плитки показывают объекты рядом с камерой (до 48). Переместитесь или выберите локацию выше, чтобы увидеть другие. Клик по плитке открывает объект для правки.</div>
+        <div class="le-scene-grid">${sceneTilesHtml || '<div class="le-empty">Ничего не найдено</div>'}</div>
+      </div>
+      <div class="le-sec">
+        <div class="le-sec-title">Правки карты (${Object.keys(overrides).length})</div>
+        <div class="le-list">${sceneOverridesHtml || '<div class="le-empty">Правок пока нет. Откройте плитку объекта ниже.</div>'}</div>
+      </div>
+      ${sceneHtml}` : '';
+
     rootEl.innerHTML = `
       <div class="le-ui le-topbar">
         <div class="le-topbar-left">
@@ -980,6 +1153,10 @@ export function initLocationEditor() {
         </div>
       </div>
       <div class="le-ui le-sidebar">
+        <div class="le-tabs">
+          <button data-tab="objects" class="${editorTab === 'objects' ? 'is-on' : ''}">Мои объекты</button>
+          <button data-tab="map" class="${editorTab === 'map' ? 'is-on' : ''}">Объекты карты</button>
+        </div>
         <div class="le-sec">
           <div class="le-sec-title">Инструменты</div>
           <div class="le-tools">
@@ -997,20 +1174,8 @@ export function initLocationEditor() {
           <div class="le-sec-title">Локации</div>
           <div class="le-locs">${biomes}</div>
         </div>
-        <div class="le-sec">
-          <div class="le-sec-title le-row-between"><span>Каталог объектов</span><button data-act="toggle-catalog">${catalogOpen?'Скрыть':'Показать'}</button></div>
-          ${catalogOpen ? `<div class="le-catalog">${catalogHtml}</div>` : `<div class="le-empty">Объекты по категориям биомов — для ручного добавления на карту.</div>`}
-        </div>
-        <div class="le-sec">
-          <div class="le-sec-title">Объекты редактора (${items.length})</div>
-          <div class="le-list">${listHtml || '<div class="le-empty">Пока нет объектов</div>'}</div>
-        </div>
-        <div class="le-sec">
-          <div class="le-sec-title">Правки карты (${Object.keys(overrides).length})</div>
-          <div class="le-list">${sceneOverridesHtml || '<div class="le-empty">Нет. Кликните по объекту игры в сцене, чтобы править его напрямую.</div>'}</div>
-        </div>
-        ${sceneHtml}
-        ${selHtml}
+        ${objectsTabHtml}
+        ${mapTabHtml}
         <div class="le-sec le-actions">
           <button data-act="import">Импорт</button>
           <button data-act="clear" class="danger">Очистить</button>
@@ -1023,10 +1188,20 @@ export function initLocationEditor() {
 
   function bindUI() {
     if (!rootEl) return;
+    rootEl.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => {
+      editorTab = btn.getAttribute('data-tab') === 'map' ? 'map' : 'objects';
+      renderUI();
+    }));
+    rootEl.querySelectorAll('[data-scene-search]').forEach(inp => inp.addEventListener('input', () => {
+      sceneSearch = inp.value || '';
+      renderUI();
+      const next = rootEl?.querySelector('[data-scene-search]');
+      if (next) { next.focus(); next.setSelectionRange(sceneSearch.length, sceneSearch.length); }
+    }));
     rootEl.querySelectorAll('[data-tool]').forEach(btn => btn.addEventListener('click', () => { tool = btn.getAttribute('data-tool') || 'select'; renderUI(); }));
     rootEl.querySelectorAll('[data-loc]').forEach(btn => btn.addEventListener('click', () => teleportToBiome(btn.getAttribute('data-loc'))));
     rootEl.querySelectorAll('[data-sel]').forEach(btn => btn.addEventListener('click', () => select(btn.getAttribute('data-sel'))));
-    rootEl.querySelectorAll('[data-selscene]').forEach(btn => btn.addEventListener('click', () => selectScene(btn.getAttribute('data-selscene'))));
+    rootEl.querySelectorAll('[data-selscene]').forEach(btn => btn.addEventListener('click', () => selectScene(btn.getAttribute('data-selscene'), true)));
     rootEl.querySelectorAll('[data-sact]').forEach(btn => btn.addEventListener('click', () => {
       const act = btn.getAttribute('data-sact');
       const key = selectedSceneKey;

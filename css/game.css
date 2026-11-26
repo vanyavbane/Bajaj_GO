@@ -1165,6 +1165,18 @@ sl-card.ach-shell::part(body){display:flex;flex-direction:column;flex:1;min-heig
 .le-row input[type=color]{width:44px;height:30px;padding:0;border:0;background:none}
 .le-row input:not([type=color]){flex:1;min-width:0;background:#182233;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:6px 8px}
 .le-key{font-size:11px;opacity:.8;word-break:break-all}
+.le-tabs{display:flex;gap:6px;padding:10px 12px 0}
+.le-tabs button{flex:1}
+.le-search{width:100%;background:#182233;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:6px 8px;font:inherit;margin-bottom:8px}
+.le-scene-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:310px;overflow:auto}
+.le-scene-tile{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:6px;text-align:left;min-width:0}
+.le-scene-tile.is-on{outline:2px solid #6fb3ff;background:#2a3d58}
+.le-thumb{display:block;width:100%;aspect-ratio:1;background:#101824;border:1px solid rgba(255,255,255,.08);border-radius:6px;overflow:hidden}
+.le-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.le-thumb-fallback{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#6fb3ff;opacity:.75}
+.le-tile-name{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.le-scene-tile small{font-size:9px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.le-badge{align-self:flex-start;padding:1px 4px;border-radius:4px;background:rgba(111,179,255,.18);color:#9fd0ff;opacity:1!important}
 .le-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
 .le-num{display:flex;flex-direction:column;gap:2px;font-size:11px}
 .le-num span{opacity:.75}
