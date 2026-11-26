@@ -242,10 +242,16 @@ export function initEmbankment() {
   const UP = new THREE.Vector3(0, 1, 0);
   const qYaw = new THREE.Quaternion();
 
-  /** Короткий сегмент полотна: своя точка, свой курс, свой масштаб. */
-  function putFlat(pool, s, lat, y, width, length, counter) {
+  /**
+   * Короткий сегмент полотна: своя точка, свой курс, свой масштаб.
+   * Глубина считается от внешней кромки всей дороги, а не от оси: иначе
+   * полотно садится на полосу съезда, когда она открыта.
+   */
+  function putFlat(pool, s, depth, y, width, length, counter) {
     if (counter.value >= pool.instanceMatrix.count) return;
-    const pose = G.embedRoad(s, lat);
+    const flank = G.flankAt(s, 1, depth);
+    if (!flank) return;
+    const pose = G.embedBeside(s, flank.edge, flank.lat);
     dummy.position.set(pose.x, y, pose.z);
     dummy.rotation.set(-Math.PI / 2, Math.atan2(-pose.fx, -pose.fz), 0, 'YXZ');
     dummy.scale.set(width, length, 1);
@@ -420,15 +426,15 @@ export function initEmbankment() {
   }
 
   let lastChunk = NaN;
-  let lastRoad = 0;
+  let lastShell = '';
   let lastBridgeS = NaN;
+  let lastBridgeShell = '';
   function updateEmbankment(dt) {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    const span = G.drivenSpanAt(G.playerS);
-    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
-    if (pc !== lastChunk || road !== lastRoad) {
+    const shell = G.roadShellKeyAt ? G.roadShellKeyAt(G.playerS) : '';
+    if (pc !== lastChunk || shell !== lastShell) {
       lastChunk = pc;
-      lastRoad = road;
+      lastShell = shell;
       rebuild();
     }
     const w = EMBANKMENT_INDEX >= 0 ? (G.biomeWeightsAtS(G.playerS)[EMBANKMENT_INDEX] || 0) : 0;
@@ -449,14 +455,21 @@ export function initEmbankment() {
       waterTex.offset.y += dt * 0.02;
     }
 
-    // Мосты стоят через каждые 800 м абсолютного пробега.
+    // Мосты стоят через каждые 800 м абсолютного пробега. Центр считается от
+    // внешней кромки: башня на -70 м от оси раньше заезжала на асфальт.
     const baseBridge = Math.floor((G.playerS - 200) / CFG.BRIDGE_EVERY) * CFG.BRIDGE_EVERY + 400;
-    if (baseBridge !== lastBridgeS) {
+    const bridgeShell = [0, 1, 2]
+      .map((i) => (G.roadShellKeyAt ? G.roadShellKeyAt(baseBridge + i * CFG.BRIDGE_EVERY) : ''))
+      .join('|');
+    if (baseBridge !== lastBridgeS || bridgeShell !== lastBridgeShell) {
       lastBridgeS = baseBridge;
+      lastBridgeShell = bridgeShell;
       for (let i = 0; i < bridges.length; i++) {
         const s = baseBridge + i * CFG.BRIDGE_EVERY;
         const g = bridges[i];
-        G.placeOnRoad(g, s, 80, 0);
+        const flank = G.flankAt(s, 1, CFG.RIVER_LAT);
+        if (!flank) continue;
+        G.placeBeside(g, s, flank.edge, flank.lat, 0);
         g.visible = true;
       }
     }
@@ -471,8 +484,9 @@ export function initEmbankment() {
   G.updateEmbankment = updateEmbankment;
   G.resetEmbankment = () => {
     lastChunk = NaN;
-    lastRoad = 0;
+    lastShell = '';
     lastBridgeS = NaN;
+    lastBridgeShell = '';
     rebuild();
   };
 }

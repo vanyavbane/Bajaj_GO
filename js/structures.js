@@ -217,11 +217,12 @@ export function initStructures() {
     const span = G.megaStructures.length * 320;
     for (const ms of G.megaStructures) {
       ms.userData.s = keepInWindow(ms.userData.s, G.playerS, 65, Infinity, span);
-      const cover = G.drivenSpanAt(ms.userData.s);
+      // Опоры и стены должны стоять снаружи всех лент, а не только ленты байка.
+      const cover = G.asphaltSpan ? G.asphaltSpan(ms.userData.s) : G.drivenSpanAt(ms.userData.s);
       ms.userData.placedS = placeIfMoved(ms.userData.placedS, ms.userData.s, () => {
         G.placeOnRoad(ms, ms.userData.s, cover.mid, 0);
         ms.userData.baseWidth = cover.width;
-      }, Math.round(cover.mid * 20) * 1000 + Math.round(cover.width * 50));
+      }, `${Math.round(cover.mid * 20)}:${Math.round(cover.width * 20)}`);
       // Мосты, эстакады и тоннели — только город и МКАД. В поле, лесу и
       // горах их нет; масштаб плавно гаснет на стыке зон.
       const cw = G.cityWeightAtS(ms.userData.s);
@@ -233,7 +234,10 @@ export function initStructures() {
       if (!ms.visible) continue;
       const full = ms.userData.baseWidth;
       const widthFactor = Math.max(1, full / G.nominalRoadWidth);
-      ms.scale.set(widthFactor * (0.05 + 0.95 * fade), 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
+      // По ширине конструкция не сжимается: при затухании на стыке биомов
+      // опоры уехали бы на середину проезжей части. Высота гаснет,
+      // поперечный габарит остаётся вне асфальта.
+      ms.scale.set(widthFactor, 0.05 + 0.95 * fade, 0.05 + 0.95 * fade);
       if (ms.userData.decoCars) {
         for (const dc of ms.userData.decoCars) {
           dc.mesh.position.x += dc.dir * 14 * dt;
@@ -244,4 +248,7 @@ export function initStructures() {
     }
   }
   G.updateMegaStructures = updateMegaStructures;
+  G.resetMegaStructures = () => {
+    for (const ms of G.megaStructures) ms.userData.placedS = undefined;
+  };
 }

@@ -261,6 +261,7 @@ export function initCableBridge() {
   }
 
   let lastChunk = NaN;
+  let lastShell = '';
 
   function rebuild(playerS) {
     resetCounters();
@@ -306,14 +307,17 @@ export function initCableBridge() {
     }
 
     const chunk = Math.floor(playerS / CHUNK_M);
-    if (chunk !== lastChunk) {
+    const shell = G.roadShellKeyAt ? G.roadShellKeyAt(playerS) : '';
+    if (chunk !== lastChunk || shell !== lastShell) {
       lastChunk = chunk;
+      lastShell = shell;
       rebuild(playerS);
     }
   }
 
   function resetCableBridge() {
     lastChunk = NaN;
+    lastShell = '';
     resetCounters();
     for (const key of Object.keys(pools)) {
       pools[key].count = 0;

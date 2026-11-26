@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EXIT_DIVERGE, EXIT_RUN } from './engine/fork.js';
+import { EXIT_RUN, exitClock } from './engine/fork.js';
 import { goreSpan } from './engine/asphalt.js';
 import { box, cylinder } from './geom.js';
 import { G } from './state.js';
@@ -23,8 +23,9 @@ const BENCH_COUNT = 4;
 const WALKER_COUNT = 8;
 /** Крайние метры развилки, где островок ещё слишком узкий для деревьев. */
 const PARK_EDGE = EXIT_RUN * 0.5 - 8;
-/** Отступ от кромки асфальта до ствола и лавочки, метров. */
-const PARK_MARGIN = 3.2;
+/** Отступ от кромки асфальта до ствола и лавочки, метров. Крона шире ствола. */
+const PARK_MARGIN = 5.5;
+const PARK_CLOCK = exitClock();
 /** Сколько метров до/после центра развилки парк вообще виден. */
 const VIEW_BEHIND = 700;
 const VIEW_AHEAD = 360;
@@ -160,13 +161,16 @@ export function initForkPark() {
     const gore = goreSpan(G.roadEdgesAt(s));
     if (!gore) return null;
     const width = gore.right - gore.left;
-    const pad = Math.min(PARK_MARGIN, width * 0.3);
+    // Узкий клин не вмещает крону с отступом — лучше не ставить дерево совсем.
+    if (width < PARK_MARGIN * 2 + 1) return null;
+    const pad = Math.min(PARK_MARGIN, width * 0.35);
     const t = (Math.max(-1, Math.min(1, u)) + 1) * 0.5;
     return gore.left + pad + t * Math.max(0, width - pad * 2);
   }
 
   const dummy = new THREE.Object3D();
   let lastCenter = NaN;
+  let lastParkShell = '';
   let visible = false;
 
   /** Берёза: белый ствол и три кроны. Ель: ствол и три конуса. */
@@ -350,18 +354,27 @@ export function initForkPark() {
     visible = on;
     for (const m of staticParts) m.visible = on;
     for (const m of walkerParts) m.visible = on;
-    if (!on) lastCenter = NaN;
+    if (!on) {
+      lastCenter = NaN;
+      lastParkShell = '';
+    }
   }
 
   function updateForkPark(dt, now) {
     if (!G.splitCenterS || !G.forkSpreadAtS) return;
-    const center = G.splitCenterS(G.playerS) + EXIT_DIVERGE + EXIT_RUN * 0.5;
+    // Старый центр приходился на подход до фиксации выбора, когда клина ещё
+    // не было. Ставим парк в середине реально открытого блока seal.
+    const center = G.splitCenterS(G.playerS) + PARK_CLOCK.choiceAt + PARK_CLOCK.turn * 0.5;
     const dNow = G.playerS - center;
     setVisible(dNow > -VIEW_BEHIND && dNow < VIEW_AHEAD);
     if (!visible) return;
 
-    if (center !== lastCenter) {
+    const shell = [-60, 0, 60]
+      .map((d) => (G.roadShellKeyAt ? G.roadShellKeyAt(center + d) : ''))
+      .join('|');
+    if (center !== lastCenter || shell !== lastParkShell) {
       lastCenter = center;
+      lastParkShell = shell;
       placeTrees(center);
       placeBushes(center);
       placeBenches(center);
@@ -370,4 +383,8 @@ export function initForkPark() {
   }
 
   G.updateForkPark = updateForkPark;
+  G.resetForkPark = () => {
+    lastCenter = NaN;
+    lastParkShell = '';
+  };
 }

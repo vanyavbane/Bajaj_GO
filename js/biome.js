@@ -1536,6 +1536,9 @@ function resetBiomeRun() {
   if (G.resetMountain) G.resetMountain();
   if (G.resetEmbankment) G.resetEmbankment();
   if (G.resetCableBridge) G.resetCableBridge();
+  if (G.resetRoadside) G.resetRoadside();
+  if (G.resetMegaStructures) G.resetMegaStructures();
+  if (G.resetForkPark) G.resetForkPark();
   applyLaneConfig(G.playerS);
 }
 
@@ -1620,6 +1623,11 @@ export function initBiome() {
   };
   G.besidePose = besidePose;
   G.asphaltSpan = asphaltSpanAt;
+  /** Ключ полного каркаса асфальта: меняется при открытии съезда и смене ветки. */
+  G.roadShellKeyAt = (s) => {
+    const at = asphaltSpanAt(s);
+    return `${Math.round(at.left)}:${Math.round(at.right)}:${Math.round(at.mid)}`;
+  };
   G.drivenSpanAt = drivenSpanAt;
   G.drivenIsExitAt = drivenIsExitAt;
   G.drivenFrameAt = drivenFrameAt;

@@ -411,24 +411,29 @@ export function initRoadside() {
       const rightLamp = decorAt(slot.s, 1, 0.8);
       const leftProp = decorAt(slot.s, -1, 12);
       const rightProp = decorAt(slot.s, 1, 12);
+      const boardS = slot.s + 6;
+      const board = slot.billboard ? decorAt(boardS, slot.billboard.side < 0 ? -1 : 1, 4.8) : null;
+      // Портал накрывает весь живой асфальт, включая полосу съезда.
+      const cover = G.asphaltSpan ? G.asphaltSpan(slot.s) : G.drivenSpanAt(slot.s);
       slot.placedS = placeIfMoved(slot.placedS, slot.s, () => {
         G.placeBeside(slot.leftLamp, slot.s, leftLamp.edge, leftLamp.lat, 0);
         G.placeBeside(slot.rightLamp, slot.s, rightLamp.edge, rightLamp.lat, 0);
         G.placeBeside(slot.leftProp, slot.s, leftProp.edge, leftProp.lat, G.groundOffset(leftProp.lat, slot.s));
         G.placeBeside(slot.rightProp, slot.s, rightProp.edge, rightProp.lat, G.groundOffset(rightProp.lat, slot.s));
-        if (slot.billboard) {
+        if (slot.billboard && board) {
           const bb = slot.billboard;
-          const boardS = slot.s + 6;
-          const board = decorAt(boardS, bb.side < 0 ? -1 : 1, 4.8);
           G.placeBeside(bb.group, boardS, board.edge, board.lat, G.groundOffset(board.lat, boardS), (bb.side < 0 ? -1 : 1) * -0.18);
         }
         if (slot.portal) {
-          const cover = G.drivenSpanAt(slot.s);
           G.placeOnRoad(slot.portal.group, slot.s, cover.mid, 0);
           const wf = Math.max(1, cover.width / G.nominalRoadWidth);
           slot.portal.group.scale.set(wf, 1, 1);
         }
-      }, Math.round((leftLamp.lat + rightLamp.lat) * 50) + Math.round(city * 20) * 100000);
+      }, [
+        Math.round(leftLamp.lat * 20), Math.round(rightLamp.lat * 20),
+        Math.round(cover.mid * 20), Math.round(cover.width * 20),
+        Math.round(city * 20), board ? Math.round(board.lat * 20) : 0
+      ].join(':'));
 
       // Инфраструктура (отбойники, фонари, здания, порталы) есть только в
       // городе и на МКАД. В поле, лесу и горах она сжимается до нуля.
@@ -562,4 +567,7 @@ export function initRoadside() {
     }
   }
   G.updateRoadside = updateRoadside;
+  G.resetRoadside = () => {
+    for (const slot of G.roadsideSlots) slot.placedS = undefined;
+  };
 }

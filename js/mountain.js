@@ -125,14 +125,17 @@ export function initMountain() {
       for (const side of SIDES) {
         const isInside = inside !== 0 && side === inside;
         if (isInside) {
-          // Скальная стена: 2–3 блока наращиваются вверх и вглубь.
-          const depth = CFG.ROAD_MARGIN + 1.2 + rng() * 3.5;
-          const flank = G.flankAt(s, side, depth);
-          if (!flank) continue;
+          // Скальная стена: 2–3 блока наращиваются вверх и вглубь. Повёрнутый
+          // блок выдаётся поперёк на hypot(w/2, dep/2) — depth считаем после
+          // размеров, иначе скала заходит на полотно.
           const h = (CFG.ROCK_MIN_H + rng() * (CFG.ROCK_MAX_H - CFG.ROCK_MIN_H)) * k;
           const w = (5 + rng() * 5) * k;
           const dep = (4 + rng() * 4) * k;
           const yaw = rng() * Math.PI;
+          const reach = Math.hypot(w * 0.5, dep * 0.5) + 0.4;
+          const depth = Math.max(CFG.ROAD_MARGIN + 1.2 + rng() * 3.5, reach);
+          const flank = G.flankAt(s, side, depth);
+          if (!flank) continue;
           put(pools.rock, s, flank.edge, flank.lat, h * 0.5, w, h, dep, yaw, 1, counters.rock);
           const further = G.flankAt(s + 2.5, side, depth + 1.5);
           if (rng() < 0.6 && further) {
@@ -238,14 +241,13 @@ export function initMountain() {
   }
 
   let lastChunk = NaN;
-  let lastRoad = 0;
+  let lastShell = '';
   function updateMountain() {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    const span = G.drivenSpanAt(G.playerS);
-    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
-    if (pc !== lastChunk || road !== lastRoad) {
+    const shell = G.roadShellKeyAt ? G.roadShellKeyAt(G.playerS) : '';
+    if (pc !== lastChunk || shell !== lastShell) {
       lastChunk = pc;
-      lastRoad = road;
+      lastShell = shell;
       rebuild();
     }
   }
@@ -254,6 +256,7 @@ export function initMountain() {
   G.updateMountain = updateMountain;
   G.resetMountain = () => {
     lastChunk = NaN;
+    lastShell = '';
     rebuild();
   };
 }

@@ -290,14 +290,14 @@ export function initForest() {
   }
 
   let lastChunk = NaN;
-  let lastRoad = 0;
+  let lastShell = '';
   function updateForest() {
     const pc = Math.floor(G.playerS / CFG.CHUNK_M);
-    const span = G.drivenSpanAt(G.playerS);
-    const road = span ? Math.round(span.left * 2) + Math.round(span.right * 2) * 100000 : 0;
-    if (pc !== lastChunk || road !== lastRoad) {
+    // Полная оболочка: выросший съезд должен сдвинуть деревья с асфальта.
+    const shell = G.roadShellKeyAt ? G.roadShellKeyAt(G.playerS) : '';
+    if (pc !== lastChunk || shell !== lastShell) {
       lastChunk = pc;
-      lastRoad = road;
+      lastShell = shell;
       rebuild();
     }
   }
@@ -307,7 +307,7 @@ export function initForest() {
   G.resetForest = () => {
     chunkCache.clear();
     lastChunk = NaN;
-    lastRoad = 0;
+    lastShell = '';
     rebuild();
   };
 }
