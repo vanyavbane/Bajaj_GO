@@ -7,6 +7,9 @@ export function initInput() {
    * 15. ОБРАБОТКА ВВОДА (КЛАВИАТУРА И ЭКРАННЫЕ КНОПКИ)
    * ========================================================================= */
   function handleKey(e, isDown) {
+    // Редактор локаций обрабатывает клавиши сам: иначе его V/T/C и WASD
+    // одновременно переключали бы камеру и руление игры.
+    if (G.locationEditorActive) return;
     const k = e.key.toLowerCase();
 
     if (isDown) {

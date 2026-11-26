@@ -532,6 +532,7 @@ export function initLoop() {
       if (G.audio) G.audio.setGameplayActive(false);
       if (G.setRainSound) G.setRainSound(0);
       if (G.updateLocationEditor) G.updateLocationEditor(realDt, now);
+      if (G.applyLocationEditorOverrides) G.applyLocationEditorOverrides();
       const ecam = G.editorCamera || G.camera;
       G.renderer.render(G.scene, ecam);
       return;
@@ -596,6 +597,7 @@ export function initLoop() {
     G.updatePedestrians(dt, now);
     if (G.updateForkPark) G.updateForkPark(dt, now);
     G.updateTraffic(dt, now, isQute);
+    if (G.applyLocationEditorOverrides) G.applyLocationEditorOverrides();
     updateHud(now);
     if (G.renderFrame) G.renderFrame(realDt);
     else G.renderer.render(G.scene, G.camera);
