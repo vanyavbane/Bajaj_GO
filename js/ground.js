@@ -17,6 +17,7 @@ export function initGround() {
   const sampleS = new Float32Array(ROW);
   const sampleY = new Float32Array(ROW);
   const sampleCity = new Float32Array(ROW);
+  const sampleBridge = new Float32Array(ROW);
 
   function makeSlope() {
     const geo = new THREE.PlaneGeometry(85, RIBBON_LEN, 2, RIBBON_SEGS);
@@ -103,6 +104,7 @@ export function initGround() {
       sampleS[r] = s;
       sampleY[r] = G.roadY(s);
       sampleCity[r] = G.cityWeightAtS(s);
+      sampleBridge[r] = typeof G.onBridgeAtS === 'function' && G.onBridgeAtS(s) ? (G.bridgeWeightAtS(s) || 0) : 0;
     }
     const posL = slopeLeft.geometry.attributes.position;
     const posR = slopeRight.geometry.attributes.position;
@@ -150,6 +152,19 @@ export function initGround() {
       posR.setXYZ(idx, ...place(rightSkirt, rLip, rLipY));
       posR.setXYZ(idx + 1, ...place(rightSkirt, rBerm, rBermY));
       posR.setXYZ(idx + 2, ...place(rightSkirt, rFar, rFarY));
+      // На пролёте откоса нет: схлопываем ряд под полотно, чтобы земля
+      // не шла зелёной лентой через воду и не закрывала балки.
+      const bw = sampleBridge[r];
+      if (bw > 0.01) {
+        const collapse = (pos, base, edgeSlot) => {
+          const x = pos.getX(base + edgeSlot);
+          const y = pos.getY(base + edgeSlot) - 12 * bw;
+          const z = pos.getZ(base + edgeSlot);
+          for (let slot = 0; slot < 3; slot++) pos.setXYZ(base + slot, x, y, z);
+        };
+        collapse(posL, idx, 2);
+        collapse(posR, idx, 2);
+      }
       if (leftJump) {
         const x = posL.getX(idx + 2);
         const y = posL.getY(idx + 2);

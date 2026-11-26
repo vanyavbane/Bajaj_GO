@@ -11,6 +11,56 @@ import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
 import type { BuildChoice, PlacedBlock } from './blocks.ts';
 import { smooth01 } from './profile.ts';
 
+/** Длина зоны совпадает с js/biome.js; импорт оттуда создал бы цикл. */
+const ZONE_M = 1500;
+
+/**
+ * Пролёт вантового моста внутри зоны биома, м.
+ * Первые 350 м зоны — подход, последние 550 м — берег и развилка.
+ */
+export const BRIDGE_START_M = 350;
+export const BRIDGE_END_M = 950;
+/** Переход от обычной дороги к мосту и обратно. */
+export const BRIDGE_FADE_M = 50;
+/** Полуширина полотна моста: 4 полосы (2 встречные, 2 попутные) на одной ленте. */
+export const BRIDGE_RIBBON_HALF = 9.5;
+/** Внешняя кромка моста от оси. */
+export const BRIDGE_EDGE = BRIDGE_RIBBON_HALF * 2;
+
+/**
+ * Кромки моста. Полотно сплошное: правой ленты съезда здесь нет.
+ * Щель посредине была бы прочитана как съезд, и ось сиденья уехала
+ * на 9.55 м влево — попутная полоса оказывалась встречной.
+ */
+export function bridgeEdges(): AsphaltEdges {
+  const edge = BRIDGE_EDGE;
+  return {
+    leftOuter: -edge,
+    leftInner: edge,
+    rightInner: edge,
+    rightOuter: edge,
+  };
+}
+
+/** Вес моста в точке трассы: 0 на берегах, 1 внутри пролёта. */
+export function bridgeWeightAtS(s: number): number {
+  const local = s % ZONE_M;
+  if (local <= BRIDGE_START_M - BRIDGE_FADE_M || local >= BRIDGE_END_M + BRIDGE_FADE_M) return 0;
+  if (local <= BRIDGE_START_M) return (local - (BRIDGE_START_M - BRIDGE_FADE_M)) / BRIDGE_FADE_M;
+  if (local >= BRIDGE_END_M) return (BRIDGE_END_M + BRIDGE_FADE_M - local) / BRIDGE_FADE_M;
+  return 1;
+}
+
+/** Смещения четырёх полос моста: две встречные слева, две попутные справа. */
+export function bridgeLaneOffsets(): number[] {
+  const laneWidth = 4.75;
+  const offsets: number[] = [];
+  for (const center of [-laneWidth, laneWidth]) {
+    for (let lane = 0; lane < 2; lane++) offsets.push(center + (lane - 0.5) * laneWidth);
+  }
+  return offsets;
+}
+
 export type { PlacedBlock };
 
 const EXIT_PLAN = compileExit(RIGHT_EXIT);

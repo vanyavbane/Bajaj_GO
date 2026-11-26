@@ -155,6 +155,10 @@ export function initStructures() {
     let s = candidateS;
     for (let attempt = 0; attempt < 6; attempt++) {
       let conflict = false;
+      if (typeof G.onBridgeAtS === 'function' && G.onBridgeAtS(s)) {
+        conflict = true;
+        s += 140;
+      }
       if (G.splitAmountAtS(s) > 0.05) {
         conflict = true;
         s += 140;

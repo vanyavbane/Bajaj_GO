@@ -109,12 +109,14 @@ export function vergeAt(edges: AsphaltEdges, edge: number, cityOuter: number): n
  * Земля у точки lat.
  * `dist` — метры от центра ближайшей ленты. На асфальте это 0.
  * `half` — полуширина этой ленты, откос считается от неё.
+ * `lat` может быть локальным для ленты; два сплошных мостовых полотна
+ * соседствуют вплотную, поэтому выбирать ленту надо по абсолютной координате.
  */
-export function groundAt(edges: AsphaltEdges, lat: number): { dist: number; half: number } {
+export function groundAt(edges: AsphaltEdges, lat: number, latAbs = lat): { dist: number; half: number } {
   const spans = asphaltSpans(edges);
   if (spans.length === 0) return { dist: Math.abs(lat), half: 0 };
   for (const span of spans) {
-    if (lat >= span.left && lat <= span.right) {
+    if (latAbs >= span.left && latAbs <= span.right) {
       return { dist: 0, half: (span.right - span.left) * 0.5 };
     }
   }
@@ -122,8 +124,8 @@ export function groundAt(edges: AsphaltEdges, lat: number): { dist: number; half
   let edge = best ? best.left : 0;
   let bestD = Infinity;
   for (const span of spans) {
-    const leftD = Math.abs(lat - span.left);
-    const rightD = Math.abs(lat - span.right);
+    const leftD = Math.abs(latAbs - span.left);
+    const rightD = Math.abs(latAbs - span.right);
     const d = Math.min(leftD, rightD);
     if (d < bestD) {
       bestD = d;
@@ -132,7 +134,7 @@ export function groundAt(edges: AsphaltEdges, lat: number): { dist: number; half
     }
   }
   const half = best ? (best.right - best.left) * 0.5 : 0;
-  return { dist: half + Math.abs(lat - edge), half };
+  return { dist: half + Math.abs(latAbs - edge), half };
 }
 
 /**

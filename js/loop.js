@@ -16,6 +16,14 @@ export function initLoop() {
   let jumpLineShown = '';
   let oncomingShown = false;
   let medianCooldown = 0;
+  // Базовая посадка сглаживается отдельно от прыжка и руля: те должны слушаться
+  // игрока сразу, а курс ленты на въезде не дёргает байк.
+  const _poseTarget = new THREE.Object3D();
+  const _poseEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const _poseExtra = new THREE.Quaternion();
+  let bikeBaseY = NaN;
+  let bikeBaseQuat = null;
+  let bikePoseS = NaN;
 
   /** Байк держится правой ленты, пока съезд ещё его дорога. */
   function onExitApproach() {
@@ -463,21 +471,31 @@ export function initLoop() {
     G.laneOffset = (hit.lat + sign * hit.clear - axis) / span;
   }
 
-  function placePlayer(isQute) {
+  function placePlayer(isQute, dt = 0) {
     const maxRollFactor = isQute ? 0.055 : (0.09 + clamp(G.speed / 280, 0, 0.14));
     const leanRoll = -G.steerVisual * maxRollFactor;
     const stuntPitch = G.stunt ? G.stunt.pitch : 0;
     const driftYaw = (G.stunt && G.stunt.mode === 'drift') ? G.stunt.slip * 0.45 * (G.steerVisual !== 0 ? Math.sign(G.steerVisual) : 1) : 0;
+    const jump = Number.isFinite(G.jumpState.height) ? G.jumpState.height : 0;
     const worldLat = G.riderLatAt(G.playerS);
-    G.placeOnRoad(
-      G.bikeRoot,
-      G.playerS,
-      worldLat,
-      G.jumpState.height,
-      -G.steerVisual * 0.035 + driftYaw,
-      G.jumpState.pitch + stuntPitch,
-      leanRoll
-    );
+    // База едет по дороге; прыжок и руль накладываются уже после сглаживания.
+    G.placeOnRoad(_poseTarget, G.playerS, worldLat, jump, 0, 0, 0);
+    const targetY = _poseTarget.position.y - jump;
+    const teleported = !Number.isFinite(bikeBaseY) || !bikeBaseQuat
+      || !Number.isFinite(bikePoseS) || Math.abs(G.playerS - bikePoseS) > 25;
+    if (teleported) {
+      bikeBaseY = targetY;
+      bikeBaseQuat = _poseTarget.quaternion.clone();
+    } else {
+      const alpha = 1 - Math.exp(-Math.max(0, dt) / 0.09);
+      bikeBaseY += (targetY - bikeBaseY) * alpha;
+      bikeBaseQuat.slerp(_poseTarget.quaternion, alpha);
+    }
+    bikePoseS = G.playerS;
+    _poseEuler.set(G.jumpState.pitch + stuntPitch, -G.steerVisual * 0.035 + driftYaw, leanRoll);
+    _poseExtra.setFromEuler(_poseEuler);
+    G.bikeRoot.position.set(_poseTarget.position.x, bikeBaseY + jump, _poseTarget.position.z);
+    G.bikeRoot.quaternion.copy(bikeBaseQuat).multiply(_poseExtra);
   }
 
   function updateHud(now) {
@@ -560,7 +578,7 @@ export function initLoop() {
     // Биом читает уже сдвинутый playerS: профиль, трафик, декорации и небо
     // в одном кадре видят одну и ту же точку маршрута.
     if (G.updateBiome) G.updateBiome(dt);
-    placePlayer(isQute);
+    placePlayer(isQute, dt);
     if (G.updateWeather) G.updateWeather(dt);
     G.updateFollowCamera(dt, isQute);
     G.updateRoadSurface(G.playerS);

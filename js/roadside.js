@@ -304,6 +304,8 @@ export function initRoadside() {
         faceMat: bb.faceMat,
         texIndex: i,
         biome: -1,
+        candidate: -1,
+        biomeHold: 0,
         side: i % 4 === 1 ? 1 : -1,
         adVersion: -1,
         banner: null
@@ -331,7 +333,7 @@ export function initRoadside() {
       const board = new THREE.Mesh(new THREE.BoxGeometry(9.6, 2.4, 0.22), boardMat);
       board.position.set(0, 7.1, 0);
       pg.add(pL, pR, beam, board);
-      slot.portal = { group: pg, boardMat, biome: -1, texIndex: 0, adVersion: -1, banner: null };
+      slot.portal = { group: pg, boardMat, biome: -1, candidate: -1, biomeHold: 0, texIndex: 0, adVersion: -1, banner: null };
       G.scene.add(pg);
     }
 
@@ -348,6 +350,42 @@ export function initRoadside() {
       if (w[b] > best) { best = w[b]; dom = b; }
     }
     return dom;
+  }
+
+  /* Щит не мигает на оси развилки: новый биом должен набрать вес и удержаться. */
+  const BIOME_SWITCH_W = 0.65;
+  const BIOME_SWITCH_FRAMES = 8;
+
+  /** Устойчивый индекс для одного щита/портала. Вес читается из общего микса. */
+  function stableBiomeAt(part, s) {
+    const w = G.biomeWeightsAtS(s);
+    let best = 0;
+    let bestW = -1;
+    for (let b = 0; b < w.length; b++) {
+      if (w[b] > bestW) { bestW = w[b]; best = b; }
+    }
+    if (part.biome < 0) {
+      part.biome = best;
+      part.candidate = best;
+      part.biomeHold = 0;
+      return best;
+    }
+    if (best === part.biome) {
+      part.candidate = best;
+      part.biomeHold = 0;
+      return best;
+    }
+    if (best !== part.candidate) {
+      part.candidate = best;
+      part.biomeHold = 0;
+    }
+    if (bestW > BIOME_SWITCH_W) part.biomeHold += 1;
+    else part.biomeHold = 0;
+    if (part.biomeHold >= BIOME_SWITCH_FRAMES) {
+      part.biome = best;
+      part.biomeHold = 0;
+    }
+    return part.biome;
   }
 
   const lampWorld = new THREE.Vector3();
@@ -428,6 +466,7 @@ export function initRoadside() {
         const show = inMetro ? slot.idx % 10 === 5 : slot.idx === 7;
         bb.group.visible = show;
         if (show) {
+          const dom = stableBiomeAt(bb, slot.s);
           const list = billboardIndexByBiome[dom] || billboardIndexByBiome[0];
           const rot = Math.floor(roadM / 200) + (inMetro && bb.side > 0 ? 1 : 0);
           const texIndex = list[((rot % list.length) + list.length) % list.length];
@@ -459,6 +498,7 @@ export function initRoadside() {
         const show = inMetro ? slot.idx % 6 === 0 : slot.idx === 7;
         po.group.visible = show;
         if (show) {
+          const dom = stableBiomeAt(po, slot.s);
           const list = biomeSignTextures[dom] || biomeSignTextures[0];
           const texIndex = inMetro
             ? Math.floor(slot.idx / 6) % list.length

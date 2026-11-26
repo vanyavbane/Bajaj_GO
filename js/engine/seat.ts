@@ -80,3 +80,14 @@ export function stepSeat(frame: RoadFrame, seat: RiderSeat, span: number): Rider
   if (along > limit) return { kind: 'exit', lane: limit };
   return { kind: 'exit', lane: along };
 }
+
+/**
+ * Посадка из уже сглаженной мировой точки. Руль и лента меняют ось в этом
+ * кадре, но сиденье читает ту же точку, что и байк в прошлом кадре.
+ */
+export function seatFromWorld(frame: RoadFrame, world: number, seat: RiderSeat, span: number): RiderSeat {
+  const scale = spanOf(span);
+  const ruler = rideRuler(frame, seat.kind === 'exit', scale);
+  const lane = laneAtWorld(world, ruler.axis, ruler.scale);
+  return stepSeat(frame, { kind: seat.kind, lane }, scale);
+}

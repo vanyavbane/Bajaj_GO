@@ -1,14 +1,14 @@
 import { BIOME_NEXT, BIOMES, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './biomes.ts';
 import { besideWithLane, carriageLanes, defaultRunOffset, directionEdge, nearestLaneIndexIn, nearestLaneOffset, offsetDirection, outerLane, roadFrom } from './lanes.ts';
 import { stepTrafficCar } from './motion.ts';
-import { EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick } from './fork.ts';
+import { BRIDGE_END_M, BRIDGE_START_M, EXIT_DIVERGE, EXIT_LANE_HALF, FORK_LEAD, FORK_SPREAD, bridgeLaneOffsets, bridgeWeightAtS, branchEdges, branchPick, exitClock, exitEntryPull, landOnCarriage, exitRibbonMid, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, liveForkAmount, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick } from './fork.ts';
 
 function assert(cond: boolean, message: string): void {
   if (!cond) throw new Error(message);
 }
 
-const ids = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment'] as const;
-assert(BIOMES.length === ids.length, 'в каталоге шесть локаций, порядок совпадает с сохранением');
+const ids = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment', 'cable_bridge'] as const;
+assert(BIOMES.length === ids.length, 'в каталоге семь локаций, порядок совпадает с сохранением');
 for (let i = 0; i < ids.length; i++) {
   assert(BIOMES[i]?.id === ids[i], `порядок каталога держит сохранённые индексы, позиция ${i}`);
 }
@@ -54,14 +54,22 @@ assert(mountain.count === 2 && mountain.oncomingCount === 1, 'горы: 2 пол
 assert(mkad.count === 8 && mkad.oncomingCount === 4 && mkad.width === 34.4, 'МКАД: 8 полос по 4.3 м');
 assert(embankment.count === 4 && embankment.oncomingCount === 2, 'набережная: 4 полосы, 2 встречные');
 assert(embankment.speeds.join() === city.speeds.join(), 'набережная: скорости как в городе');
+const bridgeLayout = laneLayoutOf(BIOMES[6]!);
+assert(bridgeLayout.count === 4 && bridgeLayout.oncomingCount === 2, 'мост: 4 полосы, 2 встречные');
+assert(bridgeLayout.lanes.slice(0, 2).every((lane) => lane.direction === 'against')
+  && bridgeLayout.lanes.slice(2).every((lane) => lane.direction === 'with'), 'мост: две встречные слева, две попутные справа');
+assert(bridgeLaneOffsets().join() === bridgeLayout.offsets.join(), 'смещения полос моста совпадают с каталогом');
 assert(transitionIndexes().every((pair) => pair.length === 2), 'у каждой развилки два индекса');
 assert(BIOMES.every((biome) => biome.road.x.length > 0 && biome.road.y.length > 0 && biome.sky.fogMul > 0), 'у каждой локации свои волны и небо');
 assert(BIOMES.every((biome) => biome.signs.length > 0 && biome.boards.length > 0), 'у каждой локации свои указатели и щиты');
 assert(BIOMES[0]!.signs === BIOMES[4]!.signs && BIOMES[0]!.signArrows === 2, 'город и МКАД делят список съездов');
 assert(BIOMES[5]!.signs[0]?.title !== BIOMES[0]!.signs[0]?.title, 'набережная не берёт указатели города');
+assert(bridgeWeightAtS(0) === 0 && bridgeWeightAtS(BRIDGE_START_M + 100) === 1 && bridgeWeightAtS(BRIDGE_END_M + 200) === 0, 'мост занимает 600 м внутри зоны');
+assert(bridgeWeightAtS(BRIDGE_START_M - 25) === 0.5 && bridgeWeightAtS(BRIDGE_END_M + 25) === 0.5, 'въезд и съезд с моста плавные');
 assert(BIOME_NEXT.city[0] === 'mountain' && BIOME_NEXT.city[1] === 'mkad', 'город ведёт в горы и на МКАД');
+assert(BIOME_NEXT.embankment[0] === 'city' && BIOME_NEXT.embankment[1] === 'cable_bridge', 'набережная ведёт в город и на вантовый мост');
 assert(BIOMES.every((biome) => biome.route === true), 'все локации каталога стоят на маршруте');
-const decorOf = { city: 'roadside', field: 'slots', forest: 'forest', mountain: 'mountain', mkad: 'slots', embankment: 'embankment' } as const;
+const decorOf = { city: 'roadside', field: 'slots', forest: 'forest', mountain: 'mountain', mkad: 'slots', embankment: 'embankment', cable_bridge: 'cable_bridge' } as const;
 for (const biome of BIOMES) {
   assert(biome.decor === decorOf[biome.id], `${biome.id}: декор записан в каталоге`);
 }
@@ -69,7 +77,7 @@ assert(storedBiomeIndex('forest') === 2 && storedBiomeIndex(2) === 2 && storedBi
 assert(storedBiomeIndex('shore') == null && storedBiomeIndex(9) == null && storedBiomeIndex(-1) == null, 'чужое имя и номер вне каталога не становятся локацией');
 const visits = storedVisits({ forest: 2, city: 1 });
 assert(visits[0] === 1 && visits[2] === 2 && visits[1] === 0, 'счётчики читаются по имени');
-assert(storedVisits([0, 1, 2]).join() === '0,1,2,0,0,0', 'старый массив счётчиков остаётся по номерам');
+assert(storedVisits([0, 1, 2]).join() === '0,1,2,0,0,0,0', 'старый массив счётчиков остаётся по номерам');
 for (const biome of BIOMES) {
   for (const target of BIOME_NEXT[biome.id]) {
     assert(BIOMES.find((item) => item.id === target)?.route === true, `${biome.id} не предлагает локацию вне маршрута`);

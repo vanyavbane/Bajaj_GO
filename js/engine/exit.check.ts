@@ -6,7 +6,7 @@
 import { BIOMES, laneLayoutOf } from './biomes.ts';
 import { carriageAt, carriageLat, laneAtWorld, rideRuler } from './carriage.ts';
 import { EXIT_LANE_HALF, exitClock, logicalRoadLimits, sampleRoad, type ChosenSide } from './fork.ts';
-import { readExit, retargetRide, rideCenter, sampleRide, surfaceWorld, type ExitLife } from './exit.ts';
+import { emptyRideHold, followRide, readExit, retargetRide, rideCenter, sampleRide, surfaceWorld, type ExitLife } from './exit.ts';
 import { stepSeat, type RiderSeat } from './seat.ts';
 
 function assert(cond: boolean, message: string): void {
@@ -85,6 +85,20 @@ const followed = retargetRide(15, 14, true, 18);
 assert(followed.along === 1 && followed.world === 19, 'байк едет вместе со своей лентой и держит место в ней');
 const swapped = retargetRide(32, 32, false, 32);
 assert(swapped.world === 32 && swapped.along === 0, 'смена дороги оставляет байка там, где середины совпали');
+
+const hold = emptyRideHold();
+const holdStart = readExit(frame(clock.choiceAt - 10, 0));
+const centerStart = surfaceWorld(0, holdStart, true);
+let heldWorld = followRide(hold, centerStart + 0.4, holdStart, 0, true);
+assert(Math.abs(heldWorld - (centerStart + 0.4)) < 1e-6, 'первый кадр посадки держит байка на ленте');
+const holdNext = readExit(frame(clock.choiceAt + 40, 1));
+const centerNext = surfaceWorld(0, holdNext, true);
+const nextWorld = followRide(hold, heldWorld, holdNext, 0, true);
+assert(
+  Math.abs((nextWorld - heldWorld) - (centerNext - centerStart)) < 1e-6,
+  'память посадки везёт смещение вместе с лентой, как у трафика',
+);
+heldWorld = nextWorld;
 
 let rideD = clock.choiceAt - 10;
 let rideSpot = readExit(frame(rideD, 0));

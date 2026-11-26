@@ -379,6 +379,7 @@ export function initLocationEditor() {
     if (G.updateForest) G.updateForest();
     if (G.updateMountain) G.updateMountain();
     if (G.updateEmbankment) G.updateEmbankment(0);
+    if (G.updateCableBridge) G.updateCableBridge(0);
     G.playerS = savedS;
     updateEditorCam();
   };

@@ -24,10 +24,10 @@ export const TRAFFIC_MODELS = [
 
 export type TrafficModel = (typeof TRAFFIC_MODELS)[number];
 
-export type BiomeId = 'city' | 'field' | 'forest' | 'mountain' | 'mkad' | 'embankment';
+export type BiomeId = 'city' | 'field' | 'forest' | 'mountain' | 'mkad' | 'embankment' | 'cable_bridge';
 
 /** Кто рисует локацию. `slots` — общий пул в biome.js, остальные — свой модуль. */
-export const BIOME_DECORS = ['roadside', 'slots', 'forest', 'mountain', 'embankment'] as const;
+export const BIOME_DECORS = ['roadside', 'slots', 'forest', 'mountain', 'embankment', 'cable_bridge'] as const;
 export type BiomeDecor = (typeof BIOME_DECORS)[number];
 
 export interface BiomeTraffic {
@@ -109,7 +109,7 @@ export interface RoadSample {
   ddy: number;
 }
 
-const BIOME_IDS = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment'] as const satisfies readonly BiomeId[];
+const BIOME_IDS = ['city', 'field', 'forest', 'mountain', 'mkad', 'embankment', 'cable_bridge'] as const satisfies readonly BiomeId[];
 
 const ALL_BOARDS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -382,6 +382,35 @@ export const BIOMES: readonly BiomeDef[] = [
       pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'qute_traffic', 'suv', 'gazelle_flatbed', 'gazelle_van', 'kamaz', 'truck'],
     },
   }),
+  defineBiome({
+    id: 'cable_bridge',
+    name: 'ВАНТОВЫЙ МОСТ',
+    icon: 'water',
+    sub: 'ПРОЛЁТ · ПИЛОНЫ · ВАНТЫ · ВОДА',
+    short: 'Мост',
+    accent: 0x5ec8e8,
+    lanes: 4,
+    oncoming: 2,
+    laneWidth: 4.75,
+    speeds: [45, 65, 75, 60],
+    sceneryScale: 1,
+    decor: 'cable_bridge',
+    ground: 0x2e5a76,
+    road: {
+      // Прямой пролёт: ненулевая частота нужна проверке каталога, амплитуда нулевая.
+      x: [sin(0, 0.0001)],
+      y: [sin(0, 0.0001)],
+    },
+    sky: { top: 0xcfe7f7, mid: 0xe4f2fb, bot: 0xf0f7fb, fog: 0xd6e8f2, cloud: 0xffffff, fogMul: 1.1, cloudY: 4, cloudScale: 1.05 },
+    signArrows: 1,
+    signs: [{ title: 'ВАНТОВЫЙ МОСТ', subtitle: 'ПРОЛЁТ · ВОДА · ПИЛОНЫ' }],
+    boards: [0, 2],
+    route: true,
+    traffic: {
+      count: 24,
+      pref: ['sedan', 'taxi', 'hatchback', 'crossover', 'bus', 'suv', 'gazelle_van', 'gazelle_flatbed', 'kamaz', 'truck', 'qute_traffic'],
+    },
+  }),
 ];
 
 /** Куда ведёт развилка: левый слот и правый. Свой биом в паре не стоит. */
@@ -391,7 +420,8 @@ export const BIOME_NEXT: Record<BiomeId, readonly [BiomeId, BiomeId]> = {
   forest: ['field', 'mountain'],
   mountain: ['embankment', 'forest'],
   mkad: ['city', 'embankment'],
-  embankment: ['city', 'field'],
+  embankment: ['city', 'cable_bridge'],
+  cable_bridge: ['embankment', 'field'],
 };
 
 function assertCatalog(): void {

@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { BIOMES, biomeIndexOf, laneLayoutOf, storedBiomeIndex, storedVisits, transitionIndexes } from './engine/biomes.js';
 import { carriageAt, carriageLat, laneAtWorld, laneMarks, rideRuler, solidMarks } from './engine/carriage.js';
 import { laneIndexByRoll, nearestLaneOffset } from './engine/lanes.js';
-import { seatOnFrame, seatWorld, stepSeat } from './engine/seat.js';
-import { readExit, retargetRide, ridingRibbon, sampleRide, surfaceWorld } from './engine/exit.js';
-import { EXIT_LANE_HALF, besidePoint, branchPick, exitClock, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick, stayOnAsphalt } from './engine/fork.js';
+import { seatFromWorld, seatOnFrame, seatWorld } from './engine/seat.js';
+import { emptyRideHold, followRide, readExit, ridingRibbon, sampleRide, surfaceWorld } from './engine/exit.js';
+import { BRIDGE_EDGE, EXIT_LANE_HALF, besidePoint, branchPick, bridgeEdges, exitClock, forkOccupancy, forkOffset, forkSpreadAt, laneAnchor, logicalRoadLimits, onExitRibbon, reachedExit, roadCenter, sampleRoad, splitPick, stayOnAsphalt } from './engine/fork.js';
 import { asphaltSpan, groundAt, groundEdge, shoulderHeight, shoulderLats, vergeAt } from './engine/asphalt.js';
 import { decideZone } from './engine/route.js';
 import { EXIT_RIGHT, RIGHT_FORK, courseLayoutOf, createVectorField, openCourse, vectorSpawnOf, zoneAt, zoneNose } from './engine/vectors.js';
@@ -29,6 +29,7 @@ import { G } from './state.js';
 
 const ZONE_M = 1500;              // длина одной локации
 const ROAD_FADE_M = 350;         // плавный переход профиля/ширины дороги между биомами после границы зоны, метров
+const BRIDGE_FADE_M = 50;         // переход от дороги к полотну моста на берегах
 const SPLIT_BANNER_AHEAD = 260;  // баннер выбора появляется за столько метров
 const STORAGE_KEY = 'bajajGO_biomeKm';
 const CURRENT_KEY = 'bajajGO_currentBiome';
@@ -42,6 +43,7 @@ const SCENERY_PREVIEW_M = 900;
 const CITY = biomeIndexOf('city');
 const MKAD = biomeIndexOf('mkad');
 const EMBANKMENT = biomeIndexOf('embankment');
+const CABLE_BRIDGE = biomeIndexOf('cable_bridge');
 const TRANSITIONS = transitionIndexes();
 
 /* Профиль и цвет земли берутся из записи каталога, в том же порядке, что и индекс сохранения. */
@@ -102,6 +104,8 @@ const chosenExit = Object.create(null);
 /** Метр, на котором выбор развилки зоны был зафиксирован. Нужен, чтобы
  *  схлопывание чужой ветки и сдвиг оси вводились плавно, а не рывком. */
 const splitCommitMeters = Object.create(null);
+/** Сторона предпросмотра в момент фиксации: отсюда начинается плавный ввод выбора. */
+const previewSideHold = Object.create(null);
 const SPLIT_RAMP_M = 60;
 
 const ZERO_VISITS = () => BIOMES.map(() => 0);
@@ -212,13 +216,42 @@ function zoneBiomeAt(zone) {
   return biomeIndex(zoneBiomes[z] ?? G.currentBiome ?? 0);
 }
 
-/** Биом, который уже можно показывать за развилкой. До выбора смотрим на сторону байка. */
+/** Насколько байк уже ушёл на правую ленту развилки. 0 — прямая, 1 — съезд. */
+function previewSideWeight(zone) {
+  const z = Math.max(0, Math.round(zone));
+  const s = Number.isFinite(G.playerS) ? G.playerS : 0;
+  if (onBridgeAtS(s)) return 0;
+  const frame = frameAt(s);
+  const spot = readExit(frame);
+  if (!spot.ribbon) return 0;
+  const axis = laneAnchor(frame);
+  const center = surfaceWorld(axis, spot, true);
+  const dist = center - axis;
+  if (!(dist > 0.1)) return 0;
+  const world = Number.isFinite(riderWorld)
+    ? riderWorld
+    : carriageLat(axis, laneSpanAt(s), G.laneOffset);
+  return smooth01(Math.max(0, Math.min(1, (world - axis) / dist)));
+}
+
+/**
+ * Биом за развилкой — не индекс, а микс двух ветвей. Пока выбор открыт, вес
+ * идёт от бокового положения байка; после фиксации дотягивается до выбранной
+ * ветви за SPLIT_RAMP_M метров. Декор, небо и щиты читают этот же микс.
+ */
 function previewBiomeAt(zone) {
   const z = Math.max(0, Math.round(zone));
-  if (chosenZones.has(z) || G.pendingBiome != null) return zoneBiomeAt(z + 1);
   const choices = splitChoices[z] || getBiomeChoices(zoneBiomeAt(z), G.visitCounts || ZERO_VISITS());
-  const side = G.splitState && G.splitState.zone === z ? G.splitState.side : 0;
-  return biomeIndex(choices[side === 1 ? 1 : 0]);
+  const left = biomeIndex(choices[0]);
+  const right = biomeIndex(choices[1]);
+  if (left === right) return { a: left, b: left, t: 0 };
+  const lateral = previewSideWeight(z);
+  if (!chosenZones.has(z) && G.pendingBiome == null) return { a: left, b: right, t: lateral };
+  const target = biomeIndex(zoneBiomeAt(z + 1)) === right ? 1 : 0;
+  const from = Number.isFinite(previewSideHold[z]) ? previewSideHold[z] : lateral;
+  const s = Number.isFinite(G.playerS) ? G.playerS : 0;
+  const ramp = splitDecisionWeight(z, blendMetersAt(s));
+  return { a: left, b: right, t: from + (target - from) * ramp };
 }
 
 function persistBiome() {
@@ -312,12 +345,8 @@ let riderSeat = { kind: /** @type {'road' | 'exit'} */ ('road'), lane: 0 };
 let riderWorld = NaN;
 /** Ось, на которой посчитан riderWorld. */
 let riderAxis = NaN;
-/** Середина дороги, на которой байк сидел в прошлом кадре. */
-let riderSurface = NaN;
-/** Полуширина ленты въезда в прошлом кадре. Расширение въезда держит байка у правой кромки. */
-let riderRibbonHalf = NaN;
-/** Прошлый кадр байк был на ленте съезда. */
-let riderOnRibbon = false;
+/** Память езды вместе с лентой: surface/heldLat/ribbonHalf, как у трафика. */
+const riderHold = emptyRideHold();
 /** Масштаб, которым посчитана текущая полоса байка. Пока неизвестен — полоса не пересчитывается. */
 let riderSpan = NaN;
 
@@ -343,6 +372,8 @@ function dropRoadCache() {
   layoutCache = null;
   frameKey = NaN;
   frameHit = null;
+  roadFrameKey = NaN;
+  roadFrameHit = null;
   headKey = NaN;
   headHit = null;
 }
@@ -457,7 +488,11 @@ function layoutAt(s) {
   return { layout, zone, nose: zoneNose(zone, layout) };
 }
 
-/** Центр развилки в координате s игрока. Единственная формула, её читает и полотно. */
+/**
+ * Центр развилки в координате s игрока. Единственная формула, её читает и полотно.
+ * Сам нос не сдвигается: ввод выбранной ветки идёт через splitDecisionWeight
+ * в roadFrameAt, поэтому ось и кромки едут плавно за SPLIT_RAMP_M метров.
+ */
 function splitCenterS(playerS) {
   return layoutAt(playerS).nose;
 }
@@ -571,6 +606,32 @@ function roadBiomeAtS(s) {
   return r.t >= 1 ? r.b : r.a;
 }
 
+/**
+ * У моста одно полотно шириной 38 м: 4 полосы — 2 встречные и 2 попутные.
+ * Раскладку берём из каталога, чтобы трафик, полосы и разметка не расходились
+ * с объявленными `lanes: 4, oncoming: 2`. Кромки — в fork.ts, без ленты съезда.
+ */
+
+/** Вес моста: 0 на берегах, 1 в пролёте, линейный переход на въезде/съезде. */
+function bridgeWeightAtS(s) {
+  const meters = Math.max(0, blendMetersAt(s));
+  const local = meters - Math.floor(meters / ZONE_M) * ZONE_M;
+  if (local <= BRIDGE_START_M - BRIDGE_FADE_M || local >= BRIDGE_END_M + BRIDGE_FADE_M) return 0;
+  if (local <= BRIDGE_START_M) return (local - (BRIDGE_START_M - BRIDGE_FADE_M)) / BRIDGE_FADE_M;
+  if (local >= BRIDGE_END_M) return (BRIDGE_END_M + BRIDGE_FADE_M - local) / BRIDGE_FADE_M;
+  return 1;
+}
+
+/** Мост включается только в зоне своего биома, не в такой же части чужой зоны. */
+function onBridgeAtS(s) {
+  return bridgeWeightAtS(s) > 0 && roadBiomeAtS(s) === CABLE_BRIDGE;
+}
+
+const BRIDGE_START_M = 350;
+const BRIDGE_END_M = 950;
+
+const BRIDGE_ROAD = LANE_CONFIG[CABLE_BRIDGE];
+
 /** Масштаб разметки: живая полуширина кадра и смещения его полос. */
 function laneSpanAt(s) {
   const at = Number.isFinite(s) ? s : G.playerS;
@@ -622,12 +683,37 @@ function splitDecisionWeight(zone, meters) {
   return u * u * (3 - 2 * u);
 }
 
-function frameAt(s) {
-  if (s === frameKey && frameHit) return frameHit;
+/** Кадр моста: одно полотно, кромки вне проезжей части, без съездов. */
+function bridgeFrameAt(s) {
+  const blended = blendMetersAt(s);
+  const z = zoneSample(blended).zone;
+  const profile = PROFILES[roadZoneIndex(z)];
+  const x = profile.x(blended);
+  const local = bridgeEdges();
+  return {
+    local,
+    world: {
+      leftOuter: local.leftOuter + x,
+      leftInner: local.leftInner + x,
+      rightInner: local.rightInner + x,
+      rightOuter: local.rightOuter + x,
+    },
+    origin: x,
+    block: null,
+    phase: { kind: 'settle', t: 1, open: 0 },
+    chosen: 0,
+  };
+}
+
+/** Обычный кадр дороги, без мостовых кромок. Полосы и съезды читают только его. */
+let roadFrameKey = NaN;
+let roadFrameHit = null;
+function roadFrameAt(s) {
+  if (s === roadFrameKey && roadFrameHit) return roadFrameHit;
   const route = routeAt(s);
   const side = decisionAt(route.zone).side;
-  frameKey = s;
-  frameHit = sampleRoad({
+  roadFrameKey = s;
+  roadFrameHit = sampleRoad({
     forkDistance: forkOffset(route.meters, ZONE_M, EXIT_CLOCK.lead),
     half: catalogHalfAt(s),
     chosen: side,
@@ -635,6 +721,31 @@ function frameAt(s) {
     endWeight: splitDecisionWeight(route.zone, route.meters),
     arriveHalf: side === 1 ? arriveHalfAt(route.zone) : undefined,
   });
+  return roadFrameHit;
+}
+
+function frameAt(s) {
+  if (s === frameKey && frameHit) return frameHit;
+  frameKey = s;
+  const w = onBridgeAtS(s) ? bridgeWeightAtS(s) : 0;
+  if (w >= 1) {
+    frameHit = bridgeFrameAt(s);
+    return frameHit;
+  }
+  const road = roadFrameAt(s);
+  if (w <= 0) {
+    frameHit = road;
+    return frameHit;
+  }
+  const bridge = bridgeFrameAt(s);
+  const lerp = (a, b) => a + (b - a) * w;
+  const world = {};
+  for (const key of Object.keys(road.world)) world[key] = lerp(road.world[key], bridge.world[key]);
+  frameHit = {
+    ...road,
+    world,
+    origin: lerp(road.origin, bridge.origin),
+  };
   return frameHit;
 }
 
@@ -716,12 +827,46 @@ function carriageBiomeAt(s, frame) {
 }
 
 function roadCarriageAt(s) {
-  const frame = frameAt(s);
+  // Полосы всегда читают обычный кадр: мостовые кромки не съезд и не вторая лента.
+  const frame = roadFrameAt(s);
   const dom = carriageBiomeAt(s, frame);
-  return carriageAt({
+  const normal = carriageAt({
     frame,
     biome: LANE_CONFIG[dom] || LANE_CONFIG[0],
   });
+  const w = onBridgeAtS(s) ? bridgeWeightAtS(s) : 0;
+  if (w <= 0) return normal;
+  const bridge = {
+    ...normal,
+    phase: 'road',
+    axis: frame.origin,
+    scale: 1,
+    half: BRIDGE_EDGE,
+    exitHalf: 0,
+    spot: { ...normal.spot, ribbon: null },
+    lanes: {
+      id: 'cable_bridge',
+      ...BRIDGE_ROAD,
+      lanes: BRIDGE_ROAD.lanes.map((lane) => ({ ...lane })),
+      offsets: BRIDGE_ROAD.offsets.slice(),
+      speeds: BRIDGE_ROAD.speeds.slice(),
+      biomeOncoming: BRIDGE_ROAD.oncomingCount,
+    },
+    way: BRIDGE_ROAD.way,
+    marks: [],
+    solid: [],
+  };
+  if (w >= 1) return bridge;
+  const mix = (a, b) => a + (b - a) * w;
+  return {
+    ...bridge,
+    axis: mix(normal.axis, bridge.axis),
+    scale: mix(normal.scale, bridge.scale),
+    half: mix(normal.half, bridge.half),
+    width: mix(normal.width, bridge.width),
+    marks: w < 0.5 ? normal.marks : [],
+    solid: w < 0.5 ? normal.solid : [],
+  };
 }
 
 /** Ширина живой проезжей части. В кадр уходит ширина каталога, без второго смешивания. */
@@ -740,14 +885,9 @@ function updateExitHold() {
     : carriageLat(axis, scale, G.laneOffset);
   const spot = readExit(frame);
   const onRibbon = ridingRibbon(spot, riderSeat.kind);
-  const center = surfaceWorld(axis, spot, onRibbon);
-  const placed = retargetRide(steeredWorld, riderSurface, onRibbon === riderOnRibbon, center);
   // Въезд растёт в новую дорогу симметрично вокруг середины. Правая кромка —
   // линия въезда: байк остаётся на ней и вливается справа, а не в центр.
-  let merged = placed.world;
-  const ribbonNow = onRibbon && spot.ribbon && !spot.ribbon.joined ? spot.ribbon : null;
-  if (ribbonNow && Number.isFinite(riderRibbonHalf)) merged += ribbonNow.half - riderRibbonHalf;
-  riderRibbonHalf = ribbonNow ? ribbonNow.half : NaN;
+  const merged = followRide(riderHold, steeredWorld, spot, axis, onRibbon);
   let seat;
   if (G.forkLabActive && Number.isFinite(G.forkLabLateral)) {
     const stick = riderSeat.kind === 'exit' ? 'exit' : 'road';
@@ -759,16 +899,14 @@ function updateExitHold() {
     const local = merged - frame.origin;
     const stick = onRibbon ? 'exit' : 'road';
     const held = stayOnAsphalt(frame.local, local, stick);
-    const incoming = rideRuler(frame, riderSeat.kind === 'exit', scale);
-    const lane = laneAtWorld(frame.origin + held, incoming.axis, incoming.scale);
-    seat = stepSeat(frame, { kind: riderSeat.kind, lane }, scale);
+    seat = seatFromWorld(frame, frame.origin + held, riderSeat, scale);
   }
   const used = rideRuler(frame, seat.kind === 'exit', scale);
   riderSeat = seat;
   riderSpan = used.scale;
   riderAxis = used.axis;
-  riderOnRibbon = ridingRibbon(spot, seat.kind);
-  riderSurface = surfaceWorld(axis, spot, riderOnRibbon);
+  riderHold.onRibbon = ridingRibbon(spot, seat.kind);
+  riderHold.surface = surfaceWorld(axis, spot, riderHold.onRibbon);
   riderWorld = seatWorld(frame, riderSeat, scale);
   G.laneOffset = riderSeat.lane;
 }
@@ -798,6 +936,9 @@ function rideAt(s, factor) {
 /** Полоса байка. Явное смещение и точка байка считаются сиденьем. Остальные точки — той же дорогой. */
 function riderLatAt(s, laneOffset) {
   const explicit = typeof laneOffset === 'number';
+  // В кадре игрока держим уже пересчитанную через retargetRide точку. Пересчёт
+  // из текущей оси снова прибавил бы сдвиг ленты и дал рывок на въезде.
+  if (!explicit && s === G.playerS && Number.isFinite(riderWorld)) return riderWorld;
   const lane = explicit ? laneOffset : G.laneOffset;
   const frame = frameAt(s);
   const seat = riderFrameSeat(s, lane);
@@ -822,10 +963,15 @@ function followLatAt(s, factor = 1, extra = 0) {
   return rideAt(s, f) + add;
 }
 
-/** Доминирующий биом в точке s (без массива весов). */
+/** Доминирующий биом в точке s — из тех же весов, что читают небо и декор. */
 function dominantBiomeAtS(s) {
-  const live = liveAtMeters(blendMetersAt(s));
-  return live.t >= 1 ? live.b : live.a;
+  const w = biomeWeightsAtS(s);
+  let dom = 0;
+  let best = -1;
+  for (let i = 0; i < w.length; i++) {
+    if (w[i] > best) { best = w[i]; dom = i; }
+  }
+  return dom;
 }
 
 /** Ближайшая попутная полоса к логическому смещению. */
@@ -858,47 +1004,56 @@ function fillWeights(live) {
   return weights;
 }
 
+/** Прибавить к весам микс двух биомов с общим весом scale. */
+function addBiomeMix(weights, a, b, t, scale) {
+  const w = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+  const k = Math.max(0, Math.min(1, Number.isFinite(scale) ? scale : 0));
+  if (a === b) {
+    weights[a] += k;
+    return;
+  }
+  weights[a] += (1 - w) * k;
+  weights[b] += w * k;
+}
+
 /**
  * Веса декора. В отличие от профиля дороги, смена идёт симметрично вокруг
  * границы зоны: новый биом виден издалека, а старый не пропадает сразу за
- * границей — он живёт, пока не уйдёт из поля зрения.
+ * границей. За развилкой читается не один индекс, а микс двух ветвей.
  */
-function sceneryMixAtMeters(meters) {
+function sceneryWeightsAtMeters(meters) {
   const m = Math.max(0, meters);
   const zone = Math.floor(m / ZONE_M);
   const local = m - zone * ZONE_M;
   const half = Math.max(1, SCENERY_PREVIEW_M);
   const span = half * 2;
+  const weights = new Array(BIOMES.length);
+  for (let i = 0; i < weights.length; i++) weights[i] = 0;
   // До первой границы нечего смешивать: в начале зоны всегда её собственный биом.
-  if (zone === 0 && local <= ZONE_M - half) return { a: zoneBiomeAt(0), b: zoneBiomeAt(0), t: 0 };
+  if (zone === 0 && local <= ZONE_M - half) {
+    weights[zoneBiomeAt(0)] = 1;
+    return weights;
+  }
   if (local > ZONE_M - half) {
-    return {
-      a: zoneBiomeAt(zone),
-      b: previewBiomeAt(zone),
-      t: smooth01((local - (ZONE_M - half)) / span),
-    };
+    const t = smooth01((local - (ZONE_M - half)) / span);
+    const own = zoneBiomeAt(zone);
+    addBiomeMix(weights, own, own, 0, 1 - t);
+    const preview = previewBiomeAt(zone);
+    addBiomeMix(weights, preview.a, preview.b, preview.t, t);
+    return weights;
   }
-  if (local < half) {
-    return {
-      a: zoneBiomeAt(zone - 1),
-      b: zoneBiomeAt(zone),
-      t: smooth01((local + half) / span),
-    };
+  if (local < half && zone > 0) {
+    const t = smooth01((local + half) / span);
+    weights[zoneBiomeAt(zone - 1)] += 1 - t;
+    weights[zoneBiomeAt(zone)] += t;
+    return weights;
   }
-  return { a: zoneBiomeAt(zone), b: zoneBiomeAt(zone), t: 0 };
+  weights[zoneBiomeAt(zone)] = 1;
+  return weights;
 }
 
 function biomeWeightsAtS(s) {
-  const live = sceneryMixAtMeters(blendMetersAt(s));
-  const weights = new Array(BIOMES.length);
-  for (let i = 0; i < weights.length; i++) weights[i] = 0;
-  if (live.a === live.b) {
-    weights[live.a] = 1;
-    return weights;
-  }
-  weights[live.a] = 1 - live.t;
-  weights[live.b] = live.t;
-  return weights;
+  return sceneryWeightsAtMeters(blendMetersAt(s));
 }
 
 
@@ -915,9 +1070,9 @@ const SHOULDER = {
 };
 
 /** Высота земли в мировой точке lat. Профиль тот же, что у откоса этой кромки. */
-function groundOffset(lat, s) {
+function groundOffset(lat, s, latAbs = lat) {
   const frame = frameAt(s);
-  const at = groundAt(frame.world, lat);
+  const at = groundAt(frame.world, lat, latAbs);
   const fromCenter = at.half;
   const cityOuter = SHOULDER.cityEdge * cityWeightAtS(s);
   const apron = vergeAt(frame.world, groundEdge(frame.world, lat), cityOuter);
@@ -1149,6 +1304,7 @@ function clearForkChoice(zone) {
   chosenZones.delete(zone);
   delete chosenExit[zone];
   delete splitCommitMeters[zone];
+  delete previewSideHold[zone];
   delete roadLock[zone + 1];
 }
 
@@ -1167,9 +1323,13 @@ function applyForkLab(zone, meters) {
 }
 
 function commitSplit(zone, side, commitMeters) {
+  // На пролёте развилки нет: въезд и съезд остаются на берегах.
+  if (onBridgeAtS(Number.isFinite(commitMeters) ? commitMeters - G.biomeOffsetM : G.playerS)) return;
   if (chosenZones.has(zone)) return;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts);
   const chosen = choices[side === 1 ? 1 : 0];
+  // Выбор фиксируется здесь, но предпросмотр едет от последней стороны байка.
+  previewSideHold[zone] = previewSideWeight(zone);
   chosenZones.add(zone);
   chosenExit[zone] = side === 1 ? 1 : -1;
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
@@ -1299,7 +1459,7 @@ function updateBiome(dt) {
   const chosenSide = splitPick(chosen ? (G.pendingBiome === choices[1] ? 1 : 0) : -1);
   const bannerSide = branchPick(previewSide);
   G.splitState = {
-    active: G.started && !G.ended && splitD > -SPLIT_BANNER_AHEAD && splitD < layout.ownAfter,
+    active: G.started && !G.ended && !onBridgeAtS(G.playerS) && splitD > -SPLIT_BANNER_AHEAD && splitD < layout.ownAfter,
     zone,
     s: splitM - G.biomeOffsetM,
     d: splitD,
@@ -1333,6 +1493,7 @@ function updateBiome(dt) {
   if (G.updateForest) G.updateForest();
   if (G.updateMountain) G.updateMountain();
   if (G.updateEmbankment) G.updateEmbankment(dt);
+  if (G.updateCableBridge) G.updateCableBridge(dt);
 }
 
 /** Сброс мира на старте заезда: биом продолжается с сохранённого места. */
@@ -1359,11 +1520,10 @@ function resetBiomeRun() {
   riderSpan = NaN;
   riderWorld = NaN;
   riderAxis = NaN;
-  riderSurface = NaN;
-  riderRibbonHalf = NaN;
-  riderOnRibbon = false;
+  Object.assign(riderHold, emptyRideHold());
   for (const key of Object.keys(roadLock)) delete roadLock[key];
   for (const key of Object.keys(splitCommitMeters)) delete splitCommitMeters[key];
+  for (const key of Object.keys(previewSideHold)) delete previewSideHold[key];
   dropRoadCache();
   clearBranchPaths();
   G.laneAssistTarget = null;
@@ -1375,6 +1535,7 @@ function resetBiomeRun() {
   if (G.resetForest) G.resetForest();
   if (G.resetMountain) G.resetMountain();
   if (G.resetEmbankment) G.resetEmbankment();
+  if (G.resetCableBridge) G.resetCableBridge();
   applyLaneConfig(G.playerS);
 }
 
@@ -1434,6 +1595,8 @@ export function initBiome() {
   G.biomeRoadDY = biomeRoadDY;
   G.cityWeightAtS = cityWeightAtS;
   G.mkadWeightAtS = mkadWeightAtS;
+  G.bridgeWeightAtS = bridgeWeightAtS;
+  G.onBridgeAtS = onBridgeAtS;
   G.embankmentWeightAtS = (s) => weightOf(liveAtMeters(blendMetersAt(s)), EMBANKMENT);
   G.biomeWeightsAtS = biomeWeightsAtS;
   G.roadWidthAtS = roadWidthAtS;
@@ -1466,6 +1629,11 @@ export function initBiome() {
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
+  /** Насколько ввод выбранной ветки уже применён к центру/кромкам. */
+  G.splitCommitWeightAtS = (s) => {
+    const at = layoutAt(s);
+    return splitDecisionWeight(at.zone, blendMetersAt(s));
+  };
   G.shoulder = SHOULDER;
   G.groundOffset = groundOffset;
   G.laneMarksAtS = laneMarksAtS;

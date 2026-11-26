@@ -113,6 +113,41 @@ export function retargetRide(
   return { along, world: next + along };
 }
 
+/** Память посадки между кадрами. То же, что traffic держит в heldLat/surface. */
+export interface RideHold {
+  surface: number;
+  ribbonHalf: number;
+  onRibbon: boolean;
+}
+
+export function emptyRideHold(): RideHold {
+  return { surface: NaN, ribbonHalf: NaN, onRibbon: false };
+}
+
+/**
+ * Один шаг езды вместе с лентой.
+ * Мир не перескакивает, когда середина съезда уезжает: как у трафика, держим
+ * смещение от прошлой середины и только затем кладём его на новую.
+ * Расширение въезда добавляется отдельно, чтобы байк оставался у правой кромки.
+ */
+export function followRide(
+  hold: RideHold,
+  steeredWorld: number,
+  spot: ExitRead,
+  axis: number,
+  onRibbon: boolean,
+): number {
+  const center = surfaceWorld(axis, spot, onRibbon);
+  const placed = retargetRide(steeredWorld, hold.surface, onRibbon === hold.onRibbon, center);
+  const open = onRibbon && spot.ribbon != null && !spot.ribbon.joined ? spot.ribbon : null;
+  let world = placed.world;
+  if (open != null && Number.isFinite(hold.ribbonHalf)) world += open.half - hold.ribbonHalf;
+  hold.ribbonHalf = open != null ? open.half : NaN;
+  hold.surface = center;
+  hold.onRibbon = onRibbon;
+  return world;
+}
+
 /** Единственное чтение съезда из кадра. */
 export function readExit(frame: RoadFrame): ExitRead {
   const edges = frame.local;
