@@ -47,7 +47,7 @@ assert(seal != null && clock.ownAfter === seal.start + seal.length, 'съезд 
 const nose = placedBlock(plan, 20, 0);
 assert(nose?.id === 'split' && nose.built, 'подход уже построен, выбор его не ждёт');
 const open = placedBlock(plan, plan.choiceAt + 40, 0);
-assert(open?.id === 'open' && open.built === false, 'до выбора хвост не строится');
+assert((open?.id === 'seal-exit' || open?.id === 'seal-main') && open.built, 'до выбора обе цепочки уже построены');
 const taken = placedBlock(plan, plan.choiceAt + 40, 1);
 assert(taken?.id === 'seal-main' && taken.built, 'выбор съезда ставит его цепочку');
 const kept = placedBlock(plan, plan.choiceAt + plan.seal + 40, -1);
@@ -55,8 +55,9 @@ assert(kept?.id === 'ahead' && kept.kind === 'road' && kept.built, 'прямой
 const carried = placedBlock(plan, plan.choiceAt + plan.seal + 40, 1);
 assert(carried?.id === 'arrived' && carried.kind === 'road', 'после въезда цепочка заканчивается новой дорогой');
 assert(placedBlock(plan, -1, 1) == null && placedBlock(plan, plan.length, 1) == null, 'вне рецепта блока нет');
-assert(plan.approach.map((span) => span.id).join() === 'split,fork', 'до выбора построено только подход');
-assert([...plan.approach, ...plan.exit].map((span) => span.id).join() === 'split,fork,seal-main,arrived', 'съезд достраивает свою цепочку');
+assert(plan.approach.map((span) => span.id).join() === 'split,fork', 'общий подход общий для обеих ветвей');
+assert([...plan.approach, ...plan.exit].map((span) => span.id).join() === 'split,fork,seal-main,arrived', 'съездная цепочка готова заранее');
+assert([...plan.approach, ...plan.straight].map((span) => span.id).join() === 'split,fork,seal-exit,ahead', 'прямая цепочка готова заранее');
 
 const broken: ExitRecipe = {
   id: 'broken',
@@ -99,6 +100,19 @@ for (const joint of [plan.diverge, plan.choiceAt, clock.ownAfter]) {
   const after = frameAt(joint + 0.02, -1).world;
   assert(mainHolds(before, after), `прямая дорога непрерывна на стыке ${joint}`);
 }
+for (const joint of [plan.diverge, plan.choiceAt, clock.ownAfter]) {
+  const before = frameAt(joint - 0.02, 1).world;
+  const after = frameAt(joint + 0.02, 1).world;
+  assert(mainHolds(before, after), `съезд непрерывен на стыке ${joint}`);
+}
+const anyChoice = frameAt(plan.choiceAt + 40, 0).world;
+const leftChoice = frameAt(plan.choiceAt + 40, -1).world;
+const rightChoice = frameAt(plan.choiceAt + 40, 1).world;
+assert(
+  Math.abs(anyChoice.leftOuter - leftChoice.leftOuter) < 1e-9
+  && Math.abs(anyChoice.rightOuter - rightChoice.rightOuter) < 1e-9,
+  'форма полотна не зависит от выбора игрока',
+);
 
 for (const joint of [plan.diverge, plan.choiceAt]) {
   const before = frameAt(joint - 0.02, 1).world;
@@ -108,28 +122,22 @@ for (const joint of [plan.diverge, plan.choiceAt]) {
 const seamBefore = frameAt(clock.ownAfter - 0.02, 1).world;
 const seamAfter = frameAt(clock.ownAfter + 0.02, 1).world;
 assert(
-  Math.abs(exitRibbonMid(seamBefore) - (seamAfter.leftOuter + seamAfter.leftInner) * 0.5) < 0.5,
-  'лента въезда переходит в новую дорогу без скачка',
+  Math.abs(exitRibbonMid(seamBefore) - exitRibbonMid(seamAfter)) < 0.5,
+  'лента съезда продолжается без скачка',
 );
 const openFork = frameAt(plan.choiceAt - 10, 1).world;
 const midSeal = frameAt(plan.choiceAt + plan.seal * 0.5, 1).world;
 const arrived = frameAt(clock.ownAfter + 2, 1).world;
-assert(openFork.leftOuter === -10 && openFork.leftInner === 10, 'до закрытия старая дорога ещё своей ширины');
+assert(openFork.leftOuter === -10 && openFork.leftInner === 10, 'до расхождения обе ленты на своих линиях');
 const oldWidth = midSeal.leftInner - midSeal.leftOuter;
-assert(oldWidth < 16 && oldWidth > 1, 'на закрытии старая дорога сужается');
-assert(Math.abs((midSeal.leftOuter + midSeal.leftInner) * 0.5) < 0.2, 'старая дорога сужается на месте');
-assert(exitRibbonMid(midSeal) > exitRibbonMid(openFork), 'въезд плавно уходит с +1 полосы на линию курса');
-assert(midSeal.rightOuter > midSeal.rightInner + 1, 'на закрытии въезд ещё отдельная лента');
+assert(Math.abs(oldWidth - 20) < 0.01, 'невыбранная дорога держит полную ширину');
+assert(midSeal.leftInner < 0, 'невыбранная дорога уходит влево от выбранной');
+assert(exitRibbonMid(midSeal) > exitRibbonMid(openFork), 'съезд плавно уходит с +1 полосы на линию курса');
+assert(midSeal.rightOuter > midSeal.rightInner + 1, 'выбранная лента остаётся отдельной');
 const home = exitRibbonMid(frameAt(clock.ownAfter - 0.02, 1).world);
-assert(Math.abs((arrived.leftOuter + arrived.leftInner) * 0.5 - home) < 1, 'сразу после въезда дорога на линии съезда');
-assert(arrived.rightInner === arrived.leftInner && arrived.rightOuter === arrived.rightInner, 'после въезда старой ленты нет');
-const declinedBefore = frameAt(clock.ownAfter - 0.02, -1).local;
-const declinedAfter = frameAt(clock.ownAfter + 0.02, -1).local;
-assert(exitRibbonMid(declinedBefore) > 12, 'закрытие отказа уводит съезд в сторону');
-assert(
-  declinedAfter.rightInner === declinedAfter.leftInner && declinedAfter.rightOuter === declinedAfter.rightInner,
-  'после закрытия кончика уже нет',
-);
+assert(Math.abs(exitRibbonMid(arrived) - home) < 1, 'съезд продолжает свою линию без скачка');
+assert(arrived.rightOuter - arrived.rightInner > 1, 'после въезда невыбранная лента всё ещё жива');
+assert(arrived.leftOuter < -10 && arrived.leftInner < 10, 'после въезда старая дорога уходит влево, а не пропадает');
 
 let tracks: [AsphaltSpan | null, AsphaltSpan | null] = [null, null];
 let entrance: number | null = null;
@@ -144,9 +152,9 @@ for (let distance = plan.choiceAt - 10; distance <= plan.length - 2; distance +=
   entrance = mid;
 }
 const left = tracks.find((span) => span != null);
-if (!left) throw new Error('после въезда новая дорога остаётся');
-assert(Math.abs(left.left + EXIT_LANE_HALF) < 0.2 && Math.abs(left.right - EXIT_LANE_HALF) < 0.2, 'лента въезда приходит в новую дорогу');
-assert(tracks.filter((span) => span != null).length === 1, 'старая дорога к концу въезда уже сошла');
+if (!left) throw new Error('после въезда обе ленты остаются');
+assert(tracks.filter((span) => span != null).length === 2, 'обе ленты продолжаются и после въезда');
+assert(Math.abs((left.left + left.right) * 0.5 + EXIT_LANE_HALF) > 1, 'невыбранная лента ушла от линии въезда');
 const pinched = pinchAsphalt([
   [{ left: -10, right: 10 }, { left: 20, right: 30 }],
   [null, { left: 20.2, right: 30.2 }],

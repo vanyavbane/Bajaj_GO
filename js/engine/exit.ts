@@ -6,21 +6,21 @@
  * дорога» — в игре не выводится заново из ширины.
  *
  * life идёт по блоку рецепта:
- *   plain    — съезда нет, одна дорога
+ *   plain    — съезда нет
  *   opening  — справа нарастает +1 полоса, она ещё одно полотно с шоссе
- *   beside   — полоса полной ширины и всё ещё прижата, здесь выбор
- *   sealing  — выбранная полоса отделяется, чужая сходится
- *   arrived  — взятый въезд стал дорогой и садится на ось пути, отдельной ленты нет
+ *   beside   — обе ленты полной ширины, здесь выбор
+ *   sealing  — ленты плавно расходятся, обе остаются живыми
+ *   settle   — обе ленты продолжаются в следующий участок
  *
- * ribbon — правая лента, пока у неё есть ширина. На plain и arrived её нет.
- * main — левый слот. На arrived это уже новая дорога, не остаток старой.
+ * ribbon — правая лента, пока у неё есть ширина. main — левая лента.
+ * Обе живут до конца рецепта: выбор не схлопывает невыбранную.
  * Если life говорит «лента есть», а ribbon пуст, кромки и рецепт разошлись:
  * чинить надо здесь, а не в вызывающем коде.
  */
 
 import { exitRibbonCenter, exitWidth, mainCenter, mainHalf, roadsJoined, type ChosenSide, type ExitKind, type RoadFrame } from './fork.ts';
 
-export type ExitLife = 'plain' | 'opening' | 'beside' | 'sealing' | 'arrived';
+export type ExitLife = 'plain' | 'opening' | 'beside' | 'sealing' | 'settle';
 
 export interface ExitRibbon {
   /** Середина ленты, в тех же метрах, что и кромки кадра. */
@@ -46,17 +46,22 @@ export interface ExitRead {
   ribbon: ExitRibbon | null;
 }
 
-function lifeOf(kind: ExitKind, chosen: ChosenSide): ExitLife {
+function lifeOf(kind: ExitKind, _chosen: ChosenSide): ExitLife {
   if (kind === 'diverge') return 'opening';
   if (kind === 'run') return 'beside';
   if (kind === 'end') return 'sealing';
-  if (kind === 'settle' && chosen === 1) return 'arrived';
+  if (kind === 'settle') return 'settle';
   return 'plain';
 }
 
 /** Байк на правой ленте, пока чтение съезда её ещё держит. */
 export function ridingRibbon(spot: ExitRead, kind: string): boolean {
   return kind === 'exit' && spot.ribbon != null;
+}
+
+/** Последний блок рецепта: ленты живы, активная уже едет своей дорогой. */
+export function settledRibbon(spot: ExitRead): boolean {
+  return spot.life === 'settle' && spot.ribbon != null;
 }
 
 /** Мир середины дороги. axis — ось полос, в ней уже сидит середина main. */
@@ -89,7 +94,7 @@ export function sampleRide(
   const playerCenter = playerOrigin + rideCenter(player, onRibbon);
   const world = Number.isFinite(playerWorld) ? playerWorld : playerCenter;
   const along = (world - playerCenter) * f;
-  if (player.life === 'arrived' && sample.life !== 'arrived') return playerCenter + along;
+  if (player.life === 'settle' && sample.life !== 'settle') return playerCenter + along;
   return sampleOrigin + rideCenter(sample, onRibbon && sample.ribbon != null) + along;
 }
 

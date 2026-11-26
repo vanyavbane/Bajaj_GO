@@ -1,7 +1,8 @@
 /**
  * Съезд собирается из блоков.
  * Рецепт — это подход, общий для обоих путей, и две цепочки одинаковой длины.
- * Игрок выбирает одну: прямую дорогу или съезд. Вторая цепочка не строится.
+ * Обе цепочки строятся заранее и стоят всё время: выбор меняет только то,
+ * какая из них активна, но не форму полотна перед игроком.
  * Новый съезд — новый рецепт здесь, а не новая ветка в расчёте кромок.
  */
 
@@ -82,7 +83,7 @@ export interface PlacedBlock {
   u: number;
   start: number;
   length: number;
-  /** Подход уже стоит. Хвост стоит только после выбора игрока. */
+  /** Обе цепочки построены заранее, поэтому поле всегда true. */
   built: boolean;
 }
 
@@ -191,18 +192,17 @@ export function spanAt(plan: CompiledExit, d: number): SpanHit | null {
   return null;
 }
 
-/** Блок, который реально построен. До выбора хвост ещё не стоит. */
+/**
+ * Блок в точке рецепта. Обе цепочки уже построены, выбор нужен только для
+ * подписи активной цепочки в HUD/отладке; форму кадра он не меняет.
+ */
 export function placedBlock(plan: CompiledExit, d: number, chosen: BuildChoice): PlacedBlock | null {
   const span = spanAt(plan, d);
   if (!span) return null;
   if (span.start < plan.choiceAt) {
     return { id: span.id, kind: span.kind, u: span.u, start: span.start, length: span.length, built: true };
   }
-  if (chosen === 0) {
-    return { id: 'open', kind: 'fork', u: span.u, start: span.start, length: span.length, built: false };
-  }
   const chain = chosen === 1 ? plan.exit : plan.straight;
-  const built = chain.find((item) => item.start === span.start);
-  if (!built) return null;
-  return { id: built.id, kind: built.kind, u: span.u, start: built.start, length: built.length, built: true };
+  const active = chain.find((item) => item.start === span.start) ?? span;
+  return { id: active.id, kind: active.kind, u: span.u, start: span.start, length: span.length, built: true };
 }

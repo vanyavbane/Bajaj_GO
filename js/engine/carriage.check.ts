@@ -69,24 +69,29 @@ const mid = carriageAt({ frame: midReturn, biome: city });
 const late = carriageAt({ frame: lateSeal, biome: city });
 assert(early.phase === 'ribbon' && mid.phase === 'ribbon', 'пока старая дорога ещё есть, въезд — её правая полоса');
 assert(early.lanes.count === city.count + 1 && early.way === 'two-way', 'полосы старой дороги остаются, справа добавлен съезд');
-assert(Math.abs(early.axis) < 0.2 && Math.abs(mid.axis) < 0.2, 'старая дорога сужается на своей оси');
+assert(
+  Math.abs(early.axis - (earlySeal.local.leftOuter + earlySeal.local.leftInner) * 0.5) < 1e-6
+  && Math.abs(mid.axis - (midReturn.local.leftOuter + midReturn.local.leftInner) * 0.5) < 1e-6
+  && mid.axis < early.axis,
+  'полосы едут вместе со своей лентой, которая уходит влево',
+);
 const earlyRibbon = exitRibbonCenter(earlySeal.local);
 const midRibbon = exitRibbonCenter(midReturn.local);
 assert(earlyRibbon != null && midRibbon != null && midRibbon > earlyRibbon, 'въезд плавно уходит с +1 полосы на линию курса');
-assert(midReturn.local.leftInner - midReturn.local.leftOuter < half * 2 - 1, 'старая дорога на въезде уже уже');
+assert(Math.abs(midReturn.local.leftInner - midReturn.local.leftOuter - half * 2) < 0.01, 'невыбранная дорога держит полную ширину');
 assert(early.lanes.lanes.some((lane) => lane.exit) && early.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');
 const cityEdge = Math.max(...city.offsets.map((offset) => Math.abs(offset))) + city.laneWidth * 0.5;
 assert(Math.abs(early.scale - Math.min(1, early.half / cityEdge)) < 1e-9, 'полосы старой дороги держит её кромка, не съезд');
-assert(exitRibbonCenter(lateSeal.local) == null && late.phase === 'road', 'к концу закрытия полоса съезда кончилась');
-assert(late.lanes.count === city.count && !late.lanes.lanes.some((lane) => lane.exit) && late.way === 'two-way', 'на месте съезда новая дорога без отдельной полосы');
-assert(Math.abs(late.half - EXIT_LANE_HALF) < 1e-6 && late.axis > half, 'новая дорога стоит на линии въезда и на его ширине');
+assert(exitRibbonCenter(lateSeal.local) != null && late.phase === 'ribbon', 'съезд продолжается и после расхождения');
+assert(late.lanes.count === city.count + 1 && late.lanes.lanes.some((lane) => lane.exit) && late.way === 'two-way', 'невыбранная лента остаётся отдельной полосой');
+assert(Math.abs(late.half - half) < 1e-6 && late.axis < -half, 'невыбранная дорога держит ширину и уходит влево');
 assert(covers(earlySeal, early.axis), 'ось дороги внутри её кромок');
 
 const exiting: RiderSeat = { kind: 'exit', lane: 0.4 };
 const merged = stepSeat(lateSeal, exiting, late.scale);
-assert(merged.kind === 'road', 'въезд сажает байка на новую дорогу');
+assert(merged.kind === 'exit', 'байк остаётся на своей ленте');
 const landed = seatWorld(lateSeal, merged, late.scale);
-assert(landed > lateSeal.local.leftOuter && landed < lateSeal.local.leftInner, 'байк остаётся на новой дороге');
+assert(landed > lateSeal.local.rightInner && landed < lateSeal.local.rightOuter, 'байк остаётся на своей ленте');
 
 const nextZone = carriageAt({ frame: frameAt(-10, 0), biome: city });
 assert(nextZone.phase === 'road' && nextZone.way === 'two-way' && nextZone.lanes.count === city.count, 'следующая зона — своя дорога');

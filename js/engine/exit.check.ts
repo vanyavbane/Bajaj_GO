@@ -45,19 +45,21 @@ assert(beside.ribbon?.joined === true, 'до выбора +1 полоса ещё
 assert(beside.main.half === 10, 'пока выбор открыт, старая дорога не сужается');
 
 const sealing = expect(clock.choiceAt + 40, 1, 'sealing', true);
-assert(sealing.main.half < 10 && sealing.main.half > 1, 'взятый въезд сужает старую дорогу, пока лента ещё есть');
-assert((sealing.ribbon?.center ?? 0) > 12, 'лента въезда на закрытии остаётся на своей линии');
+assert(sealing.main.half === 10, 'невыбранная дорога держит свою ширину');
+assert(sealing.main.center < 0, 'невыбранная дорога уходит влево');
+assert((sealing.ribbon?.center ?? 0) > 12, 'выбранная лента остаётся на своей линии');
 
 const declined = expect(clock.choiceAt + 40, -1, 'sealing', true);
-assert(declined.main.half === 10, 'отказ не сужает прямую');
-assert((declined.ribbon?.center ?? 0) > (beside.ribbon?.center ?? 0), 'отказанная лента уходит в сторону');
+assert(declined.main.half === 10, 'прямая не сужается');
+assert((declined.ribbon?.center ?? 0) > (beside.ribbon?.center ?? 0), 'отказанная лента уходит вправо');
 
-const arrived = expect(clock.ownAfter + 5, 1, 'arrived', false, 8);
-assert(Math.abs(arrived.main.half - 8) < 0.05, 'после въезда ширина — ширина новой дороги');
-assert(arrived.main.center > 12, 'сразу после закрытия новая дорога стоит на линии въезда');
+const settled = expect(clock.ownAfter + 5, 1, 'settle', true, 8);
+assert(settled.main.half === 10, 'после въезда невыбранная лента сохраняет ширину');
+assert(settled.main.center < 0, 'невыбранная лента продолжается левее');
+assert((settled.ribbon?.center ?? 0) > 12, 'выбранная лента стоит на своей линии');
 
-const straight = expect(clock.ownAfter + 5, -1, 'plain', false);
-assert(straight.main.half === 10 && straight.main.center === 0, 'после отказа остаётся прежняя дорога');
+const straight = expect(clock.ownAfter + 5, -1, 'settle', true);
+assert(straight.main.half === 10 && straight.main.center < 0, 'после отказа обе дороги продолжаются');
 
 assert(EXIT_LANE_HALF === 4.5, 'съезд без своей ширины назначения — полоса 4.5 м');
 
@@ -71,15 +73,15 @@ const sealingFrame = frame(clock.choiceAt + 40, 1);
 const sealingSpot = readExit(sealingFrame);
 const steer = logicalRoadLimits(sealingFrame.local, 1, true);
 const steerMid = (steer.min + steer.max) * 0.5;
-assert(sealingSpot.ribbon != null && sealingSpot.ribbon.joined === false, 'на закрытии взятого въезда между дорогами уже клин');
-assert(Math.abs(steerMid) < 1e-6, 'руль закрытия стоит на середине ленты, не на оси старой дороги');
+assert(sealingSpot.ribbon != null && sealingSpot.ribbon.joined === false, 'на расхождении между дорогами уже клин');
+assert(Math.abs(steerMid) < 1e-6, 'руль на отделённой ленте считается от её середины');
 assert(besideSpot.ribbon != null && rideCenter(besideSpot, true) === besideSpot.ribbon.center, 'камера тянется к середине ленты');
 assert(rideCenter(besideSpot, false) === besideSpot.main.center, 'с шоссе камера тянется к оси дороги');
 
-const arrivedSpot = readExit(frame(clock.ownAfter + 5, 1, 8));
-const behind = sampleRide(sealingSpot, arrivedSpot, false, arrivedSpot.main.center, 0, 0, 1);
-assert(Math.abs(behind - arrivedSpot.main.center) < 1e-6, 'точка позади на закрытии остаётся на линии новой дороги');
-assert(sampleRide(arrivedSpot, arrivedSpot, false, 3, 0, 0, 1) === 3, 'на новой дороге точка считается от её середины');
+const settledSpot = readExit(frame(clock.ownAfter + 5, 1, 8));
+const behind = sampleRide(sealingSpot, settledSpot, false, settledSpot.ribbon!.center, 0, 0, 1);
+assert(Math.abs(behind - settledSpot.ribbon!.center) < 1e-6, 'точка позади остаётся на линии выбранной ленты');
+assert(sampleRide(settledSpot, settledSpot, false, 3, 0, 0, 1) === 3, 'на своей ленте точка считается от её середины');
 
 const followed = retargetRide(15, 14, true, 18);
 assert(followed.along === 1 && followed.world === 19, 'байк едет вместе со своей лентой и держит место в ней');
@@ -122,7 +124,7 @@ for (rideD = clock.choiceAt - 9; rideD <= clock.lead; rideD += 1) {
 }
 assert(Math.abs(world) < 1, 'к концу въезда байк приехал вместе с дорогой на ось пути');
 
-for (const id of ['city', 'mkad']) {
+for (const id of ['city', 'mkad', 'embankment']) {
   const def = BIOMES.find((biome) => biome.id === id);
   if (!def) throw new Error(`в каталоге нет ${id}`);
   const layout = laneLayoutOf(def);
@@ -179,11 +181,11 @@ for (const id of ['city', 'mkad']) {
       assert(Math.abs(seated) > spot.main.half + 1, `${id} ${distance} м: байк сидит в центре старой дороги`);
       assert(seat.kind === 'exit', `${id} ${distance} м: съезд перестал быть своей дорогой`);
     }
-    if (spot.life === 'arrived') {
-      const right = at.local.leftInner;
-      assert(seat.kind === 'road', `${id} ${distance} м: приезд не сажает байка на новую дорогу`);
-      assert(seated > at.local.leftOuter && seated < right, `${id} ${distance} м: новая дорога не под байком`);
-      assert(seated > at.origin + spot.main.center, `${id} ${distance} м: въезд сажает байка в центр, а не вливает справа`);
+    if (spot.life === 'settle') {
+      const ribbon = spot.ribbon;
+      if (!ribbon) throw new Error(`${id} ${distance} м: на continue-ленте нет полосы`);
+      assert(seat.kind === 'exit', `${id} ${distance} м: лента продолжается, байк остаётся на ней`);
+      assert(seated > at.origin + ribbon.center - ribbon.half && seated < at.origin + ribbon.center + ribbon.half, `${id} ${distance} м: байк сошёл с выбранной ленты`);
     }
     kind = seat.kind;
     lane = seat.lane;

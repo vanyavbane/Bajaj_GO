@@ -51,22 +51,23 @@ sameWorld(heldWorld, open, held);
 
 const mergeFrame = frameAt(clock.ownAfter + 5, 1);
 assert(mergeFrame.origin === 0, 'въезд не переносит центр новой дороги');
-assert(exitRibbonCenter(mergeFrame.local) == null, 'после въезда лента уже не отдельная');
+const mergedCenter = exitRibbonCenter(mergeFrame.local);
+assert(mergedCenter != null, 'после въезда лента остаётся отдельной и продолжается');
 const exiting: RiderSeat = { kind: 'exit', lane: 0.4 };
 const merged = stepSeat(mergeFrame, exiting, span);
-assert(merged.kind === 'road', 'въезд сажает байка на новую дорогу');
+assert(merged.kind === 'exit', 'байк остаётся на своей ленте, а не перескакивает на другую');
 const landedAt = seatWorld(mergeFrame, merged, span);
 assert(
-  landedAt > mergeFrame.local.leftOuter + 0.2 && landedAt < mergeFrame.local.leftInner - 0.2,
-  'байк остаётся на новой дороге, а не на кромке старой',
+  landedAt > mergeFrame.local.rightInner + 0.2 && landedAt < mergeFrame.local.rightOuter - 0.2,
+  'байк остаётся на своей ленте, а не на кромке другой',
 );
 
 const declined = frameAt(clock.ownAfter + 5, -1);
-assert(exitRibbonCenter(declined.local) == null, 'отказанная лента к концу зоны исчезла');
-const stranded: RiderSeat = { kind: 'exit', lane: 6 };
-const landed = stepSeat(declined, stranded, span);
-assert(landed.kind === 'road', 'пропавшая лента возвращает байка на дорогу');
-assert(landed.lane < stranded.lane, 'байк садится на край прямой, а не остаётся в стороне');
+assert(exitRibbonCenter(declined.local) != null, 'отказ не закрывает ленту: она продолжается вправо');
+const onDeclined: RiderSeat = { kind: 'exit', lane: 0.4 };
+const landed = stepSeat(declined, onDeclined, span);
+assert(landed.kind === 'exit', 'байк на невыбранной ленте остаётся на ней');
+assert(Math.abs(seatWorld(declined, landed, span) - seatWorld(declined, onDeclined, span)) < 1e-6, 'мир сиденья не прыгает');
 
 // Мост — одно полотно. Если разделить его щелью посредине, readExit примет
 // правую половину за съезд, laneAnchor уедет на 9.55 м и попутная полоса

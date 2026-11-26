@@ -1,10 +1,12 @@
 /**
  * Кромки съезда и езда по ним.
  * Форма съезда — рецепт блоков в blocks.ts. Полотно и откос — asphalt.ts.
- * Кромки считаются относительно центра новой дороги. Этот центр съезд не переносит.
- * Взятый въезд идёт в новую дорогу, старая сужается и сходит. Прямой ход уводит съезд в сторону.
+ * Кромки считаются относительно центра дороги. Обе ветви построены заранее
+ * и держат свою ширину: выбор меняет курс езды, но не форму полотна.
+ * Невыбранная ветвь продолжается и уходит в свою сторону, не схлопываясь.
  *
- * ChosenSide: -1 съезд закрыт, +1 въезд идёт в новую дорогу, 0 выбор ещё открыт.
+ * ChosenSide: -1 straight, +1 exit, 0 выбор ещё открыт. До выбора геометрия
+ * от него не зависит; после — меняется только курс активной ленты.
  */
 
 import { RIGHT_EXIT, compileExit, placedBlock, spanAt } from './blocks.ts';
@@ -174,32 +176,27 @@ export function forkSpreadAt(
 
 /**
  * Занятость развилки для барьера, трамплинов и сервиса.
- * До выбора хвост ещё рисует обе ленты. После выбора блок settle — уже одна дорога,
- * поэтому флаг гаснет там, а не скачком на границе зоны.
+ * Обе ветви остаются в мире и после выбора, поэтому клин занят до конца рецепта.
  */
-export function liveForkAmount(amount: number, phase: ExitKind, chosen: ChosenSide): number {
+export function liveForkAmount(amount: number, phase: ExitKind, _chosen: ChosenSide): number {
   const raw = Number.isFinite(amount) ? Math.max(0, amount) : 0;
-  if (chosen !== 0 && (phase === 'settle' || phase === 'none')) return 0;
-  return raw;
+  return phase === 'none' ? 0 : raw;
 }
 
 /**
- * Занятость с учётом кромок.
- * Взятый въезд гасит развилку по мере прихода ленты к новой дороге.
- * Уход старой кромки в сторону эту занятость не держит.
+ * Занятость с учётом кромок. Пока обе ленты живы, клин остаётся занятым;
+ * гасим только там, где у ленты уже нет ширины.
  */
 export function forkOccupancy(
   amount: number,
   phase: ExitKind,
   chosen: ChosenSide,
   edges: AsphaltEdges,
-  close = 0,
+  _close = 0,
 ): number {
   const raw = liveForkAmount(amount, phase, chosen);
-  if (chosen !== 1 || phase !== 'end') return raw;
-  if (!(exitWidth(edges) > 1)) return 0;
-  const left = Math.max(0, Math.min(1, close));
-  return raw * (1 - left);
+  if (!(exitWidth(edges) > 1) || !(mainHalf(edges) > 1)) return 0;
+  return raw;
 }
 
 /** -1 слева, включая ровно ноль. */
@@ -232,71 +229,83 @@ function exitPhase(d: number): ExitPhase {
   return { kind: 'settle', t: smooth01(span.u), open: 1 };
 }
 
-/** Дорога ширины `half` с центром `center`. Правой ленты нет. */
-function roadAt(center: number, half: number): AsphaltEdges {
-  return {
-    leftOuter: center - half,
-    leftInner: center + half,
-    rightInner: center + half,
-    rightOuter: center + half,
-  };
-}
-
 /** Середина съезда, когда он уже отошёл на полный разъезд. */
 function entranceHome(road: number): number {
   return exitRibbonMid(branchEdges(road, FORK_SPREAD));
 }
 
 /**
- * Взятый въезд за закрытие.
- * Старая дорога сужается на месте. Въезд остаётся лентой на своей линии до конца закрытия:
- * путь подхватывает её в тот же метр, и полотно не рвётся.
+ * Обе ветви после выбора. Старая дорога остаётся полной и плавно уходит
+ * влево от линии съезда; съезд остаётся полной лентой и уходит вправо.
+ * Ни одна ширина не обнуляется: запас на стыке следующий зоны.
  */
-function takenEntrance(road: number, arrive: number, t: number): AsphaltEdges {
-  // Старт — та же прижатая +1 полоса, что была на подходе. К концу закрытия
-  // она приходит на линию курса, а старая дорога сходит на нет.
-  const fromMid = road + EXIT_LANE_HALF;
-  const home = entranceHome(road);
-  const fromHalf = EXIT_LANE_HALF;
-  const dest = Math.max(0, Number.isFinite(arrive) ? arrive : fromHalf);
+function bothBranches(road: number, arrive: number, t: number): AsphaltEdges {
   const u = Math.max(0, Math.min(1, t));
-  const oldHalf = road * (1 - u);
-  const entranceHalf = fromHalf + (dest - fromHalf) * u;
-  const mid = fromMid + (home - fromMid) * u;
+  const left = attachedEdges(road, 1);
+  const targetHalf = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
+  const exitHalf = targetHalf + (Math.max(0, Number.isFinite(arrive) ? arrive : targetHalf) - targetHalf) * u;
+  const home = entranceHome(road);
+  const startMid = road + EXIT_LANE_HALF;
+  const exitMid = startMid + (home - startMid) * u;
+  // Прямая уходит влево от линии съезда, съезд приходит на свою линию курса.
+  // Расхождение считается один раз: обе кромки живы, но не разъезжаются вдвое дальше.
+  const drift = u * FORK_SPREAD;
   return {
-    leftOuter: -oldHalf,
-    leftInner: oldHalf,
-    rightInner: mid - entranceHalf,
-    rightOuter: mid + entranceHalf,
+    leftOuter: left.leftOuter - drift,
+    leftInner: left.leftInner - drift,
+    rightInner: exitMid - exitHalf,
+    rightOuter: exitMid + exitHalf,
   };
 }
 
-/** Кромки поставленного блока. Непостроенный хвост остаётся развилкой, его ещё не закрывают. */
-function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, endWeight: number, arrive: number): AsphaltEdges {
+/**
+ * После расхождения активная лента плавно садится на ось следующей дороги,
+ * а невыбранная продолжается в свою сторону полной ширины. Ни одна лента
+ * не схлопывается: выбор уже сделан, меняется только курс езды.
+ */
+function handoffBranches(
+  road: number,
+  chosen: ChosenSide,
+  t: number,
+  arrive: number,
+): AsphaltEdges {
+  const u = Math.max(0, Math.min(1, t));
+  const split = bothBranches(road, arrive, 1);
+  if (chosen === 0) return split;
+  const exitHalf = (split.rightOuter - split.rightInner) * 0.5;
+  const grownHalf = exitHalf + (road - exitHalf) * u;
+  if (chosen === 1) {
+    const exitMid = exitRibbonMid(split) * (1 - u);
+    const away = u * FORK_SPREAD;
+    return {
+      leftOuter: split.leftOuter - away,
+      leftInner: split.leftInner - away,
+      rightInner: exitMid - grownHalf,
+      rightOuter: exitMid + grownHalf,
+    };
+  }
+  const mainMid = mainCenter(split) * (1 - u);
+  const away = u * FORK_SPREAD;
+  return {
+    leftOuter: mainMid - road,
+    leftInner: mainMid + road,
+    rightInner: split.rightInner + away,
+    rightOuter: split.rightOuter + away,
+  };
+}
+
+/**
+ * Кромки поставленного блока. До выбора форма не зависит от него; в последнем
+ * блоке выбранная лента плавно переходит в дорогу следующей зоны.
+ */
+function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide, _endWeight: number, arrive: number): AsphaltEdges {
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
-  if (!block.built) return branchEdges(road, FORK_SPREAD);
   if (block.kind === 'split') return attachedEdges(road, smooth01(block.u));
   if (block.kind === 'fork') return attachedEdges(road, 1);
-  if (block.kind === 'seal') {
-    const t = smooth01(block.u) * Math.max(0, Math.min(1, endWeight));
-    if (chosen === 1) return takenEntrance(road, dest, t);
-    const edge = attachedEdges(road, 1);
-    // Невыбранная ветка уходит в сторону и исчезает, не схлопываясь к выбранной.
-    if (chosen === -1) {
-      const away = t * FORK_SPREAD * 1.5;
-      const w = exitWidth(edge) * (1 - t);
-      const mid = exitRibbonMid(edge) + away;
-      edge.rightInner = mid - w * 0.5;
-      edge.rightOuter = mid + w * 0.5;
-    }
-    return edge;
-  }
-  // Въезд уже стал новой дорогой. За запас она садится на центр пути.
-  // Прямой ход оставляет старую.
-  if (chosen === 1) return roadAt(entranceHome(road) * (1 - smooth01(block.u)), dest);
-  return branchEdges(road, 0);
+  if (block.kind === 'seal') return bothBranches(road, dest, smooth01(block.u));
+  return handoffBranches(road, chosen, smooth01(block.u), dest);
 }
 
 /**
@@ -360,23 +369,16 @@ function translateEdges(edges: AsphaltEdges, origin: number): AsphaltEdges {
 /** Единственная сборка дороги в точке. Кромки берёт поставленный блок. */
 export function sampleRoad(query: RoadQuery): RoadFrame {
   const chosen = query.chosen;
-  const givenWeight = query.endWeight;
-  const endWeight = typeof givenWeight === 'number' && Number.isFinite(givenWeight)
-    ? Math.max(0, Math.min(1, givenWeight))
-    : 1;
   const block = placedBlock(EXIT_PLAN, query.forkDistance, chosen);
   const phase = exitPhase(query.forkDistance);
-  const weighted: ExitPhase = phase.kind === 'end' && chosen !== 0
-    ? { ...phase, t: phase.t * endWeight }
-    : phase;
   const origin = finiteOrigin(query.baseOrigin);
   const arrive = typeof query.arriveHalf === 'number' ? query.arriveHalf : EXIT_LANE_HALF;
-  const local = blockEdges(query.half, block, chosen, endWeight, arrive);
+  const local = blockEdges(query.half, block, chosen, query.endWeight ?? 1, arrive);
   return {
     origin,
     local,
     world: translateEdges(local, origin),
-    phase: weighted,
+    phase,
     chosen,
     block,
   };

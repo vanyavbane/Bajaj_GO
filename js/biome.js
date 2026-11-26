@@ -235,9 +235,8 @@ function previewSideWeight(zone) {
 }
 
 /**
- * Биом за развилкой — не индекс, а микс двух ветвей. Пока выбор открыт, вес
- * идёт от бокового положения байка; после фиксации дотягивается до выбранной
- * ветви за SPLIT_RAMP_M метров. Декор, небо и щиты читают этот же микс.
+ * Биом за развилкой — обе ветви сразу. Вес не зависит от того, где байк и когда
+ * зафиксирован выбор: декорации обоих биомов построены и видны заранее.
  */
 function previewBiomeAt(zone) {
   const z = Math.max(0, Math.round(zone));
@@ -245,13 +244,7 @@ function previewBiomeAt(zone) {
   const left = biomeIndex(choices[0]);
   const right = biomeIndex(choices[1]);
   if (left === right) return { a: left, b: left, t: 0 };
-  const lateral = previewSideWeight(z);
-  if (!chosenZones.has(z) && G.pendingBiome == null) return { a: left, b: right, t: lateral };
-  const target = biomeIndex(zoneBiomeAt(z + 1)) === right ? 1 : 0;
-  const from = Number.isFinite(previewSideHold[z]) ? previewSideHold[z] : lateral;
-  const s = Number.isFinite(G.playerS) ? G.playerS : 0;
-  const ramp = splitDecisionWeight(z, blendMetersAt(s));
-  return { a: left, b: right, t: from + (target - from) * ramp };
+  return { a: left, b: right, t: 0.5 };
 }
 
 function persistBiome() {
@@ -319,9 +312,9 @@ function roadZoneIndex(zone) {
   const start = z * ZONE_M;
   const playerM = (Number.isFinite(G.biomeOffsetM) ? G.biomeOffsetM : 0)
     + (Number.isFinite(G.playerS) ? G.playerS : 0);
-  if (start > playerM + 340) return live;
-  if (roadLock[z] == null) roadLock[z] = live;
-  return roadLock[z];
+  if (roadLock[z] == null && start <= playerM + 340) roadLock[z] = live;
+  // Замок уже поставлен: выбор ветки не перестраивает профиль перед игроком.
+  return roadLock[z] ?? live;
 }
 
 function liveAtMeters(meters) {
@@ -449,11 +442,16 @@ function exitBornAt(spawn) {
   return catalogHalfAt(at) + EXIT_LANE_HALF;
 }
 
-/** Полуширина биома, в который ведёт съезд этой зоны. */
+/** Полуширина самой широкой из двух заготовленных ветвей: выбор её не меняет. */
 function arriveHalfAt(zone) {
   ensureZonePlan(zone + 1);
-  const layout = LANE_CONFIG[biomeIndex(zoneBiomes[zone + 1])];
-  return layout ? layout.width * 0.5 : 0;
+  const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
+  let half = 0;
+  for (const index of choices) {
+    const layout = LANE_CONFIG[biomeIndex(index)];
+    if (layout) half = Math.max(half, layout.width * 0.5);
+  }
+  return half;
 }
 
 function splitAmountAtS(s) {
@@ -490,8 +488,8 @@ function layoutAt(s) {
 
 /**
  * Центр развилки в координате s игрока. Единственная формула, её читает и полотно.
- * Сам нос не сдвигается: ввод выбранной ветки идёт через splitDecisionWeight
- * в roadFrameAt, поэтому ось и кромки едут плавно за SPLIT_RAMP_M метров.
+ * Нос не сдвигается выбором: обе ленты построены заранее, активная плавно
+ * садится на свою ось внутри последнего блока рецепта.
  */
 function splitCenterS(playerS) {
   return layoutAt(playerS).nose;
@@ -525,16 +523,18 @@ function ownedCourse(s) {
   return owned;
 }
 
-/** Биом, в который ведёт взятый въезд. */
-function entranceBiome(s) {
+/** Биом активной ленты: choice хранится в решении зоны, а не в перезаписи плана. */
+function activeBranchBiome(s) {
   const zone = routeAt(s).zone;
-  ensureZonePlan(zone + 1);
-  return biomeIndex(zoneBiomes[zone + 1]);
+  const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts || ZERO_VISITS());
+  const stored = chosenExit[zone];
+  const side = stored === 1 || stored === -1 ? stored : decisionAt(zone).side;
+  return biomeIndex(side === 1 ? choices[1] : choices[0]);
 }
 
-/** Въезд уже стал дорогой: чтение съезда говорит arrived, отдельной ленты нет. */
+/** Въезд уже стал дорогой: последний блок рецепта, активная лента на своей оси. */
 function arrivedRoad(frame) {
-  return readExit(frame).life === 'arrived';
+  return frame.block?.kind === 'road' && readExit(frame).life === 'settle';
 }
 
 const ribbonHeads = new Map();
@@ -673,12 +673,10 @@ function routeAt(s) {
   return { meters, zone, local: meters - zone * ZONE_M };
 }
 
-/** 0…1 — насколько выбор развилки уже введён в геометрию. В момент
- *  авто-выбора вес 0, дальше растёт за SPLIT_RAMP_M метров. Иначе ось
- *  дороги и схлопывание ветки прыгали на ~4 м в одном кадре. */
+/** 0…1 — насколько выбор уже показан в HUD. Геометрию он больше не трогает. */
 function splitDecisionWeight(zone, meters) {
   const c = splitCommitMeters[zone];
-  if (!Number.isFinite(c)) return 1; // выбор был в прошлой сессии — он уже в силе
+  if (!Number.isFinite(c)) return 1;
   const u = Math.max(0, Math.min(1, (meters - c) / SPLIT_RAMP_M));
   return u * u * (3 - 2 * u);
 }
@@ -718,8 +716,7 @@ function roadFrameAt(s) {
     half: catalogHalfAt(s),
     chosen: side,
     baseOrigin: 0,
-    endWeight: splitDecisionWeight(route.zone, route.meters),
-    arriveHalf: side === 1 ? arriveHalfAt(route.zone) : undefined,
+    arriveHalf: arriveHalfAt(route.zone),
   });
   return roadFrameHit;
 }
@@ -820,7 +817,7 @@ function drivenFrameAt(s) {
  * Прямой ход держит старые полосы, пока ширина ещё перетекает.
  */
 function carriageBiomeAt(s, frame) {
-  if (arrivedRoad(frame)) return entranceBiome(s);
+  if (arrivedRoad(frame)) return activeBranchBiome(s);
   const sample = zoneSample(blendMetersAt(s));
   if (zoneEnteredByExit(sample)) return biomeIndex(zoneBiomes[sample.zone]);
   return biomeIndex(roadBiomeAtS(s));
@@ -1328,14 +1325,12 @@ function commitSplit(zone, side, commitMeters) {
   if (chosenZones.has(zone)) return;
   const choices = splitChoices[zone] || getBiomeChoices(zoneBiomeAt(zone), G.visitCounts);
   const chosen = choices[side === 1 ? 1 : 0];
-  // Выбор фиксируется здесь, но предпросмотр едет от последней стороны байка.
+  // Выбор фиксируется только в данных проезда. Геометрия и декорации уже готовы:
+  // переписывать биом следующей зоны здесь нельзя — это перестраивает мир на ходу.
   previewSideHold[zone] = previewSideWeight(zone);
   chosenZones.add(zone);
   chosenExit[zone] = side === 1 ? 1 : -1;
   if (Number.isFinite(commitMeters)) splitCommitMeters[zone] = commitMeters;
-  zoneBiomes[zone + 1] = chosen;
-  // Снимаем фикс профиля следующей зоны, чтобы он совпал с фактическим выбором.
-  delete roadLock[zone + 1];
   G.pendingBiome = chosen;
   if (G.forkLabActive) {
     dropRoadCache();
@@ -1363,9 +1358,8 @@ function updateZoneProgress(meters) {
   const previous = lastRunZone;
   lastRunZone = zone;
   if (zone > previous) {
-    const nextBiome = zoneBiomes[zone] != null
-      ? biomeIndex(zoneBiomes[zone])
-      : (G.pendingBiome != null ? biomeIndex(G.pendingBiome) : biomeIndex(G.currentBiome));
+    const nextBiome = G.pendingBiome != null ? biomeIndex(G.pendingBiome)
+      : (zoneBiomes[zone] != null ? biomeIndex(zoneBiomes[zone]) : biomeIndex(G.currentBiome));
     G.currentBiome = nextBiome;
     G.pendingBiome = null;
     G.visitCounts = G.visitCounts || ZERO_VISITS();
@@ -1637,7 +1631,7 @@ export function initBiome() {
   G.roadBiomeAtS = roadBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
-  /** Насколько ввод выбранной ветки уже применён к центру/кромкам. */
+  /** Насколько выбор уже показан в HUD. На центр и кромки он не влияет. */
   G.splitCommitWeightAtS = (s) => {
     const at = layoutAt(s);
     return splitDecisionWeight(at.zone, blendMetersAt(s));

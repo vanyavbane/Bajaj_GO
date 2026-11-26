@@ -41,7 +41,7 @@ assert(EXIT_RIGHT.way === 'one-way' && STRAIGHT.way === 'inherit', 'съезд �
 const sealEnd = sampleRoad({ forkDistance: clock.ownAfter - 1, half: 10, chosen: 1, baseOrigin: 0 });
 const settleStart = sampleRoad({ forkDistance: clock.ownAfter + 1, half: 10, chosen: 1, baseOrigin: 0 });
 const sealMid = exitRibbonCenter(sealEnd.local);
-assert(sealMid != null && Math.abs(sealMid - laneAnchor(settleStart)) < 0.1, 'лента приходит на ось новой дороги без бокового скачка');
+assert(sealMid != null && Math.abs(sealMid - exitRibbonMid(settleStart.local)) < 0.1, 'лента продолжает свою линию без бокового скачка');
 
 const approachSpawn = vectorSpawnOf(0, EXIT_RIGHT, layout);
 assert(approachSpawn != null && approachSpawn.turnAt === nose + clock.choiceAt, 'вектор ждёт выбора, а не поворачивает в носу');
