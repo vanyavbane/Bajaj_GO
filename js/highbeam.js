@@ -1,5 +1,4 @@
 import { vehicleLat } from './engine/carriage.js';
-import { surfaceWorld } from './engine/exit.js';
 import { highbeamYieldLane } from './engine/motion.js';
 import { G } from './state.js';
 
@@ -24,7 +23,7 @@ export function initHighbeam() {
       const own = car.onExit && road.spot && road.spot.ribbon && !road.spot.ribbon.joined;
       const scale = road.scale || 1;
       const playerLane = own
-        ? riderLat - surfaceWorld(road.axis, road.spot, true)
+        ? riderLat - road.ribbonCenter
         : (riderLat - road.axis) / scale;
       const lane = highbeamYieldLane(car, G.playerS, playerLane, road.lanes);
       if (lane == null) continue;

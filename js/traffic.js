@@ -1,5 +1,5 @@
 import { approachExit, arrivalMove, birthLane, canStartExitJoin, carriageHolds, carriageLat, laneAtWorld, repairQueue, ribbonDirection, vehicleLat } from './engine/carriage.js';
-import { retargetRide, surfaceWorld } from './engine/exit.js';
+import { retargetRide } from './engine/exit.js';
 import { clampLaneIndex, nearestLaneIndexIn, sameLaneOffset } from './engine/lanes.js';
 import { besideWithLane, offsetDirection, outerLane } from './engine/lanes.js';
 import { classifyCarContact, menuTrafficNudge, playerHalfWidth, stepTrafficCar, trafficRecycle } from './engine/motion.js';
@@ -183,7 +183,7 @@ export function initTraffic() {
     if (car.joiningExit) return false;
     if (car.laneKey != null && car.laneKey !== key && Number.isFinite(car.heldLat)) {
       if (car.onExit && ribbonSeparated(road)) {
-        car.lateralOffset = car.heldLat - surfaceWorld(road.axis, road.spot, true);
+        car.lateralOffset = car.heldLat - road.ribbonCenter;
       } else if (!carriageHolds(car.heldLat, road.axis, road.half)) {
         return true;
       } else {
@@ -358,9 +358,8 @@ export function initTraffic() {
 
   /** Одна дорога машины на этот кадр. Съезд — полоса main, пока у чтения есть лента. */
   function ribbonWorld(road) {
-    const spot = road.spot;
-    if (!spot || !spot.ribbon) return null;
-    return surfaceWorld(road.axis, spot, true);
+    if (!road.spot || !road.spot.ribbon) return null;
+    return road.ribbonCenter;
   }
 
   /** Машина едет вместе с лентой. Смещение внутри ленты не сбрасывается, когда середина уезжает. */
@@ -401,7 +400,7 @@ export function initTraffic() {
     const exit = exitLaneOf(highway);
     const wasOnExit = !!car.onExit;
     if (ribbonSeparated(road)) {
-      const center = surfaceWorld(road.axis, road.spot, true);
+      const center = road.ribbonCenter;
       const world = Number.isFinite(car.heldLat)
         ? car.heldLat
         : carriageLat(road.axis, road.scale || 1, car.lateralOffset || 0);

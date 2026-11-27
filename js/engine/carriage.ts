@@ -5,7 +5,7 @@
  * на её месте уже новая дорога, без второй проезжей части.
  */
 
-import { readExit, surfaceWorld, type ExitRead } from './exit.ts';
+import { readExit, type ExitRead } from './exit.ts';
 import { laneAnchor, mainHalf, type RoadFrame } from './fork.ts';
 import { carriageLanes, directionEdge, laneGapOffsets, nearestLaneOffset, withExitLane, type CarriageLayout, type Road, type RoadWay } from './lanes.ts';
 import type { LaneLayout } from './biomes.ts';
@@ -27,6 +27,8 @@ export interface LiveCarriage {
   half: number;
   /** Полуширина асфальта полосы съезда. 0, если этой полосы нет. */
   exitHalf: number;
+  /** Мировая середина правой ленты. Не зависит от того, какая лента активна. */
+  ribbonCenter: number;
   /** Съезд этой точки. Лента есть только у spot.ribbon. */
   spot: ExitRead;
   way: RoadWay;
@@ -38,6 +40,8 @@ export interface CarriageQuery {
   biome: LaneLayout;
   /** Ход выбранной ветви. Съезд односторонний, пока не стал дорогой. */
   way?: RoadWay;
+  /** Какая лента едет. После выбора съезда активной становится правая. */
+  active?: 'main' | 'ribbon';
 }
 
 /**
@@ -80,14 +84,22 @@ export function laneAtWorld(world: number, axis: number, scale: number): number 
 export function carriageAt(query: CarriageQuery): LiveCarriage {
   const frame = query.frame;
   const spot = readExit(frame);
-  const phase: CarriagePhase = spot.ribbon != null ? 'ribbon' : 'road';
-  const half = mainHalf(frame.local);
+  const ribbon = spot.ribbon;
+  const phase: CarriagePhase = ribbon != null ? 'ribbon' : 'road';
+  const mainAxis = laneAnchor(frame);
+  const ribbonCenter = ribbon == null ? mainAxis : frame.origin + ribbon.center;
+  // Пока выбор открыт, съезд — правая полоса общей дороги. После выбора
+  // активной становится вся правая лента: у неё свои полосы, биом и трафик,
+  // а левая остаётся только видимым продолжением старой дороги.
+  const onRibbon = query.active === 'ribbon' && ribbon != null;
+  const axis = onRibbon ? ribbonCenter : mainAxis;
+  const half = onRibbon ? ribbon.half : mainHalf(frame.local);
   const base = carriageLanes(query.biome, query.way ?? 'two-way');
-  const axis = laneAnchor(frame);
   const scale = laneFit(half, base.offsets);
   const span = scale !== 0 ? scale : 1;
-  const ribbon = spot.ribbon;
-  const lanes = ribbon == null ? base : withExitLane(base, (frame.origin + ribbon.center - axis) / span);
+  const lanes = ribbon == null || onRibbon
+    ? base
+    : withExitLane(base, (ribbonCenter - axis) / span);
   return {
     phase,
     lanes,
@@ -95,6 +107,7 @@ export function carriageAt(query: CarriageQuery): LiveCarriage {
     scale,
     half,
     exitHalf: ribbon == null ? 0 : ribbon.half,
+    ribbonCenter,
     spot,
     way: lanes.way,
   };
@@ -241,7 +254,7 @@ export function vehicleLat(road: LiveCarriage, offset: number, onExit = false): 
   const ribbon = road.spot.ribbon;
   const lane = Number.isFinite(offset) ? offset : 0;
   if (onExit && ribbon != null && !ribbon.joined) {
-    return surfaceWorld(road.axis, road.spot, true) + lane;
+    return road.ribbonCenter + lane;
   }
   return carriageLat(road.axis, road.scale, lane);
 }

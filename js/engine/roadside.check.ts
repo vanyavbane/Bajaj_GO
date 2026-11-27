@@ -90,11 +90,11 @@ const skirt = shoulderLats(4.5, vergeAt(peeled, peeled.rightOuter, 3.55), {
 });
 assert(Math.abs(skirt.lip - 4.5) < 0.01, 'откос съезда начинается на кромке асфальта');
 assert(walkCrossing(branchEdges(9.5, 0), 3.55) == null, 'на носе тротуар ещё не пересекает съезд');
-const across = walkCrossing(branchEdges(9.5, 8), 3.55);
-const acrossEdges = branchEdges(9.5, 8);
+const across = walkCrossing(branchEdges(9.5, 1), 3.55);
+const acrossEdges = branchEdges(9.5, 1);
 assert(across != null && across.near === acrossEdges.rightInner && across.far === acrossEdges.rightOuter, 'переход идёт от кромки съезда до кромки');
 assert(walkCrossing(branchEdges(9.5, 22), 3.55) == null, 'съезд, ушедший с тротуара, переход не держит');
-assert(roadsJoined(branchEdges(9.5, 3)), 'пока съезд приклеен, руль и картинка — одно полотно');
+assert(roadsJoined(branchEdges(9.5, 0.2)), 'пока съезд приклеен, руль и картинка — одно полотно');
 assert(!roadsJoined(branchEdges(9.5, 22)), 'открытый клин уже две дороги');
 assert(!roadsJoined(branchEdges(9.5, 0)), 'на носе второй кромки нет');
 

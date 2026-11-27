@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { balance, button, callout, card, heading, iconPaths, listItem, panel, rows, stats, tag } from '@bajajgo/design';
 import { accidentArrival, vehicleLat } from './engine/carriage.js';
-import { surfaceWorld } from './engine/exit.js';
 import { nearestLaneIndex, outerLane } from './engine/lanes.js';
 import { creditRun, latePenalty, meters, rubles, runDistance, shortfall } from './engine/money.js';
 import { EXIT_ENTER_SPEED, EXIT_ZONE_LENGTH, EXIT_ZONE_OFFSET, EXIT_ZONE_WIDTH, crossedExitBox, exitBoxCenter } from './engine/rules.js';
@@ -1218,7 +1217,7 @@ function exitLane(s, side) {
           pendingAccidentCar.targetLaneIdx = pendingAccidentCar.laneIdx;
           pendingAccidentCar.changingLane = false;
           pendingAccidentCar.heldLat = vehicleLat(road, pendingAccidentCar.lateralOffset, true);
-          pendingAccidentCar.surface = surfaceWorld(road.axis, road.spot, true);
+          pendingAccidentCar.surface = road.ribbonCenter;
         } else {
           const seat = accidentArrival(wasOnExit, stay, lanes, pendingAccidentCar.lateralOffset);
           const idx = nearestLaneIndex(lanes.offsets, seat);

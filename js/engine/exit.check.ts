@@ -23,6 +23,7 @@ function frame(distance: number, chosen: ChosenSide, arriveHalf?: number) {
     baseOrigin: 0,
     endWeight: 1,
     arriveHalf,
+    tailSide: chosen === 1 || chosen === -1 ? chosen : undefined,
   });
 }
 
@@ -46,21 +47,22 @@ assert(beside.main.half === 10, 'пока выбор открыт, старая 
 
 const sealing = expect(clock.choiceAt + 40, 1, 'sealing', true);
 assert(sealing.main.half === 10, 'невыбранная дорога держит свою ширину');
-assert(sealing.main.center < 0, 'невыбранная дорога уходит влево');
-assert((sealing.ribbon?.center ?? 0) > 12, 'выбранная лента остаётся на своей линии');
+assert(Math.abs(sealing.main.center) < 1e-6, 'невыбранная дорога остаётся на своей оси');
+assert((sealing.ribbon?.center ?? 0) > 12, 'выбранная лента уходит вправо');
 
 const declined = expect(clock.choiceAt + 40, -1, 'sealing', true);
-assert(declined.main.half === 10, 'прямая не сужается');
-assert(Math.abs((declined.ribbon?.center ?? 0) - (beside.ribbon?.center ?? 0)) < 0.5, 'отказанная лента держит свою линию');
+assert(declined.main.half < beside.main.half && declined.main.half > 3, 'выбранная прямая готовится к ширине нового биома');
+const declinedUndecided = readExit(frame(clock.choiceAt + 40, 0));
+assert(Math.abs((declined.ribbon?.center ?? 0) - (declinedUndecided.ribbon?.center ?? 0)) < 0.5, 'отказ не сдвигает чужую ленту');
 
 const settled = expect(clock.ownAfter + 5, 1, 'settle', true, 8);
 assert(settled.main.half === 10, 'после въезда невыбранная лента сохраняет ширину');
-assert(settled.main.center < 0, 'невыбранная лента продолжается левее');
-assert(Math.abs(settled.ribbon?.center ?? 0) < 1, 'выбранная лента стала осью новой дороги');
+assert(Math.abs(settled.main.center) < 1e-6, 'невыбранная лента остаётся на своей оси');
+assert((settled.ribbon?.center ?? 0) > 12, 'выбранная лента продолжается справа');
 
 const straight = expect(clock.ownAfter + 5, -1, 'settle', true);
 assert(
-  straight.main.half === 10 && Math.abs(straight.main.center) < 1e-9
+  straight.main.half < 10 && straight.main.half > 3 && Math.abs(straight.main.center) < 1e-9
   && (straight.ribbon?.center ?? 0) > 12,
   'после отказа прямая держит ось, а съезд продолжается справа',
 );
@@ -130,7 +132,7 @@ for (rideD = clock.choiceAt - 9; rideD <= clock.lead; rideD += 1) {
   surface = center;
   onRibbon = ride;
 }
-assert(Math.abs(world) < 1, 'к концу въезда байк приехал вместе с дорогой на ось пути');
+assert(world > 50, 'к концу въезда байк остаётся на своей ленте справа');
 
 for (const id of ['city', 'mkad', 'embankment']) {
   const def = BIOMES.find((biome) => biome.id === id);

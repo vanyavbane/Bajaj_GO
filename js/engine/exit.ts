@@ -143,8 +143,9 @@ export function followRide(
   spot: ExitRead,
   axis: number,
   onRibbon: boolean,
+  centerWorld = surfaceWorld(axis, spot, onRibbon),
 ): number {
-  const center = surfaceWorld(axis, spot, onRibbon);
+  const center = Number.isFinite(centerWorld) ? centerWorld : surfaceWorld(axis, spot, onRibbon);
   const placed = retargetRide(steeredWorld, hold.surface, onRibbon === hold.onRibbon, center);
   const open = onRibbon && spot.ribbon != null && !spot.ribbon.joined ? spot.ribbon : null;
   let world = placed.world;
