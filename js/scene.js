@@ -36,6 +36,10 @@ export function initScene() {
     const ctx = c.getContext('2d');
     drawFn(ctx, w, h);
     const tex = new THREE.CanvasTexture(c);
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = Math.min(8, G.renderer.capabilities.getMaxAnisotropy());
     if (isSRGB) tex.colorSpace = THREE.SRGBColorSpace;
     if (repeatX > 1 || repeatY > 1) {
       tex.wrapS = THREE.RepeatWrapping;

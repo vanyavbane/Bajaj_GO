@@ -329,6 +329,8 @@ export function initUi() {
         ${inline('Редактор локаций', button({ id: 'debug-open-loc-editor', variant: 'primary', icon: 'sliders', label: 'Открыть редактор' }))}
         ${note('Удобная работа с декорациями: выделение рамкой, перемещение, дублирование, удаление и изменение размера мышью или числами. Вкладка «Объекты карты» показывает готовые объекты плитками с миниатюрами — откройте нужную и правьте смещение, масштаб, поворот или скрывайте то, что мешает игре. Меню и HUD на время редактора скрываются и возвращаются при выходе.')}
         ${note('Изменения сохраняются в localStorage. Чтобы перенести их в сборку, экспортируйте JSON кнопкой в редакторе.')}
+        ${inline('Развилка', button({ id: 'debug-open-fork-lab', variant: 'primary', icon: 'sliders', label: 'Открыть FORK-отладку' }))}
+        ${note('Отдельная страница с точки разъезда: станции, посадка, выбор стороны, погода и время суток.')}
       `;
     }
     return body;
@@ -531,6 +533,15 @@ export function initUi() {
           else { const ov = $('overlay'); if (ov) ov.style.display = 'none'; }
           G.openLocationEditor({ from });
         } else alert('Редактор локаций не загружен.');
+      });
+    }
+
+    const openForkLab = owned('debug-open-fork-lab');
+    if (openForkLab) {
+      openForkLab.addEventListener('click', () => {
+        const url = new URL(location.href);
+        url.searchParams.set('fork', '1');
+        location.href = url.toString();
       });
     }
 

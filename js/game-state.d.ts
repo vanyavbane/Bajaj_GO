@@ -435,6 +435,7 @@ export interface GameState {
   /** Точка сбоку от дороги байка. null — она попала бы на чужой асфальт. */
   flankAt: (s: number, side: -1 | 1, depth: number) => { edge: number; lat: number } | null;
   roadBiomeAtS: (s: number) => number;
+  trafficBiomeAtS: (s: number) => number;
   splitCenterS: (playerS: number) => number;
   shoulder: ShoulderProfile;
   groundOffset: (lat: number, s: number) => number;

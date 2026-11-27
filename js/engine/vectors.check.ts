@@ -1,5 +1,5 @@
 import { BRANCH_YAW, signedAngle, turnToward } from './branch.ts';
-import { EXIT_LANE_HALF, besidePoint, branchEdges, exitClock, exitRibbonCenter, exitRibbonMid, followsExit, laneAnchor, onExitRibbon, sampleRoad } from './fork.ts';
+import { EXIT_LANE_HALF, besidePoint, branchEdges, exitClock, exitRibbonCenter, exitRibbonMid, followsExit, onExitRibbon, sampleRoad } from './fork.ts';
 import { EXIT_RIGHT, RIGHT_FORK, STRAIGHT, branchVectors, courseLayoutOf, courseVector, createVectorField, openCourse, vectorSpawnOf, zoneNose } from './vectors.ts';
 import type { ForkCourse, VectorSpawn } from './vectors.ts';
 
@@ -205,30 +205,34 @@ const beforeS = seamClock.ownAfter - 0.02;
 const afterS = seamClock.ownAfter + 0.02;
 const beforeFrame = seamRoad(beforeS);
 const afterFrame = seamRoad(afterS);
-const beforeLat = exitRibbonMid(beforeFrame.local);
-const afterLat = laneAnchor(afterFrame);
-const beforePose = seamField.embed({
-  s: beforeS,
-  lat: beforeLat,
+// Игра ведёт курс по фактической середине ленты; после въезда ось берётся
+// от неё же, а не от полотна невыбранной дороги, ушедшего влево.
+const seamCenterAt = (s: number) => exitRibbonMid(seamRoad(s).local) ?? 0;
+const beforeLat = seamCenterAt(beforeS);
+const afterLat = seamCenterAt(afterS);
+const seamQuery = {
   y: 0,
   nose: 0,
+  branches: [seamSpawn],
+  turn: seamClock.turn,
+  centerAt: seamCenterAt,
+};
+const beforePose = seamField.embed({
+  ...seamQuery,
+  s: beforeS,
+  lat: beforeLat,
   edges: beforeFrame.local,
   owned: [],
-  branches: [seamSpawn],
   origin: 0,
-  turn: seamClock.turn,
   ownedHere: false,
 }, straight);
 const afterPose = seamField.embed({
+  ...seamQuery,
   s: afterS,
   lat: afterLat,
-  y: 0,
-  nose: 0,
   edges: afterFrame.local,
   owned: [seamSpawn],
-  branches: [seamSpawn],
   origin: afterLat,
-  turn: seamClock.turn,
   ownedHere: true,
 }, straight);
 assert(

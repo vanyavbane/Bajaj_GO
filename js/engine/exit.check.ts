@@ -38,10 +38,10 @@ const before = expect(-10, 0, 'plain', false);
 assert(before.main.half === 10 && before.main.center === 0, 'до съезда дорога на своей оси и ширине');
 
 const opening = expect(20, 0, 'opening', true);
-assert(opening.ribbon?.joined === true, 'в начале отхода лента ещё склеена с шоссе');
+assert(opening.ribbon?.joined === false, 'отход сразу отделяет ленту от шоссе');
 
 const beside = expect(clock.choiceAt - 10, 0, 'beside', true);
-assert(beside.ribbon?.joined === true, 'до выбора +1 полоса ещё одно полотно с шоссе');
+assert(beside.ribbon?.joined === false, 'до выбора съезд уже идёт своей лентой');
 assert(beside.main.half === 10, 'пока выбор открыт, старая дорога не сужается');
 
 const sealing = expect(clock.choiceAt + 40, 1, 'sealing', true);
@@ -51,23 +51,31 @@ assert((sealing.ribbon?.center ?? 0) > 12, 'выбранная лента ост
 
 const declined = expect(clock.choiceAt + 40, -1, 'sealing', true);
 assert(declined.main.half === 10, 'прямая не сужается');
-assert((declined.ribbon?.center ?? 0) > (beside.ribbon?.center ?? 0), 'отказанная лента уходит вправо');
+assert(Math.abs((declined.ribbon?.center ?? 0) - (beside.ribbon?.center ?? 0)) < 0.5, 'отказанная лента держит свою линию');
 
 const settled = expect(clock.ownAfter + 5, 1, 'settle', true, 8);
 assert(settled.main.half === 10, 'после въезда невыбранная лента сохраняет ширину');
 assert(settled.main.center < 0, 'невыбранная лента продолжается левее');
-assert((settled.ribbon?.center ?? 0) > 12, 'выбранная лента стоит на своей линии');
+assert(Math.abs(settled.ribbon?.center ?? 0) < 1, 'выбранная лента стала осью новой дороги');
 
 const straight = expect(clock.ownAfter + 5, -1, 'settle', true);
-assert(straight.main.half === 10 && straight.main.center < 0, 'после отказа обе дороги продолжаются');
+assert(
+  straight.main.half === 10 && Math.abs(straight.main.center) < 1e-9
+  && (straight.ribbon?.center ?? 0) > 12,
+  'после отказа прямая держит ось, а съезд продолжается справа',
+);
 
 assert(EXIT_LANE_HALF === 4.5, 'съезд без своей ширины назначения — полоса 4.5 м');
 
 const besideFrame = frame(clock.choiceAt - 10, 0);
 const besideSpot = readExit(besideFrame);
 const openSteer = logicalRoadLimits(besideFrame.local, 1, true);
-assert(besideSpot.ribbon?.joined === true, 'до выбора лента склеена');
-assert(openSteer.min < 0 && openSteer.max > besideSpot.main.half, 'пока полоса прижата, руль видит и шоссе, и +1 полосу');
+assert(besideSpot.ribbon?.joined === false, 'до выбора клин уже открыт');
+assert(
+  (besideSpot.ribbon?.center ?? 0) > besideSpot.main.half
+  && openSteer.max < 5 && openSteer.min > -5,
+  'руль на отделённой ленте считается от её середины',
+);
 
 const sealingFrame = frame(clock.choiceAt + 40, 1);
 const sealingSpot = readExit(sealingFrame);
@@ -178,7 +186,10 @@ for (const id of ['city', 'mkad', 'embankment']) {
       if (!Number.isFinite(inset)) inset = right - seated;
       assert(Math.abs((right - seated) - inset) < 0.6, `${id} ${distance} м: въезд не вливает байка по правой кромке`);
       assert(seated > at.origin + spot.ribbon.center - spot.ribbon.half && seated < right, `${id} ${distance} м: байк сошёл с ленты въезда`);
-      assert(Math.abs(seated) > spot.main.half + 1, `${id} ${distance} м: байк сидит в центре старой дороги`);
+      assert(
+        seated > at.origin + spot.main.center + spot.main.half,
+        `${id} ${distance} м: байк сидит на своей ленте, а не в старой дороге`,
+      );
       assert(seat.kind === 'exit', `${id} ${distance} м: съезд перестал быть своей дорогой`);
     }
     if (spot.life === 'settle') {

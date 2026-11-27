@@ -439,7 +439,7 @@ export function initTraffic() {
   function updateTraffic(dt, now, isQute) {
     const playerHalfW = playerHalfWidth(isQute);
     const menuDemo = !G.started && !G.ended;
-    const dominant = G.roadBiomeAtS(G.playerS + 240);
+    const dominant = G.trafficBiomeAtS(G.playerS + 240);
     const mask = activeMask[dominant] || activeMask[0];
     // Окно разъезда: новые машины не спавним и не рециклим —
     // уже ехавшие доезжают по своим траекториям.
@@ -447,7 +447,7 @@ export function initTraffic() {
     for (let i = 0; i < G.trafficPool.length; i++) {
       const car = G.trafficPool[i];
       const where = car.active ? car.s : G.playerS + 240;
-      const wantActive = car.repairQueued || (activeMask[G.roadBiomeAtS(where)] || mask)[i] === 1;
+      const wantActive = car.repairQueued || (activeMask[G.trafficBiomeAtS(where)] || mask)[i] === 1;
 
       if (!car.active) {
         if (!wantActive || choosing) continue;

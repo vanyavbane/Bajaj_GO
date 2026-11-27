@@ -77,9 +77,17 @@ assert(
 );
 const earlyRibbon = exitRibbonCenter(earlySeal.local);
 const midRibbon = exitRibbonCenter(midReturn.local);
-assert(earlyRibbon != null && midRibbon != null && midRibbon > earlyRibbon, 'въезд плавно уходит с +1 полосы на линию курса');
+assert(earlyRibbon != null && midRibbon != null && midRibbon < earlyRibbon && midRibbon > 1, 'въезд плавно приходит на ось новой дороги');
 assert(Math.abs(midReturn.local.leftInner - midReturn.local.leftOuter - half * 2) < 0.01, 'невыбранная дорога держит полную ширину');
 assert(early.lanes.lanes.some((lane) => lane.exit) && early.way === 'two-way', 'взятый въезд остаётся правой полосой этой дороги');
+const oneWay = carriageAt({ frame: midReturn, biome: city, way: 'one-way' });
+assert(
+  oneWay.way === 'one-way'
+  && oneWay.lanes.lanes.every((lane) => lane.direction === 'with')
+  && oneWay.lanes.lanes.some((lane) => lane.home === 'against')
+  && oneWay.lanes.lanes.some((lane) => lane.exit),
+  'съезд односторонний: все полосы едут вперёд, встречные только в сборке',
+);
 const cityEdge = Math.max(...city.offsets.map((offset) => Math.abs(offset))) + city.laneWidth * 0.5;
 assert(Math.abs(early.scale - Math.min(1, early.half / cityEdge)) < 1e-9, 'полосы старой дороги держит её кромка, не съезд');
 assert(exitRibbonCenter(lateSeal.local) != null && late.phase === 'ribbon', 'съезд продолжается и после расхождения');
@@ -118,7 +126,7 @@ function pose(frame: ReturnType<typeof frameAt>, lat: number, distance: number) 
     nose,
     edges: frame.world,
     owned: [],
-    branches: openCourse(RIGHT_FORK, s, course),
+    branches: openCourse(RIGHT_FORK, s, course).map((spawn) => ({ ...spawn, born: 10 + EXIT_LANE_HALF })),
     origin: frame.origin,
     turn: course.turn,
     ownedHere: false,

@@ -106,8 +106,14 @@ assert(Math.abs(declined.rightOuter - declined.rightInner - 9) < 0.2, 'отка�
 assert(declined.leftOuter <= -10 && declined.leftInner <= 10, 'прямая уходит влево от съезда');
 const chosenFrame = roadAt(atSeal, 1);
 assert(
-  Math.abs(declined.leftOuter - chosenFrame.leftOuter) < 1e-9 && Math.abs(declined.rightOuter - chosenFrame.rightOuter) < 1e-9,
-  'форма полотна не зависит от выбора',
+  declined.leftOuter === -10 && declined.leftInner === 10,
+  'при отказе прямая держит ось, а не уезжает влево',
+);
+assert(
+  Math.abs(chosenFrame.rightInner + chosenFrame.rightOuter) < 1
+  && chosenFrame.leftInner < chosenFrame.rightInner - 0.2
+  && chosenFrame.leftOuter < -10,
+  'при съезде выбранная лента приходит на ось, а straight остаётся видимой сбоку',
 );
 const arrivedFrame = sampleRoad({
   forkDistance: FORK_LEAD - 1,
@@ -191,13 +197,12 @@ assert(
   Math.abs(sealStart.local.leftOuter + 10) < 0.01 && Math.abs(sealStart.local.leftInner - 10) < 0.01,
   'в начале расхождения обе ленты на своих линиях',
 );
-const homeLine = exitRibbonMid(branchEdges(10, FORK_SPREAD));
 assert(
-  Math.abs(exitRibbonMid(arrived.local) - homeLine) < 1,
-  'съезд стоит на линии курса и после расхождения',
+  Math.abs(exitRibbonMid(arrived.local)) < 1,
+  'выбранный съезд становится осью новой дороги и после расхождения',
 );
-assert(exitRibbonMid(sealStart.local) <= backRibbon + 0.5 && backRibbon <= exitRibbonMid(sealEnd.local) + 0.5, 'въезд плавно переходит с +1 полосы на линию курса');
-assert(exitRibbonMid(sealEnd.local) > 12, 'до конца закрытия въезд ещё лента на своей линии');
+assert(exitRibbonMid(sealStart.local) > backRibbon && backRibbon > exitRibbonMid(sealEnd.local), 'въезд плавно приходит на ось новой дороги');
+assert(Math.abs(exitRibbonMid(sealEnd.local)) < 1, 'к концу закрытия выбранная лента уже на оси');
 assert(sealEnd.local.leftInner - sealEnd.local.leftOuter > 15, 'к концу расхождения старая дорога всё ещё цела');
 const straightEnd = sampleRoad({
   forkDistance: clock.ownAfter - 1,
@@ -208,8 +213,8 @@ const straightEnd = sampleRoad({
 });
 assert(
   Math.abs(laneAnchor(straightEnd) - (straightEnd.local.leftOuter + straightEnd.local.leftInner) * 0.5) < 1e-9
-  && straightEnd.local.leftInner < 10,
-  'полосы остаются на своей ленте, которая уходит влево от съезда',
+  && Math.abs(straightEnd.local.leftInner - 10) < 1e-9,
+  'при отказе полосы остаются на прямой, которая не уезжает влево',
 );
 const nose = branchEdges(10, 1.5);
 assert(nose.rightInner <= 10.01 && nose.rightOuter > nose.rightInner, 'на подходе съезд ещё соединён с правой кромкой');
@@ -227,7 +232,7 @@ const endedMid = exitRibbonMid(endedExit);
 assert(endedExit.rightOuter - endedExit.rightInner > 4, 'отказанная ветка не сходит на нет');
 assert(endedMid > 12, 'отказанная ветка уходит вправо, не возвращаясь на прямую');
 const taken = roadAt(atSeal, 1);
-assert(Math.abs(exitRibbonMid(taken) - homeLine) < 0.5, 'к концу расхождения съезд ещё на своей линии');
+assert(Math.abs(exitRibbonMid(taken)) < 0.5, 'к концу расхождения выбранный съезд уже на своей новой оси');
 assert(taken.leftInner - taken.leftOuter > 15, 'к концу расхождения старая дорога продолжается');
 
 const stillOpen = roadAt(afterSeal, 0);

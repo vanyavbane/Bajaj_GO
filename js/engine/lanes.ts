@@ -51,6 +51,8 @@ export interface LanePiece {
   offset: number;
   speed: number;
   direction: LaneDirection;
+  /** Направление сборки. Есть не у всех: без него оно равно текущему ходу. */
+  home?: LaneDirection;
 }
 
 /**
@@ -94,12 +96,14 @@ const EXIT_LANE_SPEED = 65;
  * Дорога с новой полосой справа.
  * Это и есть съезд: полоса той же дороги, не вторая дорога.
  * `offset` — метры от оси этой дороги до середины ленты.
+ * Текущий ход полосы сохраняется: на одностороннем съезде все едут вперёд,
+ * хотя `home` встречных полос остаётся прежним.
  */
 export function withExitLane(layout: CarriageLayout, offset: number): CarriageLayout {
   const pieces: LanePiece[] = [];
   for (const lane of layout.lanes) {
     if (lane.exit) continue;
-    pieces.push({ offset: lane.offset, speed: lane.speed, direction: lane.home });
+    pieces.push({ offset: lane.offset, speed: lane.speed, direction: lane.direction, home: lane.home });
   }
   pieces.push({ offset, speed: EXIT_LANE_SPEED, direction: 'with' });
   const road = roadFrom(pieces, layout.laneWidth);
@@ -107,6 +111,8 @@ export function withExitLane(layout: CarriageLayout, offset: number): CarriageLa
   return {
     ...layout,
     ...road,
+    way: layout.way,
+    oncomingCount: layout.oncomingCount,
     startLane: layout.startLane,
     biomeOncoming: layout.biomeOncoming,
   };
@@ -147,7 +153,7 @@ export function roadFrom(pieces: readonly LanePiece[], laneWidth: number): Road 
       offset: piece.offset,
       speed: pieceSpeed(piece.speed),
       direction,
-      home: direction,
+      home: piece.home ?? direction,
       side: piece.offset < 0 ? 'left' : 'right',
       exit: false,
     });

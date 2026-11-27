@@ -38,7 +38,7 @@ const PENDING_KEY = 'bajajGO_pendingBiome';
 const PLAN_KEY = 'bajajGO_biomePlan';
 // Половина окна смены декора: новый биом виден за SCENERY_PREVIEW_M до границы,
 // старый держится ещё SCENERY_PREVIEW_M после неё и уходит только за кадром.
-const SCENERY_PREVIEW_M = 900;
+const SCENERY_PREVIEW_M = 1000;
 
 const CITY = biomeIndexOf('city');
 const MKAD = biomeIndexOf('mkad');
@@ -238,13 +238,22 @@ function previewSideWeight(zone) {
  * Биом за развилкой — обе ветви сразу. Вес не зависит от того, где байк и когда
  * зафиксирован выбор: декорации обоих биомов построены и видны заранее.
  */
-function previewBiomeAt(zone) {
+function previewBiomeAt(zone, meters = NaN) {
   const z = Math.max(0, Math.round(zone));
   const choices = splitChoices[z] || getBiomeChoices(zoneBiomeAt(z), G.visitCounts || ZERO_VISITS());
   const left = biomeIndex(choices[0]);
   const right = biomeIndex(choices[1]);
   if (left === right) return { a: left, b: left, t: 0 };
-  return { a: left, b: right, t: 0.5 };
+  let t = 0.5;
+  const stored = chosenExit[z];
+  if (stored === 1 || stored === -1) {
+    // Выбранная ветвь становится главной, но чужой биом остаётся призраком:
+    // его лента всё ещё видна за клином, поэтому декор не пропадает рывком.
+    const target = stored === 1 ? 0.82 : 0.18;
+    const w = Number.isFinite(meters) ? splitDecisionWeight(z, meters) : 1;
+    t = 0.5 + (target - 0.5) * w;
+  }
+  return { a: left, b: right, t };
 }
 
 function persistBiome() {
@@ -572,11 +581,9 @@ function computeHeading(s) {
   const at = layoutAt(s);
   const frame = frameAt(s);
   const owned = ownedCourse(s);
-  const spot = readExit(frame);
-  // После правого съезда активная лента — правая, и её линия курса берётся от неё.
-  const activeOrigin = spot.ribbon != null && ridingRibbon(spot, riderSeat.kind)
-    ? frame.origin + spot.ribbon.center
-    : laneAnchor(frame);
+  // Ось курса и его производная должны брать одну и ту же ленту:
+  // иначе на стыке въезда точка и курс расходятся на ширину старой дороги.
+  const activeOrigin = activeCenterAt(s);
   headKey = s;
   headHit = vectors.heading({
     s,
@@ -593,6 +600,7 @@ function computeHeading(s) {
     ownedHere: owned.length > 0,
     // За хвостом между лентами пусто: туда не поворачиваем курс камеры.
     gore: frame.tail === 0,
+    centerAt: activeCenterAt,
   }, (u) => ({ x: biomeRoadX(u), dx: biomeRoadDX(u), ddx: biomeRoadDDX(u) }));
   return headHit;
 }
@@ -640,6 +648,14 @@ function roadCurvature(s) {
 function roadBiomeAtS(s) {
   const r = roadAtMeters(blendMetersAt(s));
   return r.t >= 1 ? r.b : r.a;
+}
+
+/** Трафик после выбора едет биомом выбранной ветви, а не усреднённым планом. */
+function trafficBiomeAtS(s) {
+  const zone = routeAt(s).zone;
+  if (chosenExit[zone] === 1 || chosenExit[zone] === -1) return activeBranchBiome(s);
+  if (zone > 0 && (chosenExit[zone - 1] === 1 || chosenExit[zone - 1] === -1)) return activeBranchBiome(s);
+  return roadBiomeAtS(s);
 }
 
 /**
@@ -793,6 +809,23 @@ function roadEdgesAt(s) {
   return frameAt(s).world;
 }
 
+/**
+ * Центр активной ленты в мировом метре. Курс идёт по ней по обе стороны стыка.
+ * Выбор уже зафиксирован — едем по нему; пока открыт, активна лента байка,
+ * но только в его зоне, чтобы чужая посадка не тащила курс вперёд по маршруту.
+ */
+function activeCenterAt(s) {
+  const frame = frameAt(s);
+  const spot = readExit(frame);
+  if (spot.ribbon == null) return laneAnchor(frame);
+  const ribbon = frame.origin + spot.ribbon.center;
+  if (frame.chosen === 1) return ribbon;
+  if (frame.chosen === -1) return laneAnchor(frame);
+  const layout = courseLayout();
+  if (zoneAt(s, layout) === zoneAt(G.playerS, layout) && ridingRibbon(spot, riderSeat.kind)) return ribbon;
+  return laneAnchor(frame);
+}
+
 function forkCloseAtS(s) {
   const phase = frameAt(s).phase;
   if (phase.kind === 'settle') return 1;
@@ -860,10 +893,22 @@ function drivenFrameAt(s) {
  * Прямой ход держит старые полосы, пока ширина ещё перетекает.
  */
 function carriageBiomeAt(s, frame) {
-  if (arrivedRoad(frame)) return activeBranchBiome(s);
+  const route = routeAt(s);
+  // Выбор в этой зоне уже зафиксирован: полосы и трафик едут биомом выбранной
+  // ветви, а не старым планом. До выбора полотно остаётся общим.
+  if (chosenExit[route.zone] === 1 || chosenExit[route.zone] === -1 || arrivedRoad(frame)) {
+    return activeBranchBiome(s);
+  }
   const sample = zoneSample(blendMetersAt(s));
   if (zoneEnteredByExit(sample)) return biomeIndex(zoneBiomes[sample.zone]);
   return biomeIndex(roadBiomeAtS(s));
+}
+
+/** Съезд односторонний, пока это отдельная лента. Став дорогой, он обычный ход. */
+function carriageWayAt(s, frame) {
+  if (chosenExit[routeAt(s).zone] !== 1) return 'two-way';
+  if (arrivedRoad(frame) || readExit(frame).ribbon == null) return 'two-way';
+  return 'one-way';
 }
 
 function roadCarriageAt(s) {
@@ -873,6 +918,7 @@ function roadCarriageAt(s) {
   const normal = carriageAt({
     frame,
     biome: LANE_CONFIG[dom] || LANE_CONFIG[0],
+    way: carriageWayAt(s, frame),
   });
   const w = onBridgeAtS(s) ? bridgeWeightAtS(s) : 0;
   if (w <= 0) return normal;
@@ -930,8 +976,9 @@ function updateExitHold() {
   const merged = followRide(riderHold, steeredWorld, spot, axis, onRibbon);
   let seat;
   if (G.forkLabActive && Number.isFinite(G.forkLabLateral)) {
-    const stick = riderSeat.kind === 'exit' ? 'exit' : 'road';
-    const held = stayOnAsphalt(frame.local, G.forkLabLateral, stick);
+    // В отладке ленту задаёт ползунок, а не прошлая посадка: иначе перейти
+    // с шоссе на съезд нельзя — старый stick всё время возвращает на шоссе.
+    const held = stayOnAsphalt(frame.local, G.forkLabLateral, 'near');
     const kind = onExitRibbon(held, frame.local) ? 'exit' : 'road';
     const ruler = rideRuler(frame, kind === 'exit', scale);
     seat = { kind, lane: laneAtWorld(frame.origin + held, ruler.axis, ruler.scale) };
@@ -1078,7 +1125,7 @@ function sceneryWeightsAtMeters(meters) {
     const t = smooth01((local - (ZONE_M - half)) / span);
     const own = zoneBiomeAt(zone);
     addBiomeMix(weights, own, own, 0, 1 - t);
-    const preview = previewBiomeAt(zone);
+    const preview = previewBiomeAt(zone, m);
     addBiomeMix(weights, preview.a, preview.b, preview.t, t);
     return weights;
   }
@@ -1086,7 +1133,7 @@ function sceneryWeightsAtMeters(meters) {
     const t = smooth01((local + half) / span);
     weights[zoneBiomeAt(zone - 1)] += 1 - t;
     if (chosenExit[zone - 1] != null) {
-      const preview = previewBiomeAt(zone - 1);
+      const preview = previewBiomeAt(zone - 1, m);
       addBiomeMix(weights, preview.a, preview.b, preview.t, t);
     } else {
       weights[zoneBiomeAt(zone)] += t;
@@ -1096,7 +1143,7 @@ function sceneryWeightsAtMeters(meters) {
   // За развилкой обе дороги продолжаются: декор обоих биомов живёт дальше,
   // а не сменяется одним выбранным на границе зоны.
   if (chosenExit[zone - 1] != null) {
-    const preview = previewBiomeAt(zone - 1);
+    const preview = previewBiomeAt(zone - 1, m);
     addBiomeMix(weights, preview.a, preview.b, preview.t, 1);
     return weights;
   }
@@ -1691,6 +1738,7 @@ export function initBiome() {
   G.holdDrivenLane = holdDrivenLane;
   G.flankAt = flankAt;
   G.roadBiomeAtS = roadBiomeAtS;
+  G.trafficBiomeAtS = trafficBiomeAtS;
   G.splitAmountAtS = splitAmountAtS;
   G.splitCenterS = splitCenterS;
   /** Насколько выбор уже показан в HUD. На центр и кромки он не влияет. */

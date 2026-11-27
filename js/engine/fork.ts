@@ -135,9 +135,9 @@ export function exitClock(): ExitClock {
   if (!seal) throw new Error('Съезд без закрытия: курс не знает, когда въезд приходит в новую дорогу');
   return {
     lead: EXIT_PLAN.length,
-    // Курс поворачивает на отделении, а не на подходе: +1 полоса едет
-    // параллельно дороге до выбора, и только в seal уходит в свою сторону.
-    turn: seal.length,
+    // Курс поворачивает вместе с отходом ленты: развилка начинается в носу,
+    // а не после длинного параллельного подхода.
+    turn: EXIT_PLAN.diverge,
     ownAfter: seal.start + seal.length,
     choiceAt: EXIT_PLAN.choiceAt,
     spread: EXIT_PLAN.spread,
@@ -146,6 +146,13 @@ export function exitClock(): ExitClock {
 
 /** Нахлёст половин асфальта, чтобы на прямой не было щели по оси. */
 const FORK_SEAM = 0.16;
+
+/**
+ * Зазор между уходящей влево невыбранной дорогой и лентой съезда.
+ * Ширина съезда на стыке берётся от самой широкой ветви следующей зоны,
+ * поэтому одного разъезда 22 м мало: лента садилась бы на старое полотно.
+ */
+const FORK_BRANCH_GAP = 0.6;
 
 /** Метры до центра развилки текущей зоны. Отрицательные — ещё не доехали. */
 export function forkOffset(meters: number, zoneLength: number, lead = FORK_LEAD): number {
@@ -235,24 +242,31 @@ function entranceHome(road: number): number {
 }
 
 /**
- * Обе ветви после выбора. Старая дорога остаётся полной и плавно уходит
- * влево от линии съезда; съезд остаётся полной лентой и уходит вправо.
- * Ни одна ширина не обнуляется: запас на стыке следующий зоны.
+ * Обе ветви на закрытии. Выбранная приходит на ось маршрута, невыбранная
+ * остаётся полной лентой в стороне и недоступна. До выбора обе стоят на своих
+ * линиях: прямая не делает зигзага, если игрок остался на ней.
  */
-function bothBranches(road: number, arrive: number, t: number): AsphaltEdges {
+function bothBranches(road: number, arrive: number, t: number, chosen: ChosenSide): AsphaltEdges {
   const u = Math.max(0, Math.min(1, t));
-  const left = attachedEdges(road, 1);
-  const targetHalf = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
-  const exitHalf = targetHalf + (Math.max(0, Number.isFinite(arrive) ? arrive : targetHalf) - targetHalf) * u;
   const home = entranceHome(road);
-  const startMid = road + EXIT_LANE_HALF;
-  const exitMid = startMid + (home - startMid) * u;
-  // Прямая уходит влево от линии съезда, съезд приходит на свою линию курса.
-  // Расхождение считается один раз: обе кромки живы, но не разъезжаются вдвое дальше.
-  const drift = u * FORK_SPREAD;
+  const targetHalf = Math.max(1.8, Math.min(road, EXIT_LANE_HALF));
+  const arrival = Math.max(0, Number.isFinite(arrive) ? arrive : targetHalf);
+  const exitHalf = targetHalf + (arrival - targetHalf) * u;
+  if (chosen !== 1) {
+    return {
+      leftOuter: -road,
+      leftInner: road,
+      rightInner: home - exitHalf,
+      rightOuter: home + exitHalf,
+    };
+  }
+  // Взятый съезд плавно садится на ось, а старая дорога уходит влево.
+  // Её сдвига хватает, чтобы даже самая широкая лента не легла на асфальт.
+  const exitMid = home * (1 - u);
+  const drift = u * (road + arrival + FORK_BRANCH_GAP);
   return {
-    leftOuter: left.leftOuter - drift,
-    leftInner: left.leftInner - drift,
+    leftOuter: -road - drift,
+    leftInner: road - drift,
     rightInner: exitMid - exitHalf,
     rightOuter: exitMid + exitHalf,
   };
@@ -270,7 +284,7 @@ function handoffBranches(
   arrive: number,
 ): AsphaltEdges {
   const u = Math.max(0, Math.min(1, t));
-  const split = bothBranches(road, arrive, 1);
+  const split = bothBranches(road, arrive, 1, chosen);
   if (chosen === 0) return split;
   const exitHalf = (split.rightOuter - split.rightInner) * 0.5;
   const grownHalf = exitHalf + (road - exitHalf) * u;
@@ -302,27 +316,12 @@ function blockEdges(half: number, block: PlacedBlock | null, chosen: ChosenSide,
   const road = Math.max(0, Number.isFinite(half) ? half : 0);
   const dest = Math.max(0, Number.isFinite(arrive) ? arrive : EXIT_LANE_HALF);
   if (!block) return branchEdges(road, 0);
-  if (block.kind === 'split') return attachedEdges(road, smooth01(block.u));
-  if (block.kind === 'fork') return attachedEdges(road, 1);
-  if (block.kind === 'seal') return bothBranches(road, dest, smooth01(block.u));
+  // Подход уже Y-развилка: прямая идёт прямо, съезд с первого метра отходит
+  // вправо и за блоком отхода стоит на своей линии. Параллельной полосы нет.
+  if (block.kind === 'split') return branchEdges(road, splitSpread(block.u));
+  if (block.kind === 'fork') return branchEdges(road, FORK_SPREAD);
+  if (block.kind === 'seal') return bothBranches(road, dest, smooth01(block.u), chosen);
   return handoffBranches(road, chosen, smooth01(block.u), dest);
-}
-
-/**
- * +1 полоса на подходе: плотно прижата к правой кромке.
- * В носу её ещё нет, на блоке split она плавно набирает полную ширину.
- * Пока выбор открыт, она едет параллельно основной и больше не растёт.
- * Отделяется только после выбора, блоком seal.
- */
-function attachedEdges(road: number, open = 1): AsphaltEdges {
-  const grow = Math.max(0, Math.min(1, Number.isFinite(open) ? open : 1));
-  const exitHalf = EXIT_LANE_HALF * grow;
-  return {
-    leftOuter: -road,
-    leftInner: road,
-    rightInner: road,
-    rightOuter: road + exitHalf * 2,
-  };
 }
 
 /** Середина правой ленты. Одна формула и для полос, и для курса. */

@@ -244,7 +244,7 @@ export function initBiomeWorld() {
         for (const entry of list) {
           const bw = w[entry.biome] || 0;
           const s = slot.s + entry.ds;
-          const visible = bw > 0.12;
+          const visible = bw > 0.02;
           entry.group.visible = visible;
           if (!visible) continue;
           const sceneryScale = BIOMES[entry.biome].sceneryScale || 1;

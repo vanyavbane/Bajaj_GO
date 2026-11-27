@@ -5,7 +5,7 @@
  * Биом только называет, какой вектор выбран. Считать путь он не должен.
  */
 
-import { BRANCH_YAW, frameFromSpline, signedAngle, stepBranch, turnToward } from './branch.ts';
+import { BRANCH_YAW, frameFromSpline, signedAngle, stepBranch, turnToward, yawRight } from './branch.ts';
 import { courseLocal, exitCourseStart, exitRibbonMid, followsExit } from './fork.ts';
 import type { AsphaltEdges, ExitClock } from './fork.ts';
 import type { FrozenYaw, PathFrame, RoadEmbed } from './branch.ts';
@@ -166,6 +166,12 @@ export interface EmbedQuery {
    * Нет поля — курс по-прежнему смотрит только на кромки.
    */
   hold?: LaneHold | null;
+  /**
+   * Центр правой ленты в мировом боковом метре на любом s. Когда он есть,
+   * курс съезда идёт по тем же кромкам, что и асфальт, а не по вечному углу
+   * ответвления. Без поля работают чистые геометрические проверки.
+   */
+  centerAt?: (s: number) => number;
 }
 
 /** Ось полос на закрытии прямой. Курс везёт её тем же t. */
@@ -286,6 +292,40 @@ export function createVectorField() {
     return pathFrom(spawn, s, turn, (u) => frame(spawns, u, spline, turn, nose), parentKey(spawns, nose, nose));
   }
 
+  /**
+   * Курс ленты по её фактическим кромкам. Съезд сначала отходит вправо,
+   * а потом плавно садится на ось новой дороги: постоянный угол здесь
+   * развёл бы камеру и байка с асфальтом.
+   */
+  function pathFromCenter(
+    spawn: VectorSpawn,
+    s: number,
+    baseAt: (s: number) => PathFrame,
+    centerAt: (s: number) => number,
+  ): PathFrame {
+    const base = baseAt(s);
+    const offset = centerAt(s);
+    const h = 0.75;
+    const beforeS = Math.max(spawn.nose, s - h);
+    const afterS = s + h;
+    const before = centerAt(beforeS);
+    const after = centerAt(afterS);
+    const leftH = Math.max(0.001, s - beforeS);
+    const rightH = Math.max(0.001, afterS - s);
+    const slope = (after - before) / (leftH + rightH);
+    const second = (after - before) / rightH - (offset - before) / leftH;
+    const turned = yawRight(base, Math.atan(slope));
+    return {
+      x: base.x + base.rx * offset,
+      z: base.z + base.rz * offset,
+      fx: turned.fx,
+      fz: turned.fz,
+      rx: -turned.fz,
+      rz: turned.fx,
+      curvature: base.curvature + second / (2 * h * (1 + slope * slope)),
+    };
+  }
+
   interface Heading {
     y: number;
     origin: number;
@@ -302,10 +342,12 @@ export function createVectorField() {
     parent: PathFrame;
     right: PathFrame | null;
     hold: LaneHold | null;
+    centerAt?: (s: number) => number;
   }
 
   function heading(query: Omit<EmbedQuery, 'lat'>, spline: (s: number) => SplineSample): Heading {
     const { s, y, nose, edges, owned, branches, origin, turn, ownedHere } = query;
+    const centerAt = query.centerAt;
     const gore = query.gore !== false;
     const givenHold = query.hold;
     const width = edges.rightOuter - edges.rightInner;
@@ -323,7 +365,18 @@ export function createVectorField() {
         parentKey(owned, spawn.nose, spawn.nose),
       );
     };
-    const parent = frame(owned, s, spline, turn);
+    // Взятый въезд становится дорогой, но его асфальт уже пришёл на ось:
+    // курс не должен продолжать поворачивать по старому углу ответвления.
+    const ownedSpawn = owned.length > 0 ? owned[owned.length - 1] : null;
+    const parent = centerAt && ownedSpawn
+      ? pathFromCenter(ownedSpawn, s, (u) => frame(owned, u, spline, turn, ownedSpawn.nose), centerAt)
+      : frame(owned, s, spline, turn);
+    const rightSpawn = branches.find((item) => item.yaw > 0) ?? null;
+    const right = rightSpawn
+      ? centerAt
+        ? pathFromCenter(rightSpawn, s, (u) => frame(owned, u, spline, turn, rightSpawn.nose), centerAt)
+        : branchAt(rightSpawn)
+      : null;
     return {
       y,
       origin,
@@ -338,8 +391,9 @@ export function createVectorField() {
       peel,
       separated,
       parent,
-      right: branchAt(branches.find((item) => item.yaw > 0) ?? null),
+      right,
       hold: givenHold && Number.isFinite(givenHold.t) ? givenHold : null,
+      centerAt,
     };
   }
 

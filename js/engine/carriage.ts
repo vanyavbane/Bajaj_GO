@@ -36,6 +36,8 @@ export interface CarriageQuery {
   frame: RoadFrame;
   /** Полосы биома в этой точке. На стыке это доминирующий биом. */
   biome: LaneLayout;
+  /** Ход выбранной ветви. Съезд односторонний, пока не стал дорогой. */
+  way?: RoadWay;
 }
 
 /**
@@ -80,7 +82,7 @@ export function carriageAt(query: CarriageQuery): LiveCarriage {
   const spot = readExit(frame);
   const phase: CarriagePhase = spot.ribbon != null ? 'ribbon' : 'road';
   const half = mainHalf(frame.local);
-  const base = carriageLanes(query.biome, 'two-way');
+  const base = carriageLanes(query.biome, query.way ?? 'two-way');
   const axis = laneAnchor(frame);
   const scale = laneFit(half, base.offsets);
   const span = scale !== 0 ? scale : 1;
