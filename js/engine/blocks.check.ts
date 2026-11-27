@@ -1,6 +1,6 @@
 import { RIGHT_EXIT, compileExit, placedBlock } from './blocks.ts';
 import type { ExitRecipe } from './blocks.ts';
-import { EXIT_LANE_HALF, exitClock, exitRibbonMid, roadsJoined, sampleRoad } from './fork.ts';
+import { EXIT_LANE_HALF, exitClock, exitRibbonMid, exitWidth, roadsJoined, sampleRoad } from './fork.ts';
 import type { AsphaltEdges, ChosenSide } from './fork.ts';
 import { followAsphalt, innerTrackEdge, pinchAsphalt, pinchShell } from './asphalt.ts';
 import type { AsphaltSpan } from './asphalt.ts';
@@ -23,23 +23,28 @@ assert(plan.diverge === 50 && plan.run === 140 && plan.seal === 120 && plan.marg
 const noseBlock = placedBlock(plan, 0, 0);
 assert(noseBlock != null && noseBlock.kind === 'split' && noseBlock.u === 0, 'ноль метров от носа — это начало отхода');
 const noseEdges = frameAt(0, 0).world;
-assert(Math.abs(noseEdges.rightOuter - noseEdges.rightInner - EXIT_LANE_HALF * 2) < 0.05, '+1 полоса в носу уже полной ширины');
-assert(Math.abs(noseEdges.rightInner - noseEdges.leftInner) < 0.4, 'в носу съезд ещё прижат к кромке прямой');
-assert(roadsJoined(noseEdges), 'нос — одно полотно: на съезд можно перестроиться');
-const growing = frameAt(12, 0).world;
-assert(Math.abs(growing.rightOuter - growing.rightInner - EXIT_LANE_HALF * 2) < 0.05, 'лента не набирает ширину по метрам — она сразу полная');
-assert(growing.rightInner - growing.leftInner > 2, 'клин открывается сразу за прижатым носом');
+assert(exitWidth(noseEdges) < 0.5, 'в самом носу лента съезда — только шов, а не полоса');
+assert(noseEdges.rightInner < noseEdges.leftInner, 'в носу съезд ещё прижат к кромке прямой');
+const joinedNose = frameAt(25, 0).world;
+assert(roadsJoined(joinedNose), 'нос — одно полотно: на съезд можно перестроиться');
+assert(exitWidth(joinedNose) > 2.4, 'лента набирает ширину уже на носу');
+const fullNose = frameAt(plan.diverge - 0.02, 0).world;
+assert(Math.abs(exitWidth(fullNose) - EXIT_LANE_HALF * 2) < 0.05, 'к концу носа лента полной ширины');
+assert(fullNose.rightInner < fullNose.leftInner + 0.4, 'к концу носа съезд всё ещё прижат к прямой');
 let approachMid: number | null = null;
+let approachWidth = -1;
 for (let distance = 0; distance <= plan.diverge + 2; distance += 2) {
   const edges = frameAt(distance, 0).world;
-  assert(Math.abs(edges.rightOuter - edges.rightInner - EXIT_LANE_HALF * 2) < 0.05, 'на подходе нет схлопнутой полосы');
+  const width = exitWidth(edges);
+  assert(width >= approachWidth - 0.02, 'лента съезда только раскрывается, без скачков ширины');
+  approachWidth = width;
   const mid = exitRibbonMid(edges);
   if (approachMid != null) assert(Math.abs(mid - approachMid) < 1.5, 'съезд не появляется целиком посреди подхода');
   approachMid = mid;
 }
 const attached = frameAt(plan.diverge + 20, 0).world;
-assert(Math.abs(attached.rightOuter - attached.rightInner - EXIT_LANE_HALF * 2) < 0.05, 'подход держит полную ширину до выбора');
-assert(attached.rightInner - attached.leftInner > 10, 'до выбора съезд уже на своей линии, а не параллельной полосой');
+assert(Math.abs(exitWidth(attached) - EXIT_LANE_HALF * 2) < 0.05, 'подход держит полную ширину до выбора');
+assert(attached.rightInner < attached.leftInner + 0.4, 'до выбора съезд ещё приклеен к прямой, а не отделён клином');
 assert(plan.choiceAt === 190 && plan.length === 390, 'выбор стоит в конце общего подхода, рецепт кончается у границы зоны');
 assert(plan.straight[0]?.start === plan.exit[0]?.start && plan.straight[1]?.length === plan.exit[1]?.length, 'стык двух цепочек на одной метке');
 const clock = exitClock();
@@ -185,10 +190,12 @@ assert(Math.abs(exitRibbonMid(tailEnd)) < 0.05, 'съезд приходит н�
 assert(tailEnd.leftOuter === tailEnd.leftInner, 'старая дорога к тому моменту сошла на нет');
 
 // Самая широкая ветвь следующей зоны шире разъезда: её лента не должна
-// налегать на полотно невыбранной дороги ни на закрытии, ни после въезда.
+// налегать на полотно невыбранной дороги после того, как ленты разошлись.
+// Пока они ещё одно полотно, шов перекрывается намеренно.
 for (const side of [-1, 0, 1] as const) {
   for (let d = plan.choiceAt; d < plan.length; d += 2) {
     const edges = wideAt(d, side);
+    if (roadsJoined(edges)) continue;
     assert(edges.leftInner < edges.rightInner - 0.2, `ленты не налегают друг на друга на ${d} м, выбор ${side}`);
   }
 }

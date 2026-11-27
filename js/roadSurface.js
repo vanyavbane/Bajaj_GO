@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EXIT_DIVERGE, EXIT_RUN, roadsJoined } from './engine/fork.js';
+import { EXIT_DIVERGE, EXIT_RUN, exitClock, roadsJoined } from './engine/fork.js';
 import { asphaltShell, followAsphalt, innerTrackEdge, outerRibbon, pinchAsphalt, pinchShell, walkCrossing } from './engine/asphalt.js';
 import { stripSeam } from './engine/roadside.js';
+
+/** Конец отрыва: цветная линия ветки идёт от носа до того места, где дороги уже разошлись. */
+const EXIT_SPAN = exitClock().ownAfter;
 
 export function initRoadSurface() {
 
@@ -754,7 +757,7 @@ export function initRoadSurface() {
   function updateIslandStrip(mesh, side) {
     const splitS = G.splitCenterS(G.playerS);
     const from = splitS;
-    const span = EXIT_DIVERGE + EXIT_RUN;
+    const span = EXIT_SPAN;
     const raw = [];
     let prev = [null, null];
     const samples = [];

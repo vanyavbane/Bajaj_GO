@@ -39,10 +39,10 @@ const before = expect(-10, 0, 'plain', false);
 assert(before.main.half === 10 && before.main.center === 0, 'до съезда дорога на своей оси и ширине');
 
 const opening = expect(20, 0, 'opening', true);
-assert(opening.ribbon?.joined === false, 'отход сразу отделяет ленту от шоссе');
+assert(opening.ribbon?.joined === true, 'нос раскрывает ленту в одно полотно с шоссе');
 
 const beside = expect(clock.choiceAt - 10, 0, 'beside', true);
-assert(beside.ribbon?.joined === false, 'до выбора съезд уже идёт своей лентой');
+assert(beside.ribbon?.joined === true, 'до выбора съезд ещё одно полотно — на него можно перестроиться');
 assert(beside.main.half === 10, 'пока выбор открыт, старая дорога не сужается');
 
 const sealing = expect(clock.choiceAt + 40, 1, 'sealing', true);
@@ -72,11 +72,11 @@ assert(EXIT_LANE_HALF === 4.5, 'съезд без своей ширины наз
 const besideFrame = frame(clock.choiceAt - 10, 0);
 const besideSpot = readExit(besideFrame);
 const openSteer = logicalRoadLimits(besideFrame.local, 1, true);
-assert(besideSpot.ribbon?.joined === false, 'до выбора клин уже открыт');
+assert(besideSpot.ribbon?.joined === true, 'до выбора клин ещё не открыт');
 assert(
   (besideSpot.ribbon?.center ?? 0) > besideSpot.main.half
-  && openSteer.max < 5 && openSteer.min > -5,
-  'руль на отделённой ленте считается от её середины',
+  && openSteer.max > (besideSpot.ribbon?.center ?? 0) && openSteer.min > -10,
+  'пока полотно одно, руль свободно доходит до ленты съезда',
 );
 
 const sealingFrame = frame(clock.choiceAt + 40, 1);
@@ -132,7 +132,7 @@ for (rideD = clock.choiceAt - 9; rideD <= clock.lead; rideD += 1) {
   surface = center;
   onRibbon = ride;
 }
-assert(world > 50, 'к концу въезда байк остаётся на своей ленте справа');
+assert(world > 30, 'к концу въезда байк остаётся на своей ленте справа');
 
 for (const id of ['city', 'mkad', 'embankment']) {
   const def = BIOMES.find((biome) => biome.id === id);
