@@ -484,10 +484,11 @@ export function initRoadSurface() {
     for (let s = start; s <= end && used + 2 <= MAX_GUARD_POSTS; s += GUARD_POST_STEP) {
       const weight = Math.max(G.cityWeightAtS(s), G.mkadWeightAtS(s));
       if (weight <= 0.02) continue;
-      const row = rowNear(s);
       for (const side of [-1, 1]) {
         if (used >= MAX_GUARD_POSTS) break;
-        const edge = ribbonAt(row, side)?.edge ?? null;
+        // Кромка в точной точке столбика: край от ближайшего ряда уходит
+        // внутрь полотна на изгибе съезда и столбик заезжает на асфальт.
+        const edge = outerRibbon(G.roadEdgesAt(s), side)?.edge ?? null;
         if (edge == null) continue;
         const lat = edge + (side < 0 ? -GUARD_OFFSET : GUARD_OFFSET);
         dummy.scale.set(weight, weight, weight);

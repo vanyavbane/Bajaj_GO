@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { roadsJoined } from './engine/fork.js';
 import { keepInWindow } from './engine/stream.js';
 import { G } from './state.js';
 
@@ -58,19 +57,12 @@ export function initPedestrians() {
       // Ширина полотна у города своя, поэтому позиция считается от кромки.
       const jitter = Math.max(0, Math.abs(ped.lateralOffset) - 10.7);
       const side = ped.side < 0 ? -1 : 1;
-      const fullEdges = G.roadEdgesAt(ped.s);
-      const roadEdge = side < 0
-        ? fullEdges.leftOuter
-        : (roadsJoined(fullEdges) ? fullEdges.rightOuter : fullEdges.leftInner);
-      const spanRight = side < 0 ? fullEdges.leftInner : roadEdge;
-      const roadEdges = {
-        leftOuter: fullEdges.leftOuter,
-        leftInner: spanRight,
-        rightInner: spanRight,
-        rightOuter: spanRight,
-      };
-      const fullOrigin = G.drivenFrameAt(ped.s).origin;
-      const pose = G.besidePose({ edges: roadEdges, origin: fullOrigin }, { side, gap: 1.15 + jitter * cw, inset: 0 });
+      // Полный каркас обеих лент. При открытом клине старая внутренняя кромка
+      // уходит вглубь съезда, поэтому пешеход встаёт снаружи внешней кромки.
+      const frame = G.roadsideFrameAt(ped.s);
+      const fullEdges = frame.edges;
+      const roadEdge = side < 0 ? fullEdges.leftOuter : fullEdges.rightOuter;
+      const pose = G.besidePose(frame, { side, gap: 1.15 + jitter * cw, inset: 0 });
       const facingYaw = ped.walkSpeed >= 0 ? 0 : Math.PI;
       G.placeBeside(ped.group, ped.s, roadEdge, pose.lateral, 0.11, facingYaw);
       ped.group.scale.set(cw, ped.baseScaleY * cw, cw);

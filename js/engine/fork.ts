@@ -26,8 +26,11 @@ export const BRIDGE_END_M = 950;
 export const BRIDGE_FADE_M = 50;
 /** Полуширина полотна моста: 4 полосы (2 встречные, 2 попутные) на одной ленте. */
 export const BRIDGE_RIBBON_HALF = 9.5;
-/** Внешняя кромка моста от оси. */
-export const BRIDGE_EDGE = BRIDGE_RIBBON_HALF * 2;
+/**
+ * Внешняя кромка моста от оси. Полотно ровно городское: 19 м, без добавочной
+ * ширины, иначе кромки, полосы и декор читают разные дороги.
+ */
+export const BRIDGE_EDGE = BRIDGE_RIBBON_HALF;
 
 /**
  * Кромки моста. Полотно сплошное: правой ленты съезда здесь нет.

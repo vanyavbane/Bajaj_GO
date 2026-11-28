@@ -17,9 +17,11 @@ const VIEW_AHEAD = 900;
 const VIEW_BEHIND = 200;
 const LOD_DIST = 300;
 const RIBBON_HALF = 9.5;
-const DECK_HALF = RIBBON_HALF * 2;
+/** Палуба в точности повторяет проезжую часть: 19 м, как в городе. */
+const DECK_HALF = RIBBON_HALF;
 const WATER_Y = -14;
-const PYLON_LAT = 42;
+/** Ноги пилона держат ту же пропорцию к полотну, что и до сужения моста. */
+const PYLON_LAT = RIBBON_HALF * 2.2;
 const PYLON_H = 44;
 const PYLON_STEP = 150;
 const RAIL_POST_STEP = 5;
@@ -196,7 +198,8 @@ export function initCableBridge() {
       }
     }
 
-    for (const lat of [-17, -9, 0, 9, 17]) {
+    // Продольные балки под палубой, не за её кромкой.
+    for (const lat of [-0.75, -0.375, 0, 0.375, 0.75].map((k) => k * DECK_HALF)) {
       put('beam', center, lat, -1.5, 0.7, 1.3, CHUNK_M);
     }
     if (!far) {
